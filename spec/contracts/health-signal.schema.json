@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibespace.xyz/mycelium/health-signal.schema.json",
+  "$comment": "Mycelium Framework — VibeSpace LLC — The network provides.",
+  "title": "Mycelium Health Signal",
+  "description": "A health pulse emitted by an agent node — the heartbeat of the organism. Silent agents are assumed dead.",
+  "type": "object",
+  "required": ["agentId", "scope", "state", "timestamp", "progress"],
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "description": "Unique identifier of the emitting agent"
+    },
+    "scope": {
+      "type": "string",
+      "description": "What this agent owns"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["GERMINATING", "GROWING", "FLOWING", "FRUITING", "DORMANT"],
+      "description": "Current lifecycle state of the agent"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this pulse was emitted"
+    },
+    "progress": {
+      "type": "object",
+      "required": ["completed", "total"],
+      "properties": {
+        "completed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of deliverables completed"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total deliverables in scope"
+        },
+        "percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Completion percentage"
+        },
+        "currentTask": {
+          "type": "string",
+          "description": "What the agent is currently working on"
+        }
+      }
+    },
+    "health": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "critical", "dead"],
+      "default": "healthy",
+      "description": "Self-reported health status"
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["description"],
+        "properties": {
+          "description": { "type": "string" },
+          "blockedBy": { "type": "string", "description": "Agent ID causing the block" },
+          "severity": { "type": "string", "enum": ["soft", "hard"] },
+          "since": { "type": "string", "format": "date-time" }
+        }
+      },
+      "description": "Current blockers preventing progress"
+    },
+    "flowStatus": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "Whether this agent can accept nutrient flow work"
+        },
+        "flowingTo": {
+          "type": "string",
+          "description": "Agent ID this node is currently flowing nutrients to"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What this agent can offer as nutrients"
+        }
+      }
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable status — the field notes"
+    }
+  },
+  "additionalProperties": false
+}

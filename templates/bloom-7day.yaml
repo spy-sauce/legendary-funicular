@@ -1,0 +1,85 @@
+# Mycelium Framework — VibeSpace LLC — The network provides.
+#
+# Bloom Build Plan — 7-day ship target
+# A fully-configured organism for the Bloom product launch.
+
+organism:
+  name: bloom
+  ship_target: "7 days"
+  health_pulse_interval: 30
+  harvest_threshold: 0.8
+
+contracts:
+  - spec/contracts/user-entity.json
+  - spec/contracts/jwt-claims.json
+  - spec/contracts/error-response.json
+  - spec/contracts/public-card.json
+
+agents:
+  - id: pipeline-agent
+    scope: "CI/CD Pipeline"
+    branch: feat/pipeline
+    blocked_by: []
+    blocks: []
+    capabilities: ["devops", "docker", "ci-cd"]
+
+  - id: auth-agent
+    scope: "Authentication"
+    branch: feat/auth
+    blocked_by: []
+    blocks: [identity-agent, frontend-agent]
+    capabilities: ["java", "spring-security", "jwt"]
+
+  - id: identity-agent
+    scope: "Handles, profiles, avatars"
+    branch: feat/identity
+    blocked_by: [auth-agent]
+    blocks: [card-agent]
+    capabilities: ["java", "spring-data", "postgres"]
+
+  - id: redirect-agent
+    scope: "Smart redirects + vanity URLs"
+    branch: feat/redirects
+    blocked_by: []
+    blocks: [card-agent]
+    capabilities: ["java", "redis", "geoip"]
+
+  - id: card-agent
+    scope: "Public profile cards"
+    branch: feat/cards
+    blocked_by: [identity-agent, redirect-agent]
+    blocks: [frontend-agent]
+    capabilities: ["java", "spring-mvc", "templates"]
+
+  - id: frontend-agent
+    scope: "UI + landing page"
+    branch: feat/frontend
+    blocked_by: [auth-agent]
+    blocks: []
+    capabilities: ["react", "typescript", "tailwind"]
+
+merge_order:
+  - pipeline-agent
+  - auth-agent
+  - identity-agent
+  - redirect-agent
+  - card-agent
+  - frontend-agent
+
+timeline:
+  parallel_phases:
+    - hours: "0-2"
+      active: [pipeline-agent, auth-agent, frontend-agent]
+      description: "Foundation — pipeline, auth core, and UI scaffold grow simultaneously"
+
+    - hours: "2-6"
+      active: [pipeline-agent, auth-agent, identity-agent, redirect-agent, frontend-agent]
+      description: "Full growth — all agents active, identity and redirects join"
+
+    - hours: "6-12"
+      active: [auth-agent, identity-agent, redirect-agent, card-agent, frontend-agent]
+      description: "Integration — card agent germinates as dependencies resolve"
+
+    - hours: "12-24"
+      active: [card-agent, frontend-agent]
+      description: "Fruiting — final integration and polish"

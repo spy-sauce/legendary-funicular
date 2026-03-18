@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibespace.xyz/mycelium/nutrient-request.schema.json",
+  "$comment": "Mycelium Framework — VibeSpace LLC — The network provides.",
+  "title": "Mycelium Nutrient Request/Offer",
+  "description": "A request for help or an offer of help between agent nodes. This is how the organism self-heals — nutrients flow to where they're needed most.",
+  "type": "object",
+  "required": ["type", "agentId", "timestamp"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["NUTRIENT_REQUEST", "NUTRIENT_OFFER"],
+      "description": "Whether this is a request for help or an offer to help"
+    },
+    "agentId": {
+      "type": "string",
+      "description": "Agent sending this signal"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "For offers: what the agent can provide. For requests: what skills are needed."
+    },
+    "urgency": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "critical"],
+      "default": "normal",
+      "description": "How urgently the nutrient is needed"
+    },
+    "scope": {
+      "type": "string",
+      "description": "The domain or area where help is needed/offered"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the need or offer"
+    },
+    "estimatedEffort": {
+      "type": "string",
+      "description": "Rough estimate of how much work is involved (e.g., '2 hours', 'quick fix')"
+    },
+    "targetAgent": {
+      "type": "string",
+      "description": "Specific agent this is directed at (optional — can be broadcast)"
+    },
+    "resolved": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this request/offer has been fulfilled"
+    },
+    "resolvedBy": {
+      "type": "string",
+      "description": "Agent ID that fulfilled this request"
+    },
+    "resolvedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

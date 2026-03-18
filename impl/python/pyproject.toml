@@ -1,0 +1,37 @@
+# Mycelium Framework — VibeSpace LLC — The network provides.
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mycelium-framework"
+version = "0.1.0"
+description = "Agentic execution framework — orchestrating autonomous agents like a living mycelium network."
+readme = "README.md"
+license = { text = "Proprietary — VibeSpace LLC" }
+requires-python = ">=3.10"
+dependencies = [
+    "jsonschema>=4.20.0",
+    "aioredis>=2.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "mypy>=1.0",
+    "ruff>=0.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["mycelium*"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibespace.xyz/mycelium/contract.schema.json",
+  "$comment": "Mycelium Framework — VibeSpace LLC — The network provides.",
+  "title": "Mycelium Contract",
+  "description": "A shared contract (chemical signal) between agents in a mycelium network. Contracts define the agreed-upon interfaces that let data flow freely between nodes.",
+  "type": "object",
+  "required": ["name", "version", "owner", "frozen", "definition"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique name for this contract — the signal identifier",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of this contract",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Agent ID that owns/produces this contract"
+    },
+    "consumers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Agent IDs that consume this contract",
+      "default": []
+    },
+    "frozen": {
+      "type": "boolean",
+      "description": "Whether this contract is frozen (immutable during execution)"
+    },
+    "frozenAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when this contract was frozen"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of what this contract signals"
+    },
+    "definition": {
+      "type": "object",
+      "description": "The actual contract definition — structure varies by use case",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["entity", "dto", "event", "config", "api-endpoint"],
+          "description": "What kind of thing this contract defines"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "required": { "type": "boolean", "default": true },
+              "nullable": { "type": "boolean", "default": false },
+              "description": { "type": "string" },
+              "constraints": {
+                "type": "object",
+                "properties": {
+                  "minLength": { "type": "integer" },
+                  "maxLength": { "type": "integer" },
+                  "pattern": { "type": "string" },
+                  "min": { "type": "number" },
+                  "max": { "type": "number" },
+                  "enum": { "type": "array" }
+                }
+              }
+            }
+          }
+        },
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["method", "path"],
+            "properties": {
+              "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+              "path": { "type": "string" },
+              "auth": { "type": "boolean", "default": true },
+              "request": { "type": "object" },
+              "response": { "type": "object" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata — field notes from the mycologist",
+      "properties": {
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "priority": { "type": "string", "enum": ["critical", "high", "normal", "low"] },
+        "notes": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

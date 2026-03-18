@@ -1,0 +1,86 @@
+# Mycelium Framework — VibeSpace LLC — The network provides.
+#
+# Generic Sprint Template
+# Copy this file and customize it for your project.
+# Run `mycelium cultivate` to bring the organism to life.
+
+# ─── Organism ────────────────────────────────────────────
+# Top-level configuration for the entire organism.
+#
+#   name                   — unique identifier for this organism
+#   ship_target            — human-readable deadline ("7 days", "2 weeks", etc.)
+#   health_pulse_interval  — seconds between health checks (lower = more responsive)
+#   harvest_threshold      — fraction (0-1) of agents that must be FRUIT_READY to ship
+
+organism:
+  name: my-project
+  ship_target: "14 days"
+  health_pulse_interval: 60
+  harvest_threshold: 0.8
+
+# ─── Contracts ───────────────────────────────────────────
+# Shared type contracts that all agents must respect.
+# These are the "cell walls" of the organism — they keep agents compatible.
+#
+# List paths to JSON Schema files or TypeScript type definitions.
+# Freeze contracts with `mycelium contracts freeze` before agents begin growing.
+
+contracts: []
+  # - contracts/user.json
+  # - contracts/api-response.json
+  # - contracts/error-format.json
+
+# ─── Agents ──────────────────────────────────────────────
+# Each agent is an autonomous unit of work in the organism.
+#
+#   id           — unique agent identifier (kebab-case)
+#   scope        — human-readable description of the agent's responsibility
+#   branch       — git branch this agent works on
+#   blocked_by   — list of agent IDs that must complete before this one can start
+#   blocks       — list of agent IDs that depend on this agent
+#   capabilities — tags describing what this agent can do (for nutrient matching)
+#
+# Agent lifecycle: SPORE -> GERMINATING -> HYPHAL_GROWTH -> FRUITING -> FRUIT_READY
+
+agents: []
+  # - id: backend-agent
+  #   scope: "Core API and business logic"
+  #   branch: feat/backend
+  #   blocked_by: []
+  #   blocks: [frontend-agent]
+  #   capabilities: ["api", "database", "auth"]
+  #
+  # - id: frontend-agent
+  #   scope: "User interface and client-side logic"
+  #   branch: feat/frontend
+  #   blocked_by: [backend-agent]
+  #   blocks: []
+  #   capabilities: ["react", "css", "ux"]
+
+# ─── Merge Order ─────────────────────────────────────────
+# The order in which agent branches should be merged into main.
+# This respects dependency ordering — upstream agents merge first.
+
+merge_order: []
+  # - backend-agent
+  # - frontend-agent
+
+# ─── Timeline (optional) ────────────────────────────────
+# Define parallel growth phases for the organism.
+# This helps visualize which agents are active at each stage.
+#
+#   hours       — time range (e.g., "0-4", "4-12")
+#   active      — list of agent IDs active during this phase
+#   description — human-readable description of this growth phase
+
+# timeline:
+#   parallel_phases:
+#     - hours: "0-4"
+#       active: [backend-agent]
+#       description: "Foundation — API scaffold and database schema"
+#     - hours: "4-12"
+#       active: [backend-agent, frontend-agent]
+#       description: "Full growth — all agents active"
+#     - hours: "12-24"
+#       active: [frontend-agent]
+#       description: "Fruiting — final integration and polish"
