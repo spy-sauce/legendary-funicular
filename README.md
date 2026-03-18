@@ -201,6 +201,9 @@ Read the full [Manifesto](./MANIFESTO.md).
 
 ## License
 
-MIT — VibeSpace LLC
+**Proprietary — All Rights Reserved.**
+Copyright (c) 2026 VibeSpace LLC. Built in partnership with Anthropic.
 
-*The network provides.* 🍄
+See [LICENSE](./LICENSE) for full terms.
+
+*The network provides — but only with permission.* 🍄
