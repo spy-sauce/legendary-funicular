@@ -202,7 +202,7 @@ Read the full [Manifesto](./MANIFESTO.md).
 ## License
 
 **Proprietary — All Rights Reserved.**
-Copyright (c) 2026 VibeSpace LLC. Built in partnership with Anthropic.
+Copyright (c) 2026 VibeSpace LLC.
 
 See [LICENSE](./LICENSE) for full terms.
 
