@@ -20,6 +20,7 @@ from .contracts import (
 )
 from .flow import FlowMatch, NutrientMatcher
 from .health import HealthPulse, HealthPulseEmitter, format_pulse
+from .adapters.claude_code import ClaudeCodeAgent, PetriDishCoordinator
 from .orchestrator import Orchestrator, OrganismHealth
 
 __all__ = [
@@ -48,4 +49,7 @@ __all__ = [
     # Orchestrator
     "Orchestrator",
     "OrganismHealth",
+    # Adapters
+    "ClaudeCodeAgent",
+    "PetriDishCoordinator",
 ]
