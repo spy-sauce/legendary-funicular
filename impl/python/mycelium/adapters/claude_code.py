@@ -3,10 +3,11 @@
 """
 claude_code.py — Claude Code adapter for cellular execution.
 
-This adapter wraps the Claude Code SDK so that each hyphal agent can
+This adapter wraps the Claude Code CLI so that each hyphal agent can
 delegate its metabolic work to an external AI session. The agent reads
 its growth instructions from a HYPHA file, constrains its territory to a
-file-scope list, and spawns a Claude Code session to carry out the work.
+file-scope list, and spawns a ``claude --print`` subprocess to carry out
+the work.
 
 PetriDishCoordinator groups multiple ClaudeCodeAgents that share a
 common HYPHA context and activates them in dependency order, collecting
@@ -16,7 +17,9 @@ their fruits when the culture is complete.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -99,14 +102,13 @@ class ClaudeCodeAgent(BaseAgent):
 
     async def execute(self) -> Any:
         """
-        Perform cellular execution by spawning a Claude Code SDK session.
+        Perform cellular execution by spawning a ``claude --print`` subprocess.
 
         The agent reads the HYPHA prompt, constructs a scoped instruction set,
-        and delegates the work to Claude Code. Session output is parsed for
-        fruiting markers (``FRUITING``, ``PASS``, ``FAIL``) to determine the
-        resulting lifecycle transition.
+        and delegates the work to the Claude Code CLI. Session output is parsed
+        for fruiting markers (``FRUITING``, ``PASS``, ``FAIL``) to determine
+        the resulting lifecycle transition.
         """
-        # Must be GROWING to execute.
         if self._state not in (AgentState.GROWING, AgentState.FLOWING):
             logger.warning(
                 "Hypha %s cannot execute in state %s — must be GROWING or FLOWING",
@@ -115,7 +117,6 @@ class ClaudeCodeAgent(BaseAgent):
             )
             return None
 
-        # Read the prompt file.
         prompt_file = Path(self._prompt_path)
         if not prompt_file.is_file():
             self._blockers.append(f"Prompt file not found: {self._prompt_path}")
@@ -124,36 +125,78 @@ class ClaudeCodeAgent(BaseAgent):
 
         prompt_text = prompt_file.read_text(encoding="utf-8")
 
-        # Build the scoped instruction.
-        scope_clause = ""
         if self._file_scope:
-            scope_clause = (
+            prompt_text += (
                 "\n\nFile scope (only touch files matching these patterns): "
                 + ", ".join(self._file_scope)
             )
 
-        full_prompt = prompt_text + scope_clause
+        claude_bin = self._find_claude_binary()
+        if not claude_bin:
+            self._blockers.append("claude CLI binary not found on PATH or common locations")
+            self._transition(AgentState.DORMANT)
+            return None
 
-        # Spawn the Claude Code session.
+        cmd = [
+            claude_bin,
+            "--print",
+            "--output-format", "json",
+            "--model", self._model,
+            "--max-turns", "50",
+            "-p", prompt_text,
+        ]
+
+        logger.info("Hypha %s spawning claude CLI session (model=%s)", self._id, self._model)
+
         try:
-            from claude_code import ClaudeCode  # type: ignore[import-untyped]
-
-            session = ClaudeCode(model=self._model)
-            result = await session.run(full_prompt, cwd=self._cwd)
-            self._session_output = str(result)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self._cwd,
+            )
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(),
+                timeout=600,  # 10 minute timeout per agent
+            )
+        except asyncio.TimeoutError:
+            logger.error("Hypha %s timed out after 600s", self._id)
+            self._blockers.append("Session timed out (600s)")
+            self._transition(AgentState.DORMANT)
+            return None
         except Exception as exc:
-            logger.error("Claude Code session failed for hypha %s: %s", self._id, exc)
+            logger.error("Claude CLI failed for hypha %s: %s", self._id, exc)
             self._blockers.append(f"Session error: {exc}")
             self._transition(AgentState.DORMANT)
             return None
 
-        # Parse the output for lifecycle markers.
-        output = self._session_output or ""
+        stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+        stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+
+        self._session_output = stdout_text
+
+        if proc.returncode != 0:
+            logger.warning(
+                "Hypha %s claude CLI exited with code %d: %s",
+                self._id, proc.returncode, stderr_text[:500],
+            )
+
+        # Try to parse JSON output for structured result.
+        result_text = stdout_text
+        try:
+            parsed = json.loads(stdout_text)
+            if isinstance(parsed, dict):
+                result_text = parsed.get("result", stdout_text)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # Determine lifecycle transition from output markers.
+        output = result_text if isinstance(result_text, str) else str(result_text)
         if _FRUITING_MARKER in output and _FAIL_MARKER not in output:
             self._fruit_payload = {
                 "agent_id": self._id,
                 "scope": self._scope,
-                "output": output,
+                "output": output[:2000],
                 "status": "success",
             }
             self._transition(AgentState.FRUITING)
@@ -161,19 +204,32 @@ class ClaudeCodeAgent(BaseAgent):
         elif _FAIL_MARKER in output:
             self._blockers.append("Acceptance criteria failed")
             logger.warning("Hypha %s failed acceptance criteria — staying GROWING", self._id)
-            # Stay in GROWING so it can be retried.
         else:
-            # No explicit marker — optimistic transition to FRUITING.
             self._fruit_payload = {
                 "agent_id": self._id,
                 "scope": self._scope,
-                "output": output,
+                "output": output[:2000],
                 "status": "completed_no_marker",
             }
             self._transition(AgentState.FRUITING)
             logger.info("Hypha %s completed without explicit marker — assuming FRUITING", self._id)
 
         return self._session_output
+
+    @staticmethod
+    def _find_claude_binary() -> Optional[str]:
+        """Locate the claude CLI binary."""
+        found = shutil.which("claude")
+        if found:
+            return found
+        for candidate in [
+            Path.home() / ".local" / "bin" / "claude",
+            Path("/usr/local/bin/claude"),
+            Path("/opt/homebrew/bin/claude"),
+        ]:
+            if candidate.is_file():
+                return str(candidate)
+        return None
 
     async def flow(self, target_agent: BaseAgent) -> Dict[str, Any]:
         """
