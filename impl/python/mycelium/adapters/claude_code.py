@@ -20,6 +20,8 @@ import asyncio
 import json
 import logging
 import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -79,6 +81,9 @@ class ClaudeCodeAgent(BaseAgent):
         self._session_output: Optional[str] = None
         self._blockers: List[str] = []
         self._fruit_payload: Optional[Dict[str, Any]] = None
+        self._worktree_path: Optional[str] = None
+        self._worktree_branch: Optional[str] = None
+        self._use_worktree: bool = True
 
     # -- Lifecycle implementation ----------------------------------------------
 
@@ -102,12 +107,13 @@ class ClaudeCodeAgent(BaseAgent):
 
     async def execute(self) -> Any:
         """
-        Perform cellular execution by spawning a ``claude --print`` subprocess.
+        Perform cellular execution in an isolated git worktree.
 
-        The agent reads the HYPHA prompt, constructs a scoped instruction set,
-        and delegates the work to the Claude Code CLI. Session output is parsed
-        for fruiting markers (``FRUITING``, ``PASS``, ``FAIL``) to determine
-        the resulting lifecycle transition.
+        1. Creates a temporary git worktree + branch for this agent
+        2. Spawns ``claude --print`` inside the worktree
+        3. On success (FRUITING): merges the branch back into the source branch
+        4. On failure: leaves the worktree for manual inspection
+        5. Cleans up the worktree (unless failed — keeps it for debugging)
         """
         if self._state not in (AgentState.GROWING, AgentState.FLOWING):
             logger.warning(
@@ -125,6 +131,13 @@ class ClaudeCodeAgent(BaseAgent):
 
         prompt_text = prompt_file.read_text(encoding="utf-8")
 
+        # Strip auto-commit instructions — the coordinator handles commits.
+        prompt_text += (
+            "\n\nIMPORTANT: Do NOT run auto-commit.sh or git push. "
+            "Just make the code changes and verify they work. "
+            "The orchestrator handles commits and merges."
+        )
+
         if self._file_scope:
             prompt_text += (
                 "\n\nFile scope (only touch files matching these patterns): "
@@ -133,9 +146,17 @@ class ClaudeCodeAgent(BaseAgent):
 
         claude_bin = self._find_claude_binary()
         if not claude_bin:
-            self._blockers.append("claude CLI binary not found on PATH or common locations")
+            self._blockers.append("claude CLI binary not found")
             self._transition(AgentState.DORMANT)
             return None
+
+        # --- Worktree setup ---
+        work_cwd = self._cwd
+        if self._use_worktree:
+            work_cwd = self._create_worktree()
+            if not work_cwd:
+                self._transition(AgentState.DORMANT)
+                return None
 
         cmd = [
             claude_bin,
@@ -146,18 +167,21 @@ class ClaudeCodeAgent(BaseAgent):
             "-p", prompt_text,
         ]
 
-        logger.info("Hypha %s spawning claude CLI session (model=%s)", self._id, self._model)
+        logger.info(
+            "Hypha %s spawning claude CLI (model=%s, worktree=%s)",
+            self._id, self._model, work_cwd,
+        )
 
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self._cwd,
+                cwd=work_cwd,
             )
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 proc.communicate(),
-                timeout=600,  # 10 minute timeout per agent
+                timeout=600,
             )
         except asyncio.TimeoutError:
             logger.error("Hypha %s timed out after 600s", self._id)
@@ -172,7 +196,6 @@ class ClaudeCodeAgent(BaseAgent):
 
         stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
         stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
-
         self._session_output = stdout_text
 
         if proc.returncode != 0:
@@ -181,7 +204,6 @@ class ClaudeCodeAgent(BaseAgent):
                 self._id, proc.returncode, stderr_text[:500],
             )
 
-        # Try to parse JSON output for structured result.
         result_text = stdout_text
         try:
             parsed = json.loads(stdout_text)
@@ -190,31 +212,147 @@ class ClaudeCodeAgent(BaseAgent):
         except (json.JSONDecodeError, TypeError):
             pass
 
-        # Determine lifecycle transition from output markers.
         output = result_text if isinstance(result_text, str) else str(result_text)
+
         if _FRUITING_MARKER in output and _FAIL_MARKER not in output:
+            # --- Commit in worktree + merge back ---
+            if self._use_worktree and self._worktree_path:
+                self._commit_and_merge(success=True)
             self._fruit_payload = {
                 "agent_id": self._id,
                 "scope": self._scope,
                 "output": output[:2000],
                 "status": "success",
+                "branch": self._worktree_branch,
             }
             self._transition(AgentState.FRUITING)
-            logger.info("Hypha %s reached FRUITING state", self._id)
+            logger.info("Hypha %s reached FRUITING — merged to main", self._id)
+
         elif _FAIL_MARKER in output:
             self._blockers.append("Acceptance criteria failed")
-            logger.warning("Hypha %s failed acceptance criteria — staying GROWING", self._id)
+            if self._use_worktree and self._worktree_path:
+                self._commit_and_merge(success=False)
+            logger.warning("Hypha %s failed — worktree preserved at %s", self._id, self._worktree_path)
+
         else:
+            if self._use_worktree and self._worktree_path:
+                self._commit_and_merge(success=True)
             self._fruit_payload = {
                 "agent_id": self._id,
                 "scope": self._scope,
                 "output": output[:2000],
                 "status": "completed_no_marker",
+                "branch": self._worktree_branch,
             }
             self._transition(AgentState.FRUITING)
-            logger.info("Hypha %s completed without explicit marker — assuming FRUITING", self._id)
+            logger.info("Hypha %s completed (no marker) — merged to main", self._id)
 
         return self._session_output
+
+    # -- Worktree management ---------------------------------------------------
+
+    def _create_worktree(self) -> Optional[str]:
+        """Create an isolated git worktree for this agent."""
+        branch = f"hypha/{self._id}"
+        self._worktree_branch = branch
+
+        worktree_dir = Path(tempfile.mkdtemp(prefix=f"mycelium-{self._id}-"))
+        self._worktree_path = str(worktree_dir)
+
+        try:
+            # Create branch from current HEAD if it doesn't exist.
+            subprocess.run(
+                ["git", "branch", branch],
+                cwd=self._cwd,
+                capture_output=True,
+            )
+            # Create the worktree.
+            result = subprocess.run(
+                ["git", "worktree", "add", str(worktree_dir), branch],
+                cwd=self._cwd,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                logger.error(
+                    "Failed to create worktree for %s: %s",
+                    self._id, result.stderr,
+                )
+                self._blockers.append(f"Worktree creation failed: {result.stderr}")
+                return None
+
+            logger.info("Worktree created at %s (branch: %s)", worktree_dir, branch)
+            return str(worktree_dir)
+
+        except Exception as exc:
+            logger.error("Worktree setup error for %s: %s", self._id, exc)
+            self._blockers.append(f"Worktree error: {exc}")
+            return None
+
+    def _commit_and_merge(self, success: bool) -> None:
+        """Commit changes in the worktree and optionally merge back."""
+        if not self._worktree_path or not self._worktree_branch:
+            return
+
+        wt = self._worktree_path
+
+        # Stage + commit any changes in the worktree.
+        subprocess.run(["git", "add", "-A"], cwd=wt, capture_output=True)
+        has_changes = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=wt, capture_output=True,
+        ).returncode != 0
+
+        if has_changes:
+            stream_tag = "TS"  # TODO: read from mycelium.yaml
+            msg = f"{stream_tag}/{self._id.upper()}: {'fruiting' if success else 'incomplete'}"
+            subprocess.run(
+                ["git", "commit", "-m", msg],
+                cwd=wt, capture_output=True,
+            )
+            logger.info("Committed in worktree: %s", msg)
+
+        if success and has_changes:
+            # Merge into the source branch (typically main).
+            result = subprocess.run(
+                ["git", "merge", "--no-ff", self._worktree_branch, "-m",
+                 f"Merge {self._worktree_branch} (cellular execution)"],
+                cwd=self._cwd,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                logger.warning(
+                    "Merge conflict for %s — branch preserved: %s\n%s",
+                    self._id, self._worktree_branch, result.stderr,
+                )
+                self._blockers.append(f"Merge conflict — resolve manually on branch {self._worktree_branch}")
+            else:
+                logger.info("Merged %s into main", self._worktree_branch)
+                self._cleanup_worktree()
+        elif not success:
+            logger.info("Worktree preserved for inspection: %s", self._worktree_path)
+        else:
+            # No changes — clean up.
+            self._cleanup_worktree()
+
+    def _cleanup_worktree(self) -> None:
+        """Remove the worktree and its branch."""
+        if not self._worktree_path:
+            return
+        try:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", self._worktree_path],
+                cwd=self._cwd, capture_output=True,
+            )
+            if self._worktree_branch:
+                subprocess.run(
+                    ["git", "branch", "-d", self._worktree_branch],
+                    cwd=self._cwd, capture_output=True,
+                )
+            logger.debug("Cleaned up worktree %s", self._worktree_path)
+        except Exception as exc:
+            logger.warning("Worktree cleanup failed: %s", exc)
 
     @staticmethod
     def _find_claude_binary() -> Optional[str]:
