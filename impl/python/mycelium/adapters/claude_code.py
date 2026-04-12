@@ -129,14 +129,19 @@ class ClaudeCodeAgent(BaseAgent):
             self._transition(AgentState.DORMANT)
             return None
 
-        prompt_text = prompt_file.read_text(encoding="utf-8")
+        raw_prompt = prompt_file.read_text(encoding="utf-8")
 
-        # Strip auto-commit instructions — the coordinator handles commits.
-        prompt_text += (
-            "\n\nIMPORTANT: Do NOT run auto-commit.sh or git push. "
-            "Just make the code changes and verify they work. "
-            "The orchestrator handles commits and merges."
-        )
+        # Execution preamble — tells Claude Code to ACT, not describe.
+        prompt_text = (
+            "You are executing a HYPHA — a unit of development work. "
+            "Read the spec below and IMPLEMENT it by editing and creating files "
+            "using your tools (Read, Write, Edit, Bash). Do not just describe "
+            "what to do — actually make the changes in the codebase. "
+            "When done, verify with tsc --noEmit or equivalent.\n\n"
+            "IMPORTANT: Do NOT run auto-commit.sh or git push. "
+            "Just make the code changes and verify they compile.\n\n"
+            "--- HYPHA SPEC ---\n\n"
+        ) + raw_prompt
 
         if self._file_scope:
             prompt_text += (
@@ -164,6 +169,7 @@ class ClaudeCodeAgent(BaseAgent):
             "--output-format", "json",
             "--model", self._model,
             "--max-turns", "50",
+            "--permission-mode", "acceptEdits",
             "-p", prompt_text,
         ]
 
@@ -203,6 +209,12 @@ class ClaudeCodeAgent(BaseAgent):
                 "Hypha %s claude CLI exited with code %d: %s",
                 self._id, proc.returncode, stderr_text[:500],
             )
+            # Non-zero exit is a real failure — don't optimistically fruit.
+            self._blockers.append(f"claude exited with code {proc.returncode}")
+            if self._use_worktree and self._worktree_path:
+                self._commit_and_merge(success=False)
+            self._session_output = stdout_text + "\n---STDERR---\n" + stderr_text
+            return self._session_output
 
         result_text = stdout_text
         try:
@@ -281,6 +293,17 @@ class ClaudeCodeAgent(BaseAgent):
                 self._blockers.append(f"Worktree creation failed: {result.stderr}")
                 return None
 
+            # Symlink gitignored runtime dirs so tools (tsc, next, uvicorn) work.
+            src = Path(self._cwd)
+            wt = Path(str(worktree_dir))
+            for name in ["node_modules", ".next", ".env.local", "api/.venv", "api/.env"]:
+                src_path = src / name
+                dst_path = wt / name
+                if src_path.exists() and not dst_path.exists():
+                    dst_path.parent.mkdir(parents=True, exist_ok=True)
+                    dst_path.symlink_to(src_path)
+                    logger.debug("Symlinked %s into worktree", name)
+
             logger.info("Worktree created at %s (branch: %s)", worktree_dir, branch)
             return str(worktree_dir)
 
@@ -296,8 +319,11 @@ class ClaudeCodeAgent(BaseAgent):
 
         wt = self._worktree_path
 
-        # Stage + commit any changes in the worktree.
-        subprocess.run(["git", "add", "-A"], cwd=wt, capture_output=True)
+        # Stage changes, excluding symlinked runtime dirs.
+        subprocess.run(
+            ["git", "add", "-A", "--", ".", ":!.next", ":!api/.venv", ":!api/.env", ":!.env.local"],
+            cwd=wt, capture_output=True,
+        )
         has_changes = subprocess.run(
             ["git", "diff", "--cached", "--quiet"],
             cwd=wt, capture_output=True,
