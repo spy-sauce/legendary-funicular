@@ -11,6 +11,7 @@ import { registerNetworkCommand } from "./commands/network.js";
 import { registerFlowCommand } from "./commands/flow.js";
 import { registerHarvestCommand } from "./commands/harvest.js";
 import { registerCultivateCommand } from "./commands/cultivate.js";
+import { registerPlantCommand } from "./commands/plant.js";
 
 const banner = boxen(
   chalk.magentaBright.bold("🍄 Mycelium") +
@@ -43,5 +44,6 @@ registerNetworkCommand(program);
 registerFlowCommand(program);
 registerHarvestCommand(program);
 registerCultivateCommand(program);
+registerPlantCommand(program);
 
 program.parse();
