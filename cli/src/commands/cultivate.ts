@@ -1,11 +1,30 @@
 // Mycelium Framework — VibeSpace LLC — The network provides.
+//
+// `mycelium cultivate` — bring the organism to life.
+//
+// Cellular execution: each biome orchestrates a petri dish. `cultivate`
+// walks the tree (biome → specialist → leaf), extracts every leaf, and
+// spawns one Claude Agent SDK session per leaf in parallel. Gating is
+// either wave-based (blocked_by → fruit completion) or contract-freeze
+// (all leaves start once NUTRIENTS.md is frozen) depending on
+// `organism.gating`.
 
 import { Command } from "commander";
 import chalk from "chalk";
-import ora from "ora";
+import ora, { Ora } from "ora";
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import YAML from "yaml";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+interface SubAgent {
+  id: string;
+  scope: string;
+  capabilities?: string[];
+  needs_contracts?: string[];
+  sub_agents?: SubAgent[];
+}
 
 interface Agent {
   id: string;
@@ -14,34 +33,59 @@ interface Agent {
   blocked_by: string[];
   blocks: string[];
   capabilities: string[];
+  sub_agents?: SubAgent[];
 }
 
-interface TimelinePhase {
-  hours: string;
-  active: string[];
-  description: string;
+interface Leaf {
+  id: string;
+  scope: string;
+  branch: string;
+  /** biome → ... → leaf */
+  lineage: string[];
+  biome: string;
+}
+
+interface LeafResult {
+  leaf: Leaf;
+  success: boolean;
+  artifacts: string[];
+  error?: string;
+  ms: number;
 }
 
 export function registerCultivateCommand(program: Command): void {
   program
     .command("cultivate")
     .description("🌍 Start the full organism — bring the mycelium to life")
-    .option("--dry-run", "Simulate without executing agents", false)
+    .option("--dry-run", "Print the execution plan without spawning sessions", false)
+    .option(
+      "-c, --max-concurrency <n>",
+      "Max simultaneous leaf sessions (default: 50)",
+      (v) => parseInt(v, 10),
+      50
+    )
+    .option(
+      "--only-biome <id>",
+      "Cultivate only one biome's dish (for targeted re-runs)"
+    )
     .action(async (opts) => {
       const configPath = path.join(process.cwd(), "mycelium.yaml");
       if (!fs.existsSync(configPath)) {
         console.log(
           chalk.red("  ❌ No mycelium.yaml found. Run ") +
             chalk.cyan("mycelium init") +
+            chalk.red(" or ") +
+            chalk.cyan("mycelium plant") +
             chalk.red(" first.")
         );
         return;
       }
 
-      const raw = fs.readFileSync(configPath, "utf-8");
-      const config = YAML.parse(raw);
-      const agents: Agent[] = config.agents || [];
+      const config = YAML.parse(fs.readFileSync(configPath, "utf-8"));
       const organism = config.organism || { name: "unknown" };
+      const agents: Agent[] = config.agents || [];
+      const gating: string = organism.gating || "wave";
+      const cellular: boolean = organism.cellular === true;
 
       if (agents.length === 0) {
         console.log(
@@ -51,232 +95,449 @@ export function registerCultivateCommand(program: Command): void {
         return;
       }
 
-      // ── Startup sequence ──────────────────────────────────
+      banner(organism, agents, gating, cellular, opts);
 
+      // ── Flatten the tree to leaves ─────────────────────────────────
+      const biomes = opts.onlyBiome
+        ? agents.filter((a) => a.id === opts.onlyBiome)
+        : agents;
+
+      if (opts.onlyBiome && biomes.length === 0) {
+        console.log(chalk.red(`  ❌ Biome "${opts.onlyBiome}" not found.`));
+        return;
+      }
+
+      const leaves: Leaf[] = biomes.flatMap((biome) => flattenBiome(biome));
+      const waves: Leaf[][] = gating === "contract-freeze"
+        ? [leaves] // one wave, all at once
+        : buildLeafWaves(biomes, leaves);
+
+      // ── Execution plan ─────────────────────────────────────────────
       console.log();
-      console.log(chalk.magentaBright.bold("  ╔══════════════════════════════════════════╗"));
-      console.log(chalk.magentaBright.bold("  ║                                          ║"));
-      console.log(chalk.magentaBright.bold("  ║   🌍  CULTIVATING THE ORGANISM  🌍        ║"));
-      console.log(chalk.magentaBright.bold("  ║                                          ║"));
-      console.log(chalk.magentaBright.bold("  ╚══════════════════════════════════════════╝"));
+      console.log(chalk.magentaBright("  🧬 Execution plan\n"));
+      console.log(
+        chalk.gray("    Biomes:      ") + chalk.white(String(biomes.length))
+      );
+      console.log(
+        chalk.gray("    Leaf agents: ") + chalk.white(String(leaves.length))
+      );
+      console.log(
+        chalk.gray("    Waves:       ") + chalk.white(String(waves.length))
+      );
+      console.log(
+        chalk.gray("    Concurrency: ") +
+          chalk.white(String(opts.maxConcurrency))
+      );
+      console.log(
+        chalk.gray("    Gating:      ") + chalk.cyan(gating)
+      );
+      console.log();
+
+      for (let i = 0; i < waves.length; i++) {
+        console.log(chalk.gray(`    Wave ${i + 1} (${waves[i].length}):`));
+        for (const leaf of waves[i]) {
+          console.log(
+            chalk.gray("      • ") +
+              chalk.cyan(leaf.id) +
+              chalk.gray(" — ") +
+              chalk.white(leaf.scope)
+          );
+        }
+      }
       console.log();
 
       if (opts.dryRun) {
-        console.log(chalk.yellow.bold("  ⚠️  DRY RUN MODE — no agents will be executed\n"));
+        console.log(
+          chalk.yellow.bold("  ⚠️  DRY RUN — no sessions spawned.\n")
+        );
+        return;
       }
 
-      console.log(
-        chalk.gray("  Organism: ") +
-          chalk.white.bold(organism.name) +
-          chalk.gray(" | Target: ") +
-          chalk.cyan(organism.ship_target || "unset") +
-          chalk.gray(" | Agents: ") +
-          chalk.cyan(String(agents.length))
-      );
-      console.log();
+      // ── Cultivation: spawn each wave with a concurrency limit ─────
+      console.log(chalk.magentaBright("  🌱 Cultivating...\n"));
 
-      // Phase 1: Reading configuration
-      const spinnerConfig = ora({
-        text: chalk.cyan("Reading organism DNA from mycelium.yaml..."),
-        spinner: "earth",
-      }).start();
-      await sleep(500);
-      spinnerConfig.succeed(chalk.green("Organism DNA loaded"));
+      const targetDir = process.cwd();
+      const allResults: LeafResult[] = [];
 
-      // Phase 2: Validating contracts
-      const spinnerContracts = ora({
-        text: chalk.cyan("Validating shared contracts..."),
-        spinner: "dots",
-      }).start();
-      await sleep(400);
-
-      const contracts = config.contracts || [];
-      const frozenCount = contracts.filter(
-        (c: any) => typeof c === "object" && c.frozen
-      ).length;
-
-      spinnerContracts.succeed(
-        chalk.green(
-          `${contracts.length} contract(s) validated` +
-            (frozenCount > 0 ? chalk.gray(` (${frozenCount} frozen)`) : "")
-        )
-      );
-
-      // Phase 3: Resolving dependency graph
-      const spinnerDeps = ora({
-        text: chalk.cyan("Resolving dependency graph..."),
-        spinner: "dots",
-      }).start();
-      await sleep(400);
-
-      const layers = buildLayers(agents);
-      spinnerDeps.succeed(
-        chalk.green(
-          `Dependency graph resolved — ${layers.length} growth phase(s) identified`
-        )
-      );
-
-      // Phase 4: Initializing agents
-      console.log();
-      console.log(
-        chalk.magentaBright("  🧬 Initializing agents...\n")
-      );
-
-      for (let i = 0; i < layers.length; i++) {
-        const layer = layers[i];
+      for (let w = 0; w < waves.length; w++) {
+        const wave = waves[w];
         console.log(
-          chalk.gray(`  ── Phase ${i + 1} `) +
+          chalk.gray(`  ── Wave ${w + 1}/${waves.length} `) +
             chalk.gray("─".repeat(40))
         );
 
-        for (const agent of layer) {
-          const spinner = ora({
-            text: chalk.cyan(
-              `Germinating ${chalk.white.bold(agent.id)}` +
-                chalk.gray(` (${agent.scope})`)
-            ),
-            spinner: "dots",
-            indent: 4,
-          }).start();
-
-          await sleep(250 + Math.random() * 200);
-
-          const blockedStr =
-            agent.blocked_by.length > 0
-              ? chalk.gray(` [after: ${agent.blocked_by.join(", ")}]`)
-              : "";
-
-          spinner.succeed(
-            chalk.green(`${agent.id} `) +
-              chalk.gray("→ ") +
-              chalk.cyan("HYPHAL_GROWTH") +
-              blockedStr
-          );
-        }
-
-        console.log();
-      }
-
-      // Phase 5: Distributing contracts
-      if (contracts.length > 0) {
-        const spinnerDistribute = ora({
-          text: chalk.cyan("Distributing contracts to all agents..."),
-          spinner: "dots",
-        }).start();
-        await sleep(400);
-        spinnerDistribute.succeed(
-          chalk.green(`Contracts distributed to ${agents.length} agent(s)`)
+        const results = await runWithConcurrency(
+          wave,
+          opts.maxConcurrency,
+          (leaf) => cultivateLeaf(leaf, targetDir, config)
         );
+        allResults.push(...results);
         console.log();
       }
 
-      // Phase 6: Starting health monitoring
-      const spinnerHealth = ora({
-        text: chalk.cyan("Starting health pulse monitor..."),
-        spinner: "hearts",
-      }).start();
-      await sleep(400);
-      spinnerHealth.succeed(
-        chalk.green(
-          `Health pulse active — interval: ${organism.health_pulse_interval || 30}s`
-        )
-      );
-
-      // Phase 7: Timeline display (if present)
-      const timeline = config.timeline;
-      if (timeline && timeline.parallel_phases) {
-        console.log();
-        console.log(chalk.magentaBright("  📅 Growth Timeline:\n"));
-
-        for (const phase of timeline.parallel_phases as TimelinePhase[]) {
-          const activeStr = phase.active
-            .map((id: string) => chalk.cyan(id))
-            .join(chalk.gray(", "));
-
-          console.log(
-            chalk.yellow(`    ⏱  ${phase.hours}h`) +
-              chalk.gray(" — ") +
-              chalk.white(phase.description)
-          );
-          console.log(
-            chalk.gray("       Active: ") + activeStr
-          );
-        }
-      }
-
-      // ── Final output ──────────────────────────────────────
-
-      console.log();
-      console.log(chalk.gray("  " + "═".repeat(50)));
-      console.log();
-      console.log(
-        chalk.greenBright.bold("  🍄 The organism is alive!")
-      );
-      console.log();
-      console.log(
-        chalk.gray("  ") +
-          chalk.white(`${agents.length} agents growing`) +
-          chalk.gray(" across ") +
-          chalk.white(`${layers.length} parallel phases`)
-      );
-      console.log(
-        chalk.gray("  Harvest threshold: ") +
-          chalk.cyan(
-            `${Math.round((organism.harvest_threshold || 0.8) * 100)}%`
-          )
-      );
-      console.log();
-      console.log(
-        chalk.gray("  Commands:")
-      );
-      console.log(
-        chalk.gray("    ") +
-          chalk.cyan("mycelium network status") +
-          chalk.gray("    — check agent states")
-      );
-      console.log(
-        chalk.gray("    ") +
-          chalk.cyan("mycelium flow") +
-          chalk.gray("               — trigger nutrient distribution")
-      );
-      console.log(
-        chalk.gray("    ") +
-          chalk.cyan("mycelium harvest") +
-          chalk.gray("            — collect deliverables")
-      );
-      console.log();
-      console.log(
-        chalk.magentaBright.italic(
-          "  The mycelium grows. The network provides. 🌿"
-        )
-      );
-      console.log();
+      // ── Report ─────────────────────────────────────────────────────
+      summary(allResults, organism);
     });
 }
 
-function buildLayers(agents: Agent[]): Agent[][] {
-  const placed = new Set<string>();
-  const layers: Agent[][] = [];
-  let remaining = [...agents];
+// ── Tree flattening ────────────────────────────────────────────────────
 
-  while (remaining.length > 0) {
-    const layer = remaining.filter((a) =>
-      (a.blocked_by || []).every((dep) => placed.has(dep))
-    );
-
-    if (layer.length === 0) {
-      layers.push(remaining);
-      break;
+function flattenBiome(biome: Agent): Leaf[] {
+  const out: Leaf[] = [];
+  const walk = (specs: SubAgent[] | undefined, lineage: string[]) => {
+    if (!specs || specs.length === 0) {
+      // biome has no sub_agents — the biome itself is the leaf
+      if (lineage.length === 1) {
+        out.push({
+          id: biome.id,
+          scope: biome.scope,
+          branch: biome.branch,
+          lineage,
+          biome: biome.id,
+        });
+      }
+      return;
     }
-
-    layers.push(layer);
-    for (const a of layer) placed.add(a.id);
-    remaining = remaining.filter((a) => !placed.has(a.id));
-  }
-
-  return layers;
+    for (const s of specs) {
+      const nextLineage = [...lineage, s.id];
+      if (s.sub_agents && s.sub_agents.length > 0) {
+        walk(s.sub_agents, nextLineage);
+      } else {
+        out.push({
+          id: s.id,
+          scope: s.scope,
+          branch: `feat/${s.id}`,
+          lineage: nextLineage,
+          biome: biome.id,
+        });
+      }
+    }
+  };
+  walk(biome.sub_agents, [biome.id]);
+  return out;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// ── Wave gating (biome-level blocked_by) ───────────────────────────────
+
+function buildLeafWaves(biomes: Agent[], leaves: Leaf[]): Leaf[][] {
+  const byBiome: Record<string, Leaf[]> = {};
+  for (const l of leaves) {
+    (byBiome[l.biome] ||= []).push(l);
+  }
+
+  const placed = new Set<string>();
+  const waves: Leaf[][] = [];
+  let remaining = [...biomes];
+
+  while (remaining.length > 0) {
+    const ready = remaining.filter((b) =>
+      (b.blocked_by || []).every((dep) => placed.has(dep))
+    );
+    if (ready.length === 0) {
+      // cycle / dead-end: dump the rest into one final wave
+      waves.push(remaining.flatMap((b) => byBiome[b.id] || []));
+      break;
+    }
+    const wave: Leaf[] = ready.flatMap((b) => byBiome[b.id] || []);
+    if (wave.length > 0) waves.push(wave);
+    for (const b of ready) placed.add(b.id);
+    remaining = remaining.filter((b) => !placed.has(b.id));
+  }
+
+  return waves;
+}
+
+// ── Concurrency-limited promise pool ───────────────────────────────────
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+
+  async function runner() {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      results[i] = await worker(items[i]);
+    }
+  }
+
+  const runners = Array.from(
+    { length: Math.min(limit, items.length) },
+    () => runner()
+  );
+  await Promise.all(runners);
+  return results;
+}
+
+// ── The actual SDK spawn per leaf ──────────────────────────────────────
+
+async function cultivateLeaf(
+  leaf: Leaf,
+  targetDir: string,
+  config: any
+): Promise<LeafResult> {
+  const started = Date.now();
+  const spinner = ora({
+    text: chalk.cyan(`🌱 ${leaf.id}`) + chalk.gray(` — ${leaf.scope}`),
+    spinner: "dots",
+    indent: 2,
+  }).start();
+
+  const prompt = buildLeafPrompt(leaf, config);
+  const artifacts: string[] = [];
+
+  try {
+    const stream = query({
+      prompt,
+      options: {
+        cwd: targetDir,
+        allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        permissionMode: "acceptEdits",
+      },
+    });
+
+    for await (const msg of stream) {
+      if (msg.type === "assistant") {
+        const blocks = (msg as any).message?.content ?? [];
+        for (const b of blocks) {
+          if (b.type === "tool_use") {
+            const target = summarizeTool(b.name, b.input);
+            if (target) {
+              spinner.text =
+                chalk.cyan(`🌿 ${leaf.id}`) +
+                chalk.gray(` → ${b.name} ${target}`);
+              if (b.name === "Write" || b.name === "Edit") {
+                if (b.input?.file_path) artifacts.push(b.input.file_path);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // ── Auto-commit via serialized queue (no git race) ──────────
+    const commitMsg = await commitQueue.enqueue(async () => {
+      return autoCommitLeaf(leaf, targetDir, artifacts);
+    });
+
+    const ms = Date.now() - started;
+    spinner.succeed(
+      chalk.green(`🍄 ${leaf.id}`) +
+        chalk.gray(
+          ` FRUIT_READY (${artifacts.length} files, ${(ms / 1000).toFixed(1)}s)` +
+            (commitMsg ? ` · ${commitMsg}` : "")
+        )
+    );
+    return { leaf, success: true, artifacts, ms };
+  } catch (err: any) {
+    const ms = Date.now() - started;
+    spinner.fail(
+      chalk.red(`⚠ ${leaf.id}`) +
+        chalk.gray(` failed after ${(ms / 1000).toFixed(1)}s`)
+    );
+    return {
+      leaf,
+      success: false,
+      artifacts,
+      error: err?.message ?? String(err),
+      ms,
+    };
+  }
+}
+
+function buildLeafPrompt(leaf: Leaf, config: any): string {
+  const organism = config.organism?.name ?? "organism";
+  const biomeHypha = `hyphae/HYPHA-${leaf.biome.replace(/-agent$/, "").toUpperCase()}-AGENT.md`;
+
+  return [
+    `You are the \`${leaf.id}\` specialist sub-agent in the **${organism}** mycelium organism.`,
+    ``,
+    `Lineage: ${leaf.lineage.join(" → ")}`,
+    `Scope:   ${leaf.scope}`,
+    `Branch:  ${leaf.branch}`,
+    ``,
+    `Required reading before you write a line:`,
+    `  1. CLAUDE.md            — stack, rules, stream tags`,
+    `  2. NUTRIENTS.md         — frozen contracts you must respect`,
+    `  3. ${biomeHypha}         — your biome's hypha spec + KPI gates`,
+    `  4. mycelium.yaml        — dependency graph + merge order`,
+    ``,
+    `Your job:`,
+    `  - Execute ONLY your scope. Do not drift into sibling leaves.`,
+    `  - Respect every frozen contract in NUTRIENTS.md. If a contract does not`,
+    `    cover your case, STOP and surface a contract-update request — do not`,
+    `    invent new shapes.`,
+    `  - Meet the KPI gates in the biome hypha file that apply to your scope.`,
+    ``,
+    `DO NOT run git yourself. The orchestrator serializes commits across all`,
+    `parallel leaves to prevent race conditions. Just write your files and end`,
+    `with a final summary line:`,
+    ``,
+    `  [${leaf.id}] FRUIT_READY — <one-line summary of what you built>`,
+    ``,
+    `The network provides. Grow in your lane. 🍄`,
+  ].join("\n");
+}
+
+// ── Serialized git queue — prevents parallel git races ─────────────────
+
+class CommitQueue {
+  private chain: Promise<any> = Promise.resolve();
+  enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.chain.then(fn, fn);
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
+}
+const commitQueue = new CommitQueue();
+
+function autoCommitLeaf(
+  leaf: Leaf,
+  cwd: string,
+  artifacts: string[]
+): string | null {
+  try {
+    // Snapshot dirty state; if nothing changed, skip.
+    const status = execFileSync("git", ["status", "--porcelain"], {
+      cwd,
+      encoding: "utf-8",
+    }).trim();
+    if (!status) return null;
+
+    const tag = leaf.biome.replace(/-agent$/, "").toUpperCase();
+    const msg = `${tag}/${leaf.id}: ${leaf.scope}`;
+    execFileSync("git", ["add", "-A"], { cwd });
+    execFileSync("git", ["commit", "-m", msg, "--no-verify"], {
+      cwd,
+      stdio: "pipe",
+    });
+    return chalk.gray(`committed ${tag}/${leaf.id}`);
+  } catch (err: any) {
+    return chalk.yellow(`commit skipped: ${err?.message?.split("\n")[0] ?? err}`);
+  }
+}
+
+function summarizeTool(name: string, input: any): string {
+  if (!input) return "";
+  if (name === "Write" || name === "Edit" || name === "Read") {
+    return input.file_path ?? "";
+  }
+  if (name === "Bash") {
+    return (input.command ?? "").split("\n")[0].slice(0, 60);
+  }
+  if (name === "Glob" || name === "Grep") {
+    return input.pattern ?? "";
+  }
+  return "";
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────
+
+function banner(
+  organism: any,
+  agents: Agent[],
+  gating: string,
+  cellular: boolean,
+  opts: any
+): void {
+  console.log();
+  console.log(chalk.magentaBright.bold("  ╔══════════════════════════════════════════╗"));
+  console.log(chalk.magentaBright.bold("  ║                                          ║"));
+  console.log(chalk.magentaBright.bold("  ║   🌍  CULTIVATING THE ORGANISM  🌍        ║"));
+  console.log(chalk.magentaBright.bold("  ║                                          ║"));
+  console.log(chalk.magentaBright.bold("  ╚══════════════════════════════════════════╝"));
+  console.log();
+
+  if (opts.dryRun) {
+    console.log(chalk.yellow.bold("  ⚠️  DRY RUN MODE — no sessions will spawn\n"));
+  }
+
+  console.log(
+    chalk.gray("  Organism: ") +
+      chalk.white.bold(organism.name) +
+      chalk.gray(" | Target: ") +
+      chalk.cyan(organism.ship_target || "unset") +
+      chalk.gray(" | Biomes: ") +
+      chalk.cyan(String(agents.length)) +
+      chalk.gray(" | Mode: ") +
+      chalk.cyan(cellular ? "cellular" : "flat")
+  );
+}
+
+function summary(results: LeafResult[], organism: any): void {
+  const ok = results.filter((r) => r.success);
+  const fail = results.filter((r) => !r.success);
+  const totalFiles = results.reduce((n, r) => n + r.artifacts.length, 0);
+  const totalMs = results.reduce((n, r) => Math.max(n, r.ms), 0);
+
+  console.log(chalk.gray("  " + "═".repeat(50)));
+  console.log();
+
+  if (fail.length === 0) {
+    console.log(chalk.greenBright.bold("  🍄 The organism is alive!"));
+  } else {
+    console.log(
+      chalk.yellow.bold(
+        `  🍂 Organism partially grown — ${fail.length}/${results.length} leaves failed`
+      )
+    );
+  }
+
+  console.log();
+  console.log(
+    chalk.gray("  ") +
+      chalk.white(`${ok.length}/${results.length} leaves FRUIT_READY`) +
+      chalk.gray(" · ") +
+      chalk.white(`${totalFiles} files produced`) +
+      chalk.gray(" · wall-clock ") +
+      chalk.white(`${(totalMs / 1000).toFixed(1)}s`)
+  );
+
+  if (fail.length > 0) {
+    console.log();
+    console.log(chalk.red("  Failed leaves:"));
+    for (const r of fail) {
+      console.log(
+        chalk.red("    ✗ ") +
+          chalk.white(r.leaf.id) +
+          chalk.gray(" — ") +
+          chalk.red(r.error ?? "unknown")
+      );
+    }
+  }
+
+  const threshold = organism.harvest_threshold ?? 0.8;
+  const health = ok.length / Math.max(1, results.length);
+  console.log();
+  console.log(
+    chalk.gray("  Organism health: ") +
+      chalk.white(`${(health * 100).toFixed(0)}%`) +
+      chalk.gray(" (harvest threshold: ") +
+      chalk.cyan(`${(threshold * 100).toFixed(0)}%`) +
+      chalk.gray(")")
+  );
+
+  console.log();
+  if (health >= threshold) {
+    console.log(
+      chalk.green("  Ready to harvest: ") +
+        chalk.cyan("mycelium harvest")
+    );
+  } else {
+    console.log(
+      chalk.yellow("  Below harvest threshold — re-run failed leaves with ") +
+        chalk.cyan("mycelium cultivate --only-biome <id>")
+    );
+  }
+  console.log();
+  console.log(
+    chalk.magentaBright.italic(
+      "  The mycelium grows. The network provides. 🌿"
+    )
+  );
+  console.log();
 }
