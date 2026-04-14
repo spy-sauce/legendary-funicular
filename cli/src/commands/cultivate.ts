@@ -401,7 +401,6 @@ function autoCommitLeaf(
   artifacts: string[]
 ): string | null {
   try {
-    // Snapshot dirty state; if nothing changed, skip.
     const status = execFileSync("git", ["status", "--porcelain"], {
       cwd,
       encoding: "utf-8",
@@ -415,7 +414,29 @@ function autoCommitLeaf(
       cwd,
       stdio: "pipe",
     });
-    return chalk.gray(`committed ${tag}/${leaf.id}`);
+
+    // Push — set upstream on first push per branch, swallow no-remote errors.
+    let pushStatus = "committed";
+    try {
+      const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+        cwd,
+        encoding: "utf-8",
+      }).trim();
+      execFileSync("git", ["push", "--set-upstream", "origin", branch], {
+        cwd,
+        stdio: "pipe",
+      });
+      pushStatus = "committed+pushed";
+    } catch (pushErr: any) {
+      const errMsg = String(pushErr?.stderr ?? pushErr?.message ?? pushErr);
+      if (/no.*origin|does not appear to be a git repository|No such remote/i.test(errMsg)) {
+        pushStatus = "committed (no remote)";
+      } else {
+        pushStatus = `committed (push failed: ${errMsg.split("\n")[0].slice(0, 60)})`;
+      }
+    }
+
+    return chalk.gray(`${pushStatus} ${tag}/${leaf.id}`);
   } catch (err: any) {
     return chalk.yellow(`commit skipped: ${err?.message?.split("\n")[0] ?? err}`);
   }
