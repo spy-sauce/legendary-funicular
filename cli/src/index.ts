@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // Mycelium Framework — VibeSpace LLC — The network provides.
 
+// Each Claude Agent SDK session adds a process 'exit' listener. With high
+// --max-concurrency we deliberately blow past Node's default limit of 10.
+process.setMaxListeners(0);
+
 import { Command } from "commander";
 import chalk from "chalk";
 import boxen from "boxen";
@@ -12,6 +16,10 @@ import { registerFlowCommand } from "./commands/flow.js";
 import { registerHarvestCommand } from "./commands/harvest.js";
 import { registerCultivateCommand } from "./commands/cultivate.js";
 import { registerPlantCommand } from "./commands/plant.js";
+import { registerMapCommand } from "./commands/map.js";
+import { registerExportCommand } from "./commands/export.js";
+import { registerSporenetCommand } from "./commands/sporenet.js";
+import { registerUpgradesCommand } from "./commands/upgrades.js";
 
 const banner = boxen(
   chalk.magentaBright.bold("🍄 Mycelium") +
@@ -45,5 +53,9 @@ registerFlowCommand(program);
 registerHarvestCommand(program);
 registerCultivateCommand(program);
 registerPlantCommand(program);
+registerMapCommand(program);
+registerExportCommand(program);
+registerSporenetCommand(program);
+registerUpgradesCommand(program);
 
 program.parse();

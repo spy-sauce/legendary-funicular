@@ -17,6 +17,15 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import YAML from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import type { Upgrade, UpgradeCtx } from "../lib/upgrades/types.js";
+import { resolveUpgrades } from "../upgrades/registry.js";
+import {
+  runBeforePlan,
+  runBeforeSpawn,
+  runTransformPrompt,
+  runAfterLeaf,
+  runOnCrash,
+} from "../lib/upgrades/hooks.js";
 
 interface SubAgent {
   id: string;
@@ -51,6 +60,7 @@ interface LeafResult {
   artifacts: string[];
   error?: string;
   ms: number;
+  logPath?: string;
 }
 
 export function registerCultivateCommand(program: Command): void {
@@ -68,6 +78,14 @@ export function registerCultivateCommand(program: Command): void {
       "--only-biome <id>",
       "Cultivate only one biome's dish (for targeted re-runs)"
     )
+    .option(
+      "--exclude-biome <ids...>",
+      "Skip these biomes (space-separated) — use for held-back work"
+    )
+    .option(
+      "--no-push",
+      "Auto-commit but do not push to origin (default: push)"
+    )
     .action(async (opts) => {
       const configPath = path.join(process.cwd(), "mycelium.yaml");
       if (!fs.existsSync(configPath)) {
@@ -82,6 +100,7 @@ export function registerCultivateCommand(program: Command): void {
       }
 
       const config = YAML.parse(fs.readFileSync(configPath, "utf-8"));
+      config._push = opts.push !== false;
       const organism = config.organism || { name: "unknown" };
       const agents: Agent[] = config.agents || [];
       const gating: string = organism.gating || "wave";
@@ -98,7 +117,7 @@ export function registerCultivateCommand(program: Command): void {
       banner(organism, agents, gating, cellular, opts);
 
       // ── Flatten the tree to leaves ─────────────────────────────────
-      const biomes = opts.onlyBiome
+      let biomes = opts.onlyBiome
         ? agents.filter((a) => a.id === opts.onlyBiome)
         : agents;
 
@@ -107,7 +126,62 @@ export function registerCultivateCommand(program: Command): void {
         return;
       }
 
+      const excluded: string[] = Array.isArray(opts.excludeBiome)
+        ? opts.excludeBiome
+        : opts.excludeBiome
+        ? [opts.excludeBiome]
+        : [];
+      if (excluded.length > 0) {
+        const before = biomes.length;
+        biomes = biomes.filter((a) => !excluded.includes(a.id));
+        console.log(
+          chalk.yellow(
+            `  🚫 Excluded ${before - biomes.length} biome(s): ${excluded.join(", ")}`
+          )
+        );
+      }
+
       const leaves: Leaf[] = biomes.flatMap((biome) => flattenBiome(biome));
+
+      // ── Resolve installed upgrades ─────────────────────────────────
+      const upgradeNames: string[] = organism.upgrades ?? [];
+      let upgrades: Upgrade[] = [];
+      try {
+        upgrades = resolveUpgrades(upgradeNames);
+      } catch (err: any) {
+        console.log(chalk.red(`  ❌ ${err.message}`));
+        return;
+      }
+
+      const upgradeCtx: UpgradeCtx = {
+        organism,
+        agents,
+        leaves,
+        config,
+        targetDir: process.cwd(),
+        runLogDir: "",
+      };
+
+      if (upgrades.length > 0) {
+        console.log();
+        console.log(
+          chalk.magentaBright("  🔧 Upgrades: ") +
+            chalk.cyan(upgrades.map((u) => u.manifest.name).join(", "))
+        );
+        const outcome = await runBeforePlan(upgrades, upgradeCtx);
+        for (const w of outcome.warnings) {
+          console.log(chalk.yellow(`  ⚠ ${w}`));
+        }
+        if (outcome.abort) {
+          console.log();
+          for (const r of outcome.reasons) {
+            console.log(chalk.red(`  ❌ ${r}`));
+          }
+          console.log();
+          return;
+        }
+      }
+
       const waves: Leaf[][] = gating === "contract-freeze"
         ? [leaves] // one wave, all at once
         : buildLeafWaves(biomes, leaves);
@@ -154,30 +228,115 @@ export function registerCultivateCommand(program: Command): void {
       }
 
       // ── Cultivation: spawn each wave with a concurrency limit ─────
+      installShutdownHook();
       console.log(chalk.magentaBright("  🌱 Cultivating...\n"));
 
       const targetDir = process.cwd();
+      const logsDir = path.join(targetDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      const runStamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const runLogDir = path.join(logsDir, runStamp);
+      fs.mkdirSync(runLogDir, { recursive: true });
+      upgradeCtx.runLogDir = runLogDir;
+      console.log(chalk.gray(`  📝 Leaf logs: ${path.relative(targetDir, runLogDir)}/<leaf-id>.log\n`));
       const allResults: LeafResult[] = [];
 
-      for (let w = 0; w < waves.length; w++) {
-        const wave = waves[w];
-        console.log(
-          chalk.gray(`  ── Wave ${w + 1}/${waves.length} `) +
-            chalk.gray("─".repeat(40))
-        );
+      try {
+        for (let w = 0; w < waves.length; w++) {
+          const wave = waves[w];
+          console.log(
+            chalk.gray(`  ── Wave ${w + 1}/${waves.length} `) +
+              chalk.gray("─".repeat(40))
+          );
 
-        const results = await runWithConcurrency(
-          wave,
-          opts.maxConcurrency,
-          (leaf) => cultivateLeaf(leaf, targetDir, config)
-        );
-        allResults.push(...results);
-        console.log();
+          const results = await runWithConcurrency(
+            wave,
+            opts.maxConcurrency,
+            async (leaf) => {
+              if (upgrades.length > 0) {
+                const dec = await runBeforeSpawn(upgrades, upgradeCtx, leaf);
+                if (dec.skip) {
+                  console.log(
+                    chalk.cyan(`  ⏭ ${leaf.id}`) +
+                      chalk.gray(` — skipped: ${dec.skipReason ?? "upgrade"}`)
+                  );
+                  const synthetic: LeafResult = {
+                    leaf,
+                    success: true,
+                    artifacts: [],
+                    ms: 0,
+                  };
+                  await runAfterLeaf(upgrades, upgradeCtx, leaf, synthetic);
+                  return synthetic;
+                }
+              }
+              const result = await cultivateLeaf(
+                leaf,
+                targetDir,
+                config,
+                runLogDir,
+                upgrades,
+                upgradeCtx
+              );
+              if (upgrades.length > 0) {
+                await runAfterLeaf(upgrades, upgradeCtx, leaf, result);
+              }
+              return result;
+            }
+          );
+          allResults.push(...results);
+          console.log();
+        }
+      } catch (err) {
+        if (upgrades.length > 0) {
+          await runOnCrash(upgrades, upgradeCtx, err);
+        }
+        throw err;
       }
 
       // ── Report ─────────────────────────────────────────────────────
       summary(allResults, organism);
     });
+}
+
+// ── Session lifecycle ──────────────────────────────────────────────────
+// Every live Claude Agent SDK Query goes in this set so we can cleanly
+// interrupt + release all of them on error or ctrl-c.
+
+const activeSessions = new Set<any>();
+
+async function closeStream(s: any): Promise<void> {
+  try {
+    if (typeof s?.interrupt === "function") {
+      await s.interrupt().catch(() => undefined);
+    }
+    if (typeof s?.return === "function") {
+      await s.return(undefined).catch(() => undefined);
+    }
+  } catch {
+    // best-effort cleanup only
+  }
+}
+
+let sigintInstalled = false;
+function installShutdownHook(): void {
+  if (sigintInstalled) return;
+  sigintInstalled = true;
+  const shutdown = async () => {
+    const count = activeSessions.size;
+    if (count === 0) {
+      process.exit(130);
+    }
+    console.log();
+    console.log(chalk.yellow.bold(`  ✋ Interrupt received — closing ${count} active session(s)...`));
+    const pending = Array.from(activeSessions);
+    activeSessions.clear();
+    await Promise.allSettled(pending.map((s) => closeStream(s)));
+    console.log(chalk.yellow("  🍂 Sessions closed. Exiting."));
+    process.exit(130);
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 // ── Tree flattening ────────────────────────────────────────────────────
@@ -278,7 +437,10 @@ async function runWithConcurrency<T, R>(
 async function cultivateLeaf(
   leaf: Leaf,
   targetDir: string,
-  config: any
+  config: any,
+  logDir: string,
+  upgrades: Upgrade[] = [],
+  upgradeCtx?: UpgradeCtx
 ): Promise<LeafResult> {
   const started = Date.now();
   const spinner = ora({
@@ -287,11 +449,20 @@ async function cultivateLeaf(
     indent: 2,
   }).start();
 
-  const prompt = buildLeafPrompt(leaf, config);
+  let prompt = buildLeafPrompt(leaf, config);
+  if (upgrades.length > 0 && upgradeCtx) {
+    prompt = await runTransformPrompt(upgrades, upgradeCtx, leaf, prompt);
+  }
   const artifacts: string[] = [];
+  const logPath = path.join(logDir, `${leaf.id}.log`);
+  const logStream = fs.createWriteStream(logPath, { flags: "a" });
+  const logLine = (obj: any) => logStream.write(JSON.stringify({ t: new Date().toISOString(), ...obj }) + "\n");
+  logLine({ event: "start", leaf: leaf.id, scope: leaf.scope, branch: leaf.branch, lineage: leaf.lineage });
+  logLine({ event: "prompt", prompt });
 
+  let stream: any;
   try {
-    const stream = query({
+    stream = query({
       prompt,
       options: {
         cwd: targetDir,
@@ -299,8 +470,10 @@ async function cultivateLeaf(
         permissionMode: "acceptEdits",
       },
     });
+    activeSessions.add(stream);
 
     for await (const msg of stream) {
+      logLine({ event: "sdk_msg", msg });
       if (msg.type === "assistant") {
         const blocks = (msg as any).message?.content ?? [];
         for (const b of blocks) {
@@ -321,10 +494,38 @@ async function cultivateLeaf(
 
     // ── Auto-commit via serialized queue (no git race) ──────────
     const commitMsg = await commitQueue.enqueue(async () => {
-      return autoCommitLeaf(leaf, targetDir, artifacts);
+      return autoCommitLeaf(leaf, targetDir, artifacts, (config as any)._push !== false);
     });
 
+    // ── Mark in SporeNet if state.json exists ───────────────────
+    try {
+      const statePath = path.join(targetDir, "sporenet", "state.json");
+      if (fs.existsSync(statePath)) {
+        const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+        const stateLeaf = state.leaves.find((l: any) => l.id === leaf.id);
+        if (stateLeaf) {
+          stateLeaf.status = "done";
+          stateLeaf.completed_at = new Date().toISOString();
+          const shaMatch = (commitMsg ?? "").match(/\b[0-9a-f]{7,40}\b/);
+          if (shaMatch) stateLeaf.commit = shaMatch[0];
+          else if ((commitMsg ?? "").includes("committed")) {
+            try {
+              const sha = execFileSync("git", ["-C", targetDir, "rev-parse", "HEAD"], { encoding: "utf-8" }).trim();
+              stateLeaf.commit = sha;
+            } catch {}
+          }
+          fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+        }
+      }
+    } catch {
+      // SporeNet sync is best-effort only
+    }
+
     const ms = Date.now() - started;
+    logLine({ event: "fruit_ready", artifacts, ms, commit: commitMsg });
+    logStream.end();
+    activeSessions.delete(stream);
+    await closeStream(stream);
     spinner.succeed(
       chalk.green(`🍄 ${leaf.id}`) +
         chalk.gray(
@@ -332,19 +533,28 @@ async function cultivateLeaf(
             (commitMsg ? ` · ${commitMsg}` : "")
         )
     );
-    return { leaf, success: true, artifacts, ms };
+    return { leaf, success: true, artifacts, ms, logPath };
   } catch (err: any) {
     const ms = Date.now() - started;
+    const errMsg = err?.message ?? String(err);
+    logLine({ event: "error", error: errMsg, stack: err?.stack });
+    logStream.end();
+    if (stream) {
+      activeSessions.delete(stream);
+      await closeStream(stream);
+    }
     spinner.fail(
       chalk.red(`⚠ ${leaf.id}`) +
-        chalk.gray(` failed after ${(ms / 1000).toFixed(1)}s`)
+        chalk.gray(` failed after ${(ms / 1000).toFixed(1)}s → `) +
+        chalk.yellow(path.relative(targetDir, logPath))
     );
     return {
       leaf,
       success: false,
       artifacts,
-      error: err?.message ?? String(err),
+      error: errMsg,
       ms,
+      logPath,
     };
   }
 }
@@ -398,7 +608,8 @@ const commitQueue = new CommitQueue();
 function autoCommitLeaf(
   leaf: Leaf,
   cwd: string,
-  artifacts: string[]
+  artifacts: string[],
+  push: boolean = true
 ): string | null {
   try {
     const status = execFileSync("git", ["status", "--porcelain"], {
@@ -417,6 +628,9 @@ function autoCommitLeaf(
 
     // Push — set upstream on first push per branch, swallow no-remote errors.
     let pushStatus = "committed";
+    if (!push) {
+      return chalk.gray(`committed (no-push) ${tag}/${leaf.id}`);
+    }
     try {
       const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
         cwd,
@@ -526,8 +740,11 @@ function summary(results: LeafResult[], organism: any): void {
         chalk.red("    ✗ ") +
           chalk.white(r.leaf.id) +
           chalk.gray(" — ") +
-          chalk.red(r.error ?? "unknown")
+          chalk.red((r.error ?? "unknown").split("\n")[0].slice(0, 120))
       );
+      if (r.logPath) {
+        console.log(chalk.gray("        log: ") + chalk.yellow(r.logPath));
+      }
     }
   }
 
