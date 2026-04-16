@@ -100,14 +100,17 @@ await orchestrator.cultivate();
 ```bash
 npm install -g @vibespace/mycelium-cli
 
-mycelium init                    # Scaffold a new organism
-mycelium agent create auth       # Grow a new agent node
-mycelium contracts freeze        # Lock chemical signals before the sprint
-mycelium cultivate               # Start the organism
-mycelium network status          # Health check — see every node's state
-mycelium network visualize       # ASCII art of the living network
-mycelium flow                    # Trigger nutrient redistribution
-mycelium harvest                 # Collect all deliverables
+mycelium init                      # Scaffold a new organism
+mycelium agent create auth         # Grow a new agent node
+mycelium contracts freeze          # Lock chemical signals before the sprint
+mycelium cultivate                 # Start the organism (wave gating)
+mycelium cultivate --dry-run       # Print execution plan without spawning
+mycelium cultivate -c 150          # Max concurrency cap for leaf sessions
+mycelium cultivate --only-biome X  # Re-run a single biome's dish
+mycelium network status            # Health check — see every node's state
+mycelium network visualize         # ASCII art of the living network
+mycelium flow                      # Trigger nutrient redistribution
+mycelium harvest                   # Collect all deliverables
 ```
 
 ---
@@ -144,6 +147,44 @@ mycelium harvest                 # Collect all deliverables
                                                               ↓
                                                     (back to 🌱)
 ```
+
+### Cellular Execution (depth-3 + contract-freeze)
+
+Flat wave mode tops out around one agent per biome. **Cellular mode** decomposes each biome into specialists, and each specialist into leaves, so the organism runs ~90–150 concurrent Claude Agent SDK sessions at peak.
+
+Opt in via the organism header:
+
+```yaml
+organism:
+  name: bardot
+  cellular: true              # walk sub_agents tree recursively
+  gating: contract-freeze     # all leaves start the moment NUTRIENTS.md is frozen
+```
+
+Express the tree as nested `sub_agents` on each agent:
+
+```yaml
+agents:
+  - id: data-agent
+    scope: "PostgreSQL schema + client libs + integrity"
+    sub_agents:
+      - id: data.schema-migrations
+        scope: "Supabase migrations"
+        sub_agents:
+          - { id: data.schema.members-ambassadors, scope: "member+ambassador tables" }
+          - { id: data.schema.events-attendance,   scope: "event+attendance tables" }
+      - id: data.hot-path-indexes
+        sub_agents:
+          - { id: data.idx.member-phone,           scope: "phone lookup index" }
+```
+
+The `cultivate` command flattens the tree, assigns each leaf its own `feat/<id>` branch, and spawns a Claude Agent SDK session per leaf with a scoped prompt referencing `CLAUDE.md`, `NUTRIENTS.md`, and the leaf's biome hypha. Commits are serialized through an in-process queue to prevent git races.
+
+**Gating modes:**
+- `wave` (default) — biome-level `blocked_by` graph; leaves wait for upstream biome completion.
+- `contract-freeze` — once contracts are frozen, **every leaf starts at once**. Specialists consume frozen type stubs + mock payloads, not upstream code. Integration happens at merge time.
+
+See `CELLULAR-MAP.md` in a cultivated project for the living tree view of the organism.
 
 ### The Five Laws
 
@@ -190,6 +231,10 @@ mycelium/
 The magic is in step 6: **no agent clocks out**. Resources flow to where they create the most value. The network self-heals. The organism ships as one.
 
 ---
+
+## Developer Guide
+
+For a complete reference — schema, commands, execution model, HYPHA conventions, end-to-end workflow, authoring checklist, and known limits — see [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md).
 
 ## Philosophy
 
