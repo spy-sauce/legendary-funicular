@@ -141,7 +141,22 @@ export function registerCultivateCommand(program: Command): void {
         );
       }
 
-      const leaves: Leaf[] = biomes.flatMap((biome) => flattenBiome(biome));
+      let leaves: Leaf[] = biomes.flatMap((biome) => flattenBiome(biome));
+
+      // ── F1: skip leaves already marked done in sporenet/state.json ──
+      const doneIds = loadDoneLeafIds(process.cwd());
+      if (doneIds.size > 0) {
+        const before = leaves.length;
+        leaves = leaves.filter((l) => !doneIds.has(l.id));
+        const skipped = before - leaves.length;
+        if (skipped > 0) {
+          console.log(
+            chalk.gray(
+              `  ⏭  Skipping ${skipped} already-done leaf(s) per sporenet/state.json`
+            )
+          );
+        }
+      }
 
       // ── Resolve installed upgrades ─────────────────────────────────
       const upgradeNames: string[] = organism.upgrades ?? [];
@@ -497,29 +512,24 @@ async function cultivateLeaf(
       return autoCommitLeaf(leaf, targetDir, artifacts, (config as any)._push !== false);
     });
 
-    // ── Mark in SporeNet if state.json exists ───────────────────
-    try {
-      const statePath = path.join(targetDir, "sporenet", "state.json");
-      if (fs.existsSync(statePath)) {
-        const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-        const stateLeaf = state.leaves.find((l: any) => l.id === leaf.id);
-        if (stateLeaf) {
-          stateLeaf.status = "done";
-          stateLeaf.completed_at = new Date().toISOString();
-          const shaMatch = (commitMsg ?? "").match(/\b[0-9a-f]{7,40}\b/);
-          if (shaMatch) stateLeaf.commit = shaMatch[0];
-          else if ((commitMsg ?? "").includes("committed")) {
-            try {
-              const sha = execFileSync("git", ["-C", targetDir, "rev-parse", "HEAD"], { encoding: "utf-8" }).trim();
-              stateLeaf.commit = sha;
-            } catch {}
-          }
-          fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
-        }
-      }
-    } catch {
-      // SporeNet sync is best-effort only
+    // ── Mark done in SporeNet (F2: symmetric with failure path) ─
+    const updates: Record<string, any> = {
+      status: "done",
+      completed_at: new Date().toISOString(),
+    };
+    const shaMatch = (commitMsg ?? "").match(/\b[0-9a-f]{7,40}\b/);
+    if (shaMatch) updates.commit = shaMatch[0];
+    else if ((commitMsg ?? "").includes("committed")) {
+      try {
+        const sha = execFileSync(
+          "git",
+          ["-C", targetDir, "rev-parse", "HEAD"],
+          { encoding: "utf-8" }
+        ).trim();
+        updates.commit = sha;
+      } catch {}
     }
+    writeLeafState(targetDir, leaf.id, updates);
 
     const ms = Date.now() - started;
     logLine({ event: "fruit_ready", artifacts, ms, commit: commitMsg });
@@ -543,6 +553,12 @@ async function cultivateLeaf(
       activeSessions.delete(stream);
       await closeStream(stream);
     }
+    // F2: persist failure to SporeNet so re-runs and the dashboard see it
+    writeLeafState(targetDir, leaf.id, {
+      status: "failed",
+      error: errMsg.split("\n")[0].slice(0, 200),
+      completed_at: new Date().toISOString(),
+    });
     spinner.fail(
       chalk.red(`⚠ ${leaf.id}`) +
         chalk.gray(` failed after ${(ms / 1000).toFixed(1)}s → `) +
@@ -556,6 +572,40 @@ async function cultivateLeaf(
       ms,
       logPath,
     };
+  }
+}
+
+// F1/F2 helpers — SporeNet state readers/writers ───────────────────────
+function loadDoneLeafIds(targetDir: string): Set<string> {
+  try {
+    const statePath = path.join(targetDir, "sporenet", "state.json");
+    if (!fs.existsSync(statePath)) return new Set();
+    const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+    return new Set(
+      (state.leaves ?? [])
+        .filter((l: any) => l.status === "done")
+        .map((l: any) => l.id)
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeLeafState(
+  targetDir: string,
+  leafId: string,
+  updates: Record<string, any>
+): void {
+  try {
+    const statePath = path.join(targetDir, "sporenet", "state.json");
+    if (!fs.existsSync(statePath)) return;
+    const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+    const stateLeaf = state.leaves?.find((l: any) => l.id === leafId);
+    if (!stateLeaf) return;
+    Object.assign(stateLeaf, updates);
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  } catch {
+    // best-effort
   }
 }
 
