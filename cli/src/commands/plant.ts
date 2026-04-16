@@ -251,6 +251,46 @@ Your job — produce these files using the Write tool:
    (id, scope, branch, blocked_by, blocks, capabilities + germinate/grow/fruit
    methods that just log). Match what \`mycelium agent create\` would produce.
 
+6. **CELLULAR-MAP.md** — the max-concurrency execution tree for this organism.
+   This file is the operator's at-a-glance view of how deep the decomposition
+   goes and how many parallel Claude Agent SDK sessions the organism can fan
+   out to at peak. Required sections, in this order:
+
+   - **Heading** \`# {Organism Name} Cellular Execution Map\`
+   - **Blockquote** restating the gating model: max-concurrency tree, gating =
+     **contract freeze** (not fruit completion), every leaf is its own Claude
+     Agent SDK session on its own branch.
+   - **Concurrency math** table with columns \`Depth | Count\`:
+       \`Biomes (1)\` = number of top-level agents,
+       \`Specialists (2)\` = estimated count after one decomposition pass,
+       \`Leaf specialists (3)\` = target count once fully decomposed,
+       \`Total concurrent sessions at peak\` = realistic peak estimate now and
+       a target for full depth-3 rollout.
+   - **Gating semantics** paragraph: contrast old wave-gating vs. new
+     contract-freeze gating (specialists consume frozen contract stubs, not
+     upstream code; integration happens at merge time via deterministic merge
+     order, not execution time).
+   - **Tree** fenced code block rendering every agent → specialist → leaf in
+     the shape:
+     \`\`\`
+     organism: {name}
+     │
+     ├── {agent-id} ({specialist count})
+     │   ├── {agent-id}.{specialist-slug}
+     │   │   ├── {agent-id}.{specialist-slug}.{leaf-slug}
+     ...
+     \`\`\`
+     For agents where leaf decomposition is not yet planned, emit the agent
+     with a \`— flat; leaf decomposition TODO\` tag so gaps are visible.
+   - **What's next** numbered list — concrete next leaf-decomposition passes
+     to increase peak concurrency, each with an estimated session delta.
+   - **Parked for later** short list of intentionally deferred concerns
+     (rate-limit tuning, circuit breakers, etc.).
+
+   The map MUST be organism-agnostic in tone — no product-specific jargon
+   outside agent/specialist/leaf ids. It is the generic ideology applied to
+   this organism's specific decomposition.
+
 After writing all files, output a short markdown summary listing what you
 created and any open questions the user should resolve before running
 \`mycelium cultivate\`.
