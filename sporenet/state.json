@@ -27,21 +27,27 @@
       "agent": "telemetry-agent",
       "tag": "TELEMETRY",
       "scope": "Append-only JSONL writer to .mycelium/events/<run_id>.jsonl with atomic fs ops",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:42.220Z"
     },
     {
       "id": "telemetry.sink.s3",
       "agent": "telemetry-agent",
       "tag": "TELEMETRY",
       "scope": "S3 sink adapter gated on MYCELIUM_S3_BUCKET env — best-effort, never throws",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:41.351Z"
     },
     {
       "id": "cicd.action.composite",
       "agent": "cicd-agent",
       "tag": "CICD",
       "scope": "Author .github/actions/mycelium-run/action.yml per NUTRIENTS.md section 6",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:45.094Z"
     },
     {
       "id": "cicd.action.workflow",
@@ -80,7 +86,9 @@
       "agent": "cost-agent",
       "tag": "COST",
       "scope": "Upgrade in cli/src/upgrades/cost-tracker.ts; emits cost_recorded via telemetry on afterLeaf",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:41.223Z"
     },
     {
       "id": "cost.tracker.reconcile",
@@ -94,14 +102,18 @@
       "agent": "cost-agent",
       "tag": "COST",
       "scope": "Aggregate costs by organism/biome/leaf from event log in cli/src/lib/telemetry/cost-rollup.ts",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:43.579Z"
     },
     {
       "id": "cost.attribution.report",
       "agent": "cost-agent",
       "tag": "COST",
       "scope": "Extend mycelium harvest output with cost summary section",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:43.391Z"
     },
     {
       "id": "alerting.hook.upgrade",
@@ -122,14 +134,18 @@
       "agent": "alerting-agent",
       "tag": "ALERTING",
       "scope": "Slack poster via MYCELIUM_SLACK_WEBHOOK env; Block Kit JSON; never throws",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:44.854Z"
     },
     {
       "id": "alerting.sinks.github",
       "agent": "alerting-agent",
       "tag": "ALERTING",
       "scope": "GitHub issue creator via gh CLI subprocess; feature-detect gh; never throws",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:42.076Z"
     },
     {
       "id": "dashboard.template.port",
@@ -157,7 +173,9 @@
       "agent": "dashboard-agent",
       "tag": "DASHBOARD",
       "scope": "Wire /api/events + /api/events/stream to JSONL event log for phase 3 (DDP)",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:41.026Z"
     },
     {
       "id": "dashboard.live.poll",
@@ -171,21 +189,27 @@
       "agent": "fleet-agent",
       "tag": "FLEET",
       "scope": "DuckDB wrapper in cli/src/lib/fleet/duckdb.ts reading .mycelium/events/*.jsonl",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:42.553Z"
     },
     {
       "id": "fleet.query.api",
       "agent": "fleet-agent",
       "tag": "FLEET",
       "scope": "Typed query helpers in cli/src/lib/fleet/queries.ts: listOrganisms, organismRollup, stageDurations",
-      "status": "pending"
+      "status": "done",
+      "completed_at": "2026-04-17T22:40:41.014Z",
+      "commit": "fba0abb9619b8f95865ac8047faabb2b1dbff1dc"
     },
     {
       "id": "fleet.view.route",
       "agent": "fleet-agent",
       "tag": "FLEET",
       "scope": "Add /fleet route + /api/fleet/* endpoints to sporenet server",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:45.061Z"
     },
     {
       "id": "fleet.view.render",
@@ -199,7 +223,9 @@
       "agent": "docs-agent",
       "tag": "DOCS",
       "scope": "Append CI/CD section: composite action, inputs/outputs, DDP stages, secrets",
-      "status": "pending"
+      "status": "failed",
+      "error": "Claude Code process exited with code 1",
+      "completed_at": "2026-04-17T22:40:42.962Z"
     },
     {
       "id": "docs.guide.dashboard",

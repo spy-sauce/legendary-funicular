@@ -170,6 +170,23 @@ export function registerHarvestCommand(program: Command): void {
         }
         console.log();
       }
+
+      // Cost estimate section — only shown when JSONL event log exists
+      // Silently skipped if no events file (preserves existing harvest behavior)
+      const organism = config.organism?.name || "unknown";
+      const eventLogPath = findLatestEventLog(organism);
+      if (eventLogPath) {
+        try {
+          const rollup = await rollupFromJsonl(eventLogPath);
+          // Only print if there's actual cost data (at least one cost_recorded event)
+          if (rollup.total_usd > 0 || Object.keys(rollup.by_leaf).length > 0) {
+            printCostReport(rollup);
+          }
+        } catch {
+          // Silently skip on error — never block harvest on cost failure
+          // per HYPHA-COST-AGENT rules
+        }
+      }
     });
 }
 
