@@ -26,7 +26,9 @@
       "agent": "panel-agent",
       "tag": "PANEL",
       "scope": "Build slide-in detail panel showing source code, exports, and file path",
-      "status": "pending"
+      "status": "done",
+      "completed_at": "2026-04-17T22:37:34.554Z",
+      "commit": "47909a6e0481aede786daa8192d6be2c65cb0b22"
     },
     {
       "id": "cost-agent",
