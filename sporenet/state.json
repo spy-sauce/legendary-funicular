@@ -1,7 +1,7 @@
 {
-  "session_id": "exec-2026-04-17T04-46-12-072Z",
+  "session_id": "exec-2026-04-17T22-39-18-830Z",
   "organism": "ddp-integration",
-  "started_at": "2026-04-17T04:46:12.197Z",
+  "started_at": "2026-04-17T22:39:18.841Z",
   "ship_target": "48 hours",
   "gating": "contract-freeze",
   "total": 30,
@@ -11,9 +11,7 @@
       "agent": "telemetry-agent",
       "tag": "TELEMETRY",
       "scope": "Upgrade module with beforePlan/beforeSpawn/afterLeaf/onCrash hooks in cli/src/upgrades/telemetry-emitter.ts",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:52:35.133Z"
+      "status": "pending"
     },
     {
       "id": "telemetry.emitter.events",
@@ -34,9 +32,7 @@
       "agent": "telemetry-agent",
       "tag": "TELEMETRY",
       "scope": "S3 sink adapter gated on MYCELIUM_S3_BUCKET env — best-effort, never throws",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:50:47.892Z"
+      "status": "pending"
     },
     {
       "id": "cicd.action.composite",
@@ -50,9 +46,7 @@
       "agent": "cicd-agent",
       "tag": "CICD",
       "scope": "Author .github/workflows/cultivate.yml using the composite, triggered on workflow_dispatch",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:51:28.857Z"
+      "status": "pending"
     },
     {
       "id": "cicd.ddp.emit",
@@ -66,18 +60,14 @@
       "agent": "cicd-agent",
       "tag": "CICD",
       "scope": "Individual stage scripts for merge-order/lint/typecheck/test under .github/scripts/stages/",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:56:43.833Z"
+      "status": "pending"
     },
     {
       "id": "cicd.ddp.deploy",
       "agent": "cicd-agent",
       "tag": "CICD",
       "scope": "Placeholder deploy-stg/smoke/deploy-prod scripts with override hook points",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:53:05.869Z"
+      "status": "pending"
     },
     {
       "id": "cost.tracker.upgrade",
@@ -91,18 +81,14 @@
       "agent": "cost-agent",
       "tag": "COST",
       "scope": "Parse SDK usage metadata from leaf result into tokens per category",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:49:26.392Z"
+      "status": "pending"
     },
     {
       "id": "cost.attribution.rollup",
       "agent": "cost-agent",
       "tag": "COST",
       "scope": "Aggregate costs by organism/biome/leaf from event log in cli/src/lib/telemetry/cost-rollup.ts",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:49:51.226Z"
+      "status": "pending"
     },
     {
       "id": "cost.attribution.report",
@@ -116,9 +102,7 @@
       "agent": "alerting-agent",
       "tag": "ALERTING",
       "scope": "Upgrade in cli/src/upgrades/alerting.ts with onCrash + afterLeaf handlers",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:51:28.720Z"
+      "status": "pending"
     },
     {
       "id": "alerting.hook.triggers",
@@ -132,45 +116,35 @@
       "agent": "alerting-agent",
       "tag": "ALERTING",
       "scope": "Slack poster via MYCELIUM_SLACK_WEBHOOK env; Block Kit JSON; never throws",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:51:29.443Z"
+      "status": "pending"
     },
     {
       "id": "alerting.sinks.github",
       "agent": "alerting-agent",
       "tag": "ALERTING",
       "scope": "GitHub issue creator via gh CLI subprocess; feature-detect gh; never throws",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:52:34.926Z"
+      "status": "pending"
     },
     {
       "id": "dashboard.template.port",
       "agent": "dashboard-agent",
       "tag": "DASHBOARD",
       "scope": "Copy templates/scale.html to cli/src/commands/sporenet/templates/scale.html with the simulation stripped",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:50:29.795Z"
+      "status": "pending"
     },
     {
       "id": "dashboard.template.databind",
       "agent": "dashboard-agent",
       "tag": "DASHBOARD",
       "scope": "Inject <script id=mycelium-data> slot per NUTRIENTS.md section 9; expose ?demo=1 for simulator mode",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:52:34.965Z"
+      "status": "pending"
     },
     {
       "id": "dashboard.live.state",
       "agent": "dashboard-agent",
       "tag": "DASHBOARD",
       "scope": "Wire /api/state and initial render to sporenet/state.json for phase 1/2",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:49:49.414Z"
+      "status": "pending"
     },
     {
       "id": "dashboard.live.events",
@@ -191,9 +165,7 @@
       "agent": "fleet-agent",
       "tag": "FLEET",
       "scope": "DuckDB wrapper in cli/src/lib/fleet/duckdb.ts reading .mycelium/events/*.jsonl",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:55:10.119Z"
+      "status": "pending"
     },
     {
       "id": "fleet.query.api",
@@ -221,27 +193,21 @@
       "agent": "docs-agent",
       "tag": "DOCS",
       "scope": "Append CI/CD section: composite action, inputs/outputs, DDP stages, secrets",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:50:31.744Z"
+      "status": "pending"
     },
     {
       "id": "docs.guide.dashboard",
       "agent": "docs-agent",
       "tag": "DOCS",
       "scope": "Append Dashboard section: sporenet routes, phases, fleet view, scale.html slots",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:54:50.576Z"
+      "status": "pending"
     },
     {
       "id": "docs.polyglot.python",
       "agent": "docs-agent",
       "tag": "DOCS",
       "scope": "Create impl/python/README.md: when to embed (not orchestrate), install, BaseAgent example",
-      "status": "failed",
-      "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T04:49:17.110Z"
+      "status": "pending"
     },
     {
       "id": "docs.polyglot.java",

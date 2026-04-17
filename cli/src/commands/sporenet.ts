@@ -19,6 +19,7 @@ import path from "node:path";
 import http from "node:http";
 import { execFileSync } from "node:child_process";
 import YAML from "yaml";
+import type { BaseEvent } from "../lib/telemetry/events.js";
 
 interface Leaf {
   id: string;
@@ -568,6 +569,154 @@ async function handleFleetPageRequest(res: http.ServerResponse, dir: string): Pr
   } catch (err: any) {
     res.writeHead(500, { "Content-Type": "text/plain" });
     res.end("Error rendering fleet page: " + (err?.message ?? String(err)));
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Events API — reads from JSONL event log
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Find the current run's JSONL file by scanning .mycelium/events/ for the most
+ * recent file that matches the organism name from mycelium.yaml.
+ *
+ * @param dir - The organism directory
+ * @returns Path to the current run's JSONL file, or null if none found
+ */
+function findCurrentRunFile(dir: string): string | null {
+  const eventsDir = path.join(dir, ".mycelium/events");
+
+  if (!fs.existsSync(eventsDir)) {
+    return null;
+  }
+
+  // Load organism name from mycelium.yaml for cross-reference
+  let organismName: string | null = null;
+  try {
+    const mycelium = loadMycelium(dir);
+    organismName = mycelium.organism?.name ?? null;
+  } catch {
+    // If we can't load mycelium.yaml, we'll just use the most recent file
+  }
+
+  // Get all JSONL files, sorted by modification time (newest first)
+  const files = fs.readdirSync(eventsDir)
+    .filter(f => f.endsWith(".jsonl"))
+    .map(f => ({
+      name: f,
+      path: path.join(eventsDir, f),
+      mtime: fs.statSync(path.join(eventsDir, f)).mtime.getTime(),
+    }))
+    .sort((a, b) => b.mtime - a.mtime);
+
+  if (files.length === 0) {
+    return null;
+  }
+
+  // If we have an organism name, prefer files that match it
+  if (organismName) {
+    const matching = files.find(f => f.name.startsWith(organismName + "-"));
+    if (matching) {
+      return matching.path;
+    }
+  }
+
+  // Fall back to the most recent file
+  return files[0].path;
+}
+
+/**
+ * Parse JSONL file into array of events.
+ *
+ * @param filePath - Path to the JSONL file
+ * @returns Array of parsed events
+ */
+function parseJSONLFile(filePath: string): BaseEvent[] {
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+
+  const content = fs.readFileSync(filePath, "utf-8");
+  const lines = content.trim().split("\n").filter(line => line.trim());
+  const events: BaseEvent[] = [];
+
+  for (const line of lines) {
+    try {
+      const event = JSON.parse(line) as BaseEvent;
+      events.push(event);
+    } catch {
+      // Skip malformed lines — best effort, never block
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Handle GET /api/events?since=<ts>&limit=<n>
+ *
+ * Returns events from the current run's JSONL file, optionally filtered by
+ * timestamp and limited to N results.
+ *
+ * @param res - HTTP response object
+ * @param dir - Organism directory
+ * @param query - Query string (everything after ?)
+ */
+function handleEventsRequest(
+  res: http.ServerResponse,
+  dir: string,
+  query: string
+): void {
+  try {
+    // Parse query parameters
+    const params = new URLSearchParams(query);
+    const sinceParam = params.get("since");
+    const limitParam = params.get("limit");
+
+    // Find the current run's JSONL file
+    const jsonlPath = findCurrentRunFile(dir);
+
+    if (!jsonlPath) {
+      // No events file exists — return empty array (not an error)
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify([]));
+      return;
+    }
+
+    // Parse all events from the file
+    let events = parseJSONLFile(jsonlPath);
+
+    // Filter by timestamp if `since` parameter provided
+    if (sinceParam) {
+      const sinceDate = new Date(sinceParam);
+      if (!isNaN(sinceDate.getTime())) {
+        events = events.filter(e => {
+          const eventDate = new Date(e.ts);
+          return !isNaN(eventDate.getTime()) && eventDate > sinceDate;
+        });
+      }
+    }
+
+    // Apply limit if provided
+    if (limitParam) {
+      const limit = parseInt(limitParam, 10);
+      if (!isNaN(limit) && limit > 0) {
+        events = events.slice(-limit); // Take the last N events (most recent)
+      }
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    });
+    res.end(JSON.stringify(events));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: message }));
   }
 }
 

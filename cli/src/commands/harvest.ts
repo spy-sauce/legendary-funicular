@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import Table from "cli-table3";
+import { rollupFromJsonl, type CostRollup } from "../lib/telemetry/cost-rollup.js";
 
 interface Agent {
   id: string;

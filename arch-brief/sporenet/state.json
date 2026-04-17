@@ -19,7 +19,9 @@
       "agent": "layout-agent",
       "tag": "LAYOUT",
       "scope": "Build visual shell with canvas particles, layer headers, flow connectors, responsive grid",
-      "status": "pending"
+      "status": "done",
+      "completed_at": "2026-04-17T22:38:34.382Z",
+      "commit": "85e26defe849754e272e00b1a9253f45c0857081"
     },
     {
       "id": "panel-agent",

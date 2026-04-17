@@ -1,0 +1,92 @@
+# Mycelium Cultivate Workflow
+# Runs the full DDP pipeline: plant -> freeze -> cultivate -> harvest
+# Uses the mycelium-run composite action for the heavy lifting.
+#
+# Triggers:
+#   - workflow_dispatch: Manual trigger with configurable inputs
+#   - push to brief.md: Demo trigger for quick iterations
+#
+# Secrets required:
+#   - ANTHROPIC_API_KEY (required): API key for Claude
+#   - MYCELIUM_SLACK_WEBHOOK (optional): Slack webhook for alerting
+#   - MYCELIUM_S3_BUCKET (optional): S3 bucket for event log backup
+
+name: Cultivate
+
+on:
+  workflow_dispatch:
+    inputs:
+      brief-path:
+        description: 'Path to the brief.md file'
+        required: true
+        default: 'brief.md'
+        type: string
+      organism-name:
+        description: 'Name of the organism to cultivate'
+        required: true
+        type: string
+      max-concurrency:
+        description: 'Maximum parallel leaf spawns'
+        required: false
+        default: '50'
+        type: string
+      harvest-threshold:
+        description: 'Minimum health ratio to pass harvest (0.0-1.0)'
+        required: false
+        default: '0.8'
+        type: string
+      stack:
+        description: 'Optional stack filter (e.g., "typescript", "python")'
+        required: false
+        default: ''
+        type: string
+
+  push:
+    paths:
+      - 'brief.md'
+    branches:
+      - main
+      - master
+
+# Prevent concurrent cultivations on the same ref
+concurrency:
+  group: cultivate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cultivate:
+    name: Cultivate Organism
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    # Required for gh CLI operations (issue creation for alerts)
+    permissions:
+      contents: read
+      issues: write
+
+    env:
+      # Pass optional secrets as env vars for alerting/telemetry sinks
+      MYCELIUM_SLACK_WEBHOOK: ${{ secrets.MYCELIUM_SLACK_WEBHOOK }}
+      MYCELIUM_S3_BUCKET: ${{ secrets.MYCELIUM_S3_BUCKET }}
+
+    steps:
+      - name: Run Mycelium Pipeline
+        uses: ./.github/actions/mycelium-run
+        id: mycelium
+        with:
+          brief-path: ${{ inputs.brief-path || 'brief.md' }}
+          organism-name: ${{ inputs.organism-name || github.event.repository.name }}
+          max-concurrency: ${{ inputs.max-concurrency || '50' }}
+          harvest-threshold: ${{ inputs.harvest-threshold || '0.8' }}
+          stack: ${{ inputs.stack || '' }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Summary
+        run: |
+          echo "## Cultivate Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Run ID | \`${{ steps.mycelium.outputs.run-id }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Health | ${{ steps.mycelium.outputs.health }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Event Log | ${{ steps.mycelium.outputs.event-log-path }} |" >> $GITHUB_STEP_SUMMARY
