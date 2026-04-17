@@ -1,0 +1,347 @@
+# .github/actions/mycelium-run/action.yml
+# Composite action for running mycelium cultivate with full DDP pipeline telemetry
+# Contract: NUTRIENTS.md section 6
+name: 'Mycelium Run'
+description: 'Run mycelium plant -> freeze -> cultivate -> harvest with DDP stage telemetry'
+author: 'VibeSpace LLC'
+
+inputs:
+  brief-path:
+    description: 'Path to brief.md'
+    required: true
+  organism-name:
+    description: 'Name of the organism'
+    required: true
+  max-concurrency:
+    description: 'Maximum parallel leaves'
+    required: false
+    default: '50'
+  harvest-threshold:
+    description: 'Minimum health ratio to pass (0.0-1.0)'
+    required: false
+    default: '0.8'
+  stack:
+    description: 'Stack hint for plant command (optional)'
+    required: false
+    default: ''
+  anthropic-api-key:
+    description: 'Anthropic API key for Claude'
+    required: true
+
+outputs:
+  run-id:
+    description: 'Telemetry run_id'
+    value: ${{ steps.get-run-id.outputs.run_id }}
+  health:
+    description: 'ok/total ratio from harvest'
+    value: ${{ steps.harvest.outputs.health }}
+  event-log-path:
+    description: 'Artifact path of JSONL event log'
+    value: ${{ steps.upload-artifacts.outputs.artifact-url }}
+
+runs:
+  using: 'composite'
+  steps:
+    # ─────────────────────────────────────────────────────────────────────────
+    # Setup
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: cli/package-lock.json
+
+    - name: Install CLI dependencies
+      shell: bash
+      run: |
+        cd cli
+        npm ci
+
+    - name: Build CLI
+      shell: bash
+      run: |
+        cd cli
+        npm run build
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Plant & Freeze
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Plant organism
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        STACK_ARG=""
+        if [ -n "${{ inputs.stack }}" ]; then
+          STACK_ARG="-s ${{ inputs.stack }}"
+        fi
+        node cli/dist/index.js plant "${{ inputs.brief-path }}" $STACK_ARG
+
+    - name: Freeze contracts
+      shell: bash
+      run: |
+        node cli/dist/index.js contracts freeze
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Get run_id (written by telemetry-emitter or generate one)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Get or generate run_id
+      id: get-run-id
+      shell: bash
+      run: |
+        mkdir -p .mycelium/events
+        if [ -f .mycelium/events/LATEST ]; then
+          RUN_ID=$(cat .mycelium/events/LATEST)
+        else
+          # Generate run_id per NUTRIENTS.md §1: <organism>-<ISO-8601-compact>-<4-char-hash>
+          TS=$(date -u +"%Y%m%dT%H%MZ")
+          HASH=$(echo "${{ inputs.organism-name }}-$TS-$RANDOM" | sha256sum | cut -c1-4)
+          RUN_ID="${{ inputs.organism-name }}-${TS}-${HASH}"
+          echo "$RUN_ID" > .mycelium/events/LATEST
+        fi
+        echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+        echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+        echo "::notice::Run ID: $RUN_ID"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DDP Stage: merge-order
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: 'DDP: merge-order (start)'
+      shell: bash
+      run: bash .github/scripts/ddp-emit.sh merge-order start
+
+    - name: 'DDP: merge-order (run)'
+      id: merge-order
+      shell: bash
+      continue-on-error: true
+      run: |
+        bash .github/scripts/stages/merge-order.sh
+        echo "status=$?" >> $GITHUB_OUTPUT
+
+    - name: 'DDP: merge-order (end)'
+      shell: bash
+      run: |
+        if [ "${{ steps.merge-order.outcome }}" == "success" ]; then
+          bash .github/scripts/ddp-emit.sh merge-order end success
+        else
+          bash .github/scripts/ddp-emit.sh merge-order end failure
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DDP Stage: lint
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: 'DDP: lint (start)'
+      shell: bash
+      run: bash .github/scripts/ddp-emit.sh lint start
+
+    - name: 'DDP: lint (run)'
+      id: lint
+      shell: bash
+      continue-on-error: true
+      run: |
+        bash .github/scripts/stages/lint.sh
+        echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+    - name: 'DDP: lint (end)'
+      shell: bash
+      run: |
+        if [ "${{ steps.lint.outcome }}" == "success" ]; then
+          bash .github/scripts/ddp-emit.sh lint end success
+        elif [ -f .mycelium/ddp-skipped-lint ]; then
+          bash .github/scripts/ddp-emit.sh lint end skipped
+          rm -f .mycelium/ddp-skipped-lint
+        else
+          bash .github/scripts/ddp-emit.sh lint end failure
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DDP Stage: typecheck
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: 'DDP: typecheck (start)'
+      shell: bash
+      run: bash .github/scripts/ddp-emit.sh typecheck start
+
+    - name: 'DDP: typecheck (run)'
+      id: typecheck
+      shell: bash
+      continue-on-error: true
+      run: bash .github/scripts/stages/typecheck.sh
+
+    - name: 'DDP: typecheck (end)'
+      shell: bash
+      run: |
+        if [ "${{ steps.typecheck.outcome }}" == "success" ]; then
+          bash .github/scripts/ddp-emit.sh typecheck end success
+        else
+          bash .github/scripts/ddp-emit.sh typecheck end failure
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DDP Stage: test
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: 'DDP: test (start)'
+      shell: bash
+      run: bash .github/scripts/ddp-emit.sh test start
+
+    - name: 'DDP: test (run)'
+      id: test
+      shell: bash
+      continue-on-error: true
+      run: bash .github/scripts/stages/test.sh
+
+    - name: 'DDP: test (end)'
+      shell: bash
+      run: |
+        if [ "${{ steps.test.outcome }}" == "success" ]; then
+          bash .github/scripts/ddp-emit.sh test end success
+        elif [ -f .mycelium/ddp-skipped-test ]; then
+          bash .github/scripts/ddp-emit.sh test end skipped
+          rm -f .mycelium/ddp-skipped-test
+        else
+          bash .github/scripts/ddp-emit.sh test end failure
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DDP Stage: build
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: 'DDP: build (start)'
+      shell: bash
+      run: bash .github/scripts/ddp-emit.sh build start
+
+    - name: 'DDP: build (run)'
+      id: build
+      shell: bash
+      continue-on-error: true
+      run: bash .github/scripts/stages/build.sh
+
+    - name: 'DDP: build (end)'
+      shell: bash
+      run: |
+        if [ "${{ steps.build.outcome }}" == "success" ]; then
+          bash .github/scripts/ddp-emit.sh build end success
+        else
+          bash .github/scripts/ddp-emit.sh build end failure
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Cultivate (main run)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Run cultivate
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        node cli/dist/index.js cultivate -c ${{ inputs.max-concurrency }}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Harvest (threshold check)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Run harvest
+      id: harvest
+      shell: bash
+      run: |
+        RESULT=$(node cli/dist/index.js harvest -t ${{ inputs.harvest-threshold }} 2>&1) || true
+        echo "$RESULT"
+        # Extract health from output (format: "Health: X.XX")
+        HEALTH=$(echo "$RESULT" | grep -oP 'Health:\s*\K[0-9.]+' || echo "0")
+        echo "health=$HEALTH" >> $GITHUB_OUTPUT
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DDP Stage: deploy-stg (placeholder)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: 'DDP: deploy-stg (start)'
+      shell: bash
+      run: bash .github/scripts/ddp-emit.sh deploy-stg start
+
+    - name: 'DDP: deploy-stg (run)'
+      id: deploy-stg
+      shell: bash
+      continue-on-error: true
+      run: bash .github/scripts/stages/deploy-stg.sh
+
+    - name: 'DDP: deploy-stg (end)'
+      shell: bash
+      run: |
+        if [ "${{ steps.deploy-stg.outcome }}" == "success" ]; then
+          if [ -f .mycelium/ddp-skipped-deploy-stg ]; then
+            bash .github/scripts/ddp-emit.sh deploy-stg end skipped
+            rm -f .mycelium/ddp-skipped-deploy-stg
+          else
+            bash .github/scripts/ddp-emit.sh deploy-stg end success
+          fi
+        else
+          bash .github/scripts/ddp-emit.sh deploy-stg end failure
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DDP Stage: smoke (placeholder)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: 'DDP: smoke (start)'
+      shell: bash
+      run: bash .github/scripts/ddp-emit.sh smoke start
+
+    - name: 'DDP: smoke (run)'
+      id: smoke
+      shell: bash
+      continue-on-error: true
+      run: bash .github/scripts/stages/smoke.sh
+
+    - name: 'DDP: smoke (end)'
+      shell: bash
+      run: |
+        if [ "${{ steps.smoke.outcome }}" == "success" ]; then
+          if [ -f .mycelium/ddp-skipped-smoke ]; then
+            bash .github/scripts/ddp-emit.sh smoke end skipped
+            rm -f .mycelium/ddp-skipped-smoke
+          else
+            bash .github/scripts/ddp-emit.sh smoke end success
+          fi
+        else
+          bash .github/scripts/ddp-emit.sh smoke end failure
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DDP Stage: deploy-prod (placeholder, gated)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: 'DDP: deploy-prod (start)'
+      shell: bash
+      run: bash .github/scripts/ddp-emit.sh deploy-prod start
+
+    - name: 'DDP: deploy-prod (run)'
+      id: deploy-prod
+      shell: bash
+      continue-on-error: true
+      run: bash .github/scripts/stages/deploy-prod.sh
+
+    - name: 'DDP: deploy-prod (end)'
+      shell: bash
+      run: |
+        if [ "${{ steps.deploy-prod.outcome }}" == "success" ]; then
+          if [ -f .mycelium/ddp-skipped-deploy-prod ]; then
+            bash .github/scripts/ddp-emit.sh deploy-prod end skipped
+            rm -f .mycelium/ddp-skipped-deploy-prod
+          else
+            bash .github/scripts/ddp-emit.sh deploy-prod end success
+          fi
+        else
+          bash .github/scripts/ddp-emit.sh deploy-prod end failure
+        fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Upload artifacts
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Upload event log and state artifacts
+      id: upload-artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mycelium-run-${{ steps.get-run-id.outputs.run_id }}
+        path: |
+          .mycelium/events/${{ steps.get-run-id.outputs.run_id }}.jsonl
+          sporenet/state.json
+          CELLULAR-MAP.md
+        if-no-files-found: warn
+        retention-days: 30
