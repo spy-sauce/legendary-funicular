@@ -10,7 +10,9 @@
       "agent": "component-agent",
       "tag": "COMPONENT",
       "scope": "Read source files, extract metadata, produce arch-data.json with component map",
-      "status": "pending"
+      "status": "done",
+      "completed_at": "2026-04-17T22:37:31.209Z",
+      "commit": "ff2ed8710e47ab3a91d39a3ec8d3215f1d853f7e"
     },
     {
       "id": "layout-agent",
