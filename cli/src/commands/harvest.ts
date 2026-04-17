@@ -176,3 +176,92 @@ export function registerHarvestCommand(program: Command): void {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Find the latest JSONL event log for the given organism.
+ * Searches .mycelium/events/ for files matching the organism name pattern.
+ * Returns the path to the most recent file by modification time, or null if none.
+ */
+function findLatestEventLog(organism: string): string | null {
+  const eventsDir = path.join(process.cwd(), ".mycelium", "events");
+  if (!fs.existsSync(eventsDir)) {
+    return null;
+  }
+
+  const files = fs.readdirSync(eventsDir)
+    .filter((f) => f.endsWith(".jsonl") && f.startsWith(organism + "-"))
+    .map((f) => ({
+      name: f,
+      path: path.join(eventsDir, f),
+      mtime: fs.statSync(path.join(eventsDir, f)).mtimeMs,
+    }))
+    .sort((a, b) => b.mtime - a.mtime);
+
+  return files.length > 0 ? files[0].path : null;
+}
+
+/**
+ * Format a number as a compact token count string.
+ * E.g., 1234567 -> "1.2M", 12345 -> "12k"
+ */
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) {
+    return `${(n / 1_000_000).toFixed(1)}M`;
+  } else if (n >= 1_000) {
+    return `${Math.round(n / 1_000)}k`;
+  }
+  return String(n);
+}
+
+/**
+ * Format a USD amount with 2 decimal places.
+ */
+function formatUSD(amount: number): string {
+  return `$${amount.toFixed(2)}`;
+}
+
+/**
+ * Print the cost estimate section to the console.
+ * Only called when cost data is available from the event log.
+ */
+function printCostReport(rollup: CostRollup): void {
+  console.log(chalk.magentaBright("  💰 Cost estimate (current run):"));
+  console.log();
+
+  // Total cost
+  console.log(
+    chalk.gray("    Total:     ") +
+    chalk.greenBright.bold(formatUSD(rollup.total_usd))
+  );
+
+  // Token breakdown
+  const tokensLine = [
+    `${formatTokenCount(rollup.tokens.input)} in`,
+    `${formatTokenCount(rollup.tokens.output)} out`,
+    `${formatTokenCount(rollup.tokens.cache_read)} cache-read`,
+    `${formatTokenCount(rollup.tokens.cache_write)} cache-write`,
+  ].join(" / ");
+  console.log(chalk.gray("    Tokens:    ") + chalk.white(tokensLine));
+
+  // Top biomes by cost (sorted descending, top 5 max)
+  const biomeEntries = Object.entries(rollup.by_biome)
+    .filter(([, cost]) => cost > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  if (biomeEntries.length > 0) {
+    console.log();
+    console.log(chalk.gray("    Top biomes by cost:"));
+    for (const [biome, cost] of biomeEntries) {
+      const costStr = formatUSD(cost).padStart(8);
+      console.log(chalk.gray("      ") + chalk.cyan(biome.padEnd(20)) + chalk.white(costStr));
+    }
+  }
+
+  // Disclaimer per NUTRIENTS.md / HYPHA spec
+  console.log();
+  console.log(
+    chalk.gray.italic("    (* estimates based on published rates — reconcile against billing)")
+  );
+  console.log();
+}

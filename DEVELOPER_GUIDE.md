@@ -266,6 +266,222 @@ Substrate plugins (`substrate-api`, `substrate-max`), convention packs (`commit-
 
 ---
 
+## 13. CI/CD with Digital Dash
+
+Run a full Mycelium cultivation inside GitHub Actions with DDP (Digital Dash Pipeline) stage gates. The composite action wraps `plant → freeze → cultivate → harvest` with per-stage event emission for dashboard visualization.
+
+### 13.1 Composite action
+
+**Path:** `.github/actions/mycelium-run/action.yml`
+
+Drop this action into your workflow to run a complete organism build.
+
+#### Inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `brief-path` | **yes** | — | Path to your `brief.md` business spec |
+| `organism-name` | **yes** | — | Name for the organism (used in telemetry) |
+| `max-concurrency` | no | `50` | Cap on simultaneous leaf sessions |
+| `harvest-threshold` | no | `0.8` | Minimum success ratio to pass harvest |
+| `stack` | no | `""` | Stack hint passed to `mycelium plant -s` |
+| `anthropic-api-key` | **yes** | — | Your Anthropic API key (use a secret!) |
+
+#### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `run-id` | Telemetry run ID (`<organism>-<ISO-8601>-<hash>`) |
+| `health` | Final success ratio (`ok/total`) |
+| `event-log-path` | Artifact path to the JSONL event log |
+
+### 13.2 Example workflow
+
+```yaml
+# .github/workflows/cultivate.yml
+name: Cultivate Organism
+
+on:
+  workflow_dispatch:
+    inputs:
+      brief:
+        description: "Path to brief.md"
+        required: true
+        default: "./brief.md"
+      organism:
+        description: "Organism name"
+        required: true
+      concurrency:
+        description: "Max parallel leaves"
+        required: false
+        default: "50"
+
+jobs:
+  cultivate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Mycelium
+        id: mycelium
+        uses: ./.github/actions/mycelium-run
+        with:
+          brief-path: ${{ inputs.brief }}
+          organism-name: ${{ inputs.organism }}
+          max-concurrency: ${{ inputs.concurrency }}
+          harvest-threshold: "0.8"
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Report
+        run: |
+          echo "Run ID: ${{ steps.mycelium.outputs.run-id }}"
+          echo "Health: ${{ steps.mycelium.outputs.health }}"
+```
+
+### 13.3 DDP stages
+
+The Digital Dash Pipeline wraps each build phase with event emission. Stage events (`ddp_stage_started`, `ddp_stage_ended`) write to the same JSONL log consumed by the dashboard.
+
+| Stage | Icon | What it does |
+|-------|------|--------------|
+| `merge-order` | M | Validates `mycelium.yaml`, prints execution plan |
+| `lint` | L | Runs `npm run lint` if script exists, else skips |
+| `typecheck` | T | Runs `npx tsc --noEmit` |
+| `test` | ✓ | Runs `npm test` if script exists, else skips |
+| `build` | B | Runs `npm run build` |
+| `deploy-stg` | S | **Placeholder** — user overrides via hook |
+| `smoke` | ~ | **Placeholder** — user overrides via hook |
+| `deploy-prod` | P | **Placeholder** — gated on manual approval |
+
+Stages execute in order. A failing stage (except placeholders) aborts the pipeline.
+
+### 13.4 Stage execution order
+
+The composite action executes steps in this order:
+
+1. Checkout repo
+2. Setup Node 20
+3. `npm ci` in `cli/`
+4. `npm run build` in `cli/`
+5. `mycelium plant ${brief-path} -s ${stack}`
+6. `mycelium contracts freeze`
+7. **DDP: merge-order** → validate + plan
+8. **DDP: lint** → optional lint pass
+9. **DDP: typecheck** → TypeScript check
+10. **DDP: test** → optional test suite
+11. **DDP: build** → compile
+12. `mycelium cultivate -c ${max-concurrency}`
+13. `mycelium harvest -t ${harvest-threshold}`
+14. **DDP: deploy-stg** → placeholder
+15. **DDP: smoke** → placeholder
+16. **DDP: deploy-prod** → placeholder
+17. Upload artifacts
+
+### 13.5 Overriding deploy stages
+
+Deploy stages are placeholders by default. To customize, create hook scripts in your repo:
+
+```
+.github/hooks/
+├── deploy-stg.sh       # Staging deployment
+├── smoke.sh            # Post-deploy smoke tests
+└── deploy-prod.sh      # Production deployment
+```
+
+The composite action sources these if present:
+
+```bash
+# .github/hooks/deploy-stg.sh
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Deploying to staging..."
+fly deploy --app my-app-staging
+```
+
+**Production gating:** `deploy-prod` only runs if the `MYCELIUM_PROD_APPROVED` environment variable is set to `true`. Use GitHub's environment protection rules to require manual approval:
+
+```yaml
+jobs:
+  deploy-prod:
+    environment: production   # requires approval in repo settings
+    env:
+      MYCELIUM_PROD_APPROVED: "true"
+```
+
+### 13.6 Secrets and environment variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `ANTHROPIC_API_KEY` | **yes** | Claude API access for leaf sessions |
+| `MYCELIUM_SLACK_WEBHOOK` | no | Slack webhook URL for alerts (see NUTRIENTS.md §7) |
+| `MYCELIUM_S3_BUCKET` | no | S3 bucket for event log replication |
+| `MYCELIUM_PROD_APPROVED` | no | Gate for production deploy stage |
+
+**Never** commit secrets. Use GitHub repository secrets or environment secrets.
+
+### 13.7 Event emission
+
+Each DDP stage is wrapped by `.github/scripts/ddp-emit.sh`, which writes events to `.mycelium/events/<run_id>.jsonl`:
+
+```bash
+# Emits ddp_stage_started event
+./ddp-emit.sh start <stage-id>
+
+# Run the stage...
+
+# Emits ddp_stage_ended event with status
+./ddp-emit.sh end <stage-id> <success|failure|skipped> <wall_ms>
+```
+
+Event payloads follow the frozen schema in NUTRIENTS.md §1:
+
+```json
+{
+  "v": 1,
+  "run_id": "ddp-integration-20260417T1830Z-a7f3",
+  "organism": "ddp-integration",
+  "ts": "2026-04-17T18:31:45.123Z",
+  "kind": "ddp_stage_started",
+  "data": {
+    "stage_id": "build",
+    "gh_run_id": "12345678",
+    "gh_run_url": "https://github.com/org/repo/actions/runs/12345678"
+  }
+}
+```
+
+### 13.8 Artifacts
+
+The action uploads three artifacts on completion:
+
+| Artifact | Contents |
+|----------|----------|
+| `mycelium-events-<run_id>` | `.mycelium/events/<run_id>.jsonl` — full event log |
+| `mycelium-state-<run_id>` | `sporenet/state.json` — final leaf states |
+| `mycelium-cellular-map` | `CELLULAR-MAP.md` — tree visualization |
+
+Download artifacts via the GitHub Actions UI or API for post-hoc analysis, dashboard replay, or fleet aggregation.
+
+### 13.9 Local simulation
+
+Test the pipeline locally before pushing:
+
+```bash
+# Dry-run cultivate
+mycelium cultivate --dry-run
+
+# Run with reduced concurrency
+mycelium cultivate -c 5
+
+# Check harvest threshold
+mycelium harvest -t 0.8
+```
+
+The composite action is just orchestration sugar — all CLI commands work standalone.
+
+---
+
 That's the full surface area. A new dev should be able to read `cli/src/commands/cultivate.ts` + this guide and ship their own organism.
 
 *The network provides.* 🍄

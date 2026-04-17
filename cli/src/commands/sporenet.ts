@@ -943,6 +943,13 @@ export function registerSporenetCommand(program: Command): void {
           return;
         }
 
+        // Events API — JSONL event log (dashboard.live.events scope)
+        if (pathOnly === "/api/events") {
+          const query = raw.includes("?") ? raw.split("?")[1] : "";
+          handleEventsRequest(res, dir, query);
+          return;
+        }
+
         // Existing diff endpoint
         if (pathOnly.startsWith("/diff/")) {
           const leafId = decodeURIComponent(pathOnly.slice("/diff/".length));
