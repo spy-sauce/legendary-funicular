@@ -18,7 +18,9 @@
       "agent": "telemetry-agent",
       "tag": "TELEMETRY",
       "scope": "Event payload builders for every EventKind in cli/src/lib/telemetry/events.ts",
-      "status": "pending"
+      "status": "done",
+      "completed_at": "2026-04-17T22:40:19.778Z",
+      "commit": "54d3117e55b70e06cbe298a313ec01d6eef5230d"
     },
     {
       "id": "telemetry.sink.jsonl",
