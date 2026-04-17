@@ -1,0 +1,76 @@
+# Mycelium Framework — VibeSpace LLC — The network provides.
+
+organism:
+  name: arch-brief
+  ship_target: 2024-01-15
+  health_pulse_interval: 30
+  harvest_threshold: 0.8
+contracts:
+  - path: NUTRIENTS.md
+    frozen: true
+    frozenAt: 2026-04-17T22:34:49.766Z
+agents:
+  - id: component-agent
+    scope: Read source files, extract metadata, produce arch-data.json with
+      component map
+    branch: feat/component-agent
+    blocked_by: []
+    blocks:
+      - wiring-agent
+    capabilities:
+      - typescript
+      - file-parsing
+      - json
+  - id: layout-agent
+    scope: Build visual shell with canvas particles, layer headers, flow connectors,
+      responsive grid
+    branch: feat/layout-agent
+    blocked_by: []
+    blocks:
+      - wiring-agent
+    capabilities:
+      - html
+      - css
+      - canvas
+      - animation
+  - id: panel-agent
+    scope: Build slide-in detail panel showing source code, exports, and file path
+    branch: feat/panel-agent
+    blocked_by: []
+    blocks:
+      - wiring-agent
+    capabilities:
+      - html
+      - css
+      - javascript
+  - id: cost-agent
+    scope: Build cost visualization comparing sequential vs parallel execution costs
+    branch: feat/cost-agent
+    blocked_by: []
+    blocks:
+      - wiring-agent
+    capabilities:
+      - html
+      - css
+      - javascript
+      - data-viz
+  - id: wiring-agent
+    scope: Wire all components into final ARCHITECTURE.html, validate links, add
+      search/filter
+    branch: feat/wiring-agent
+    blocked_by:
+      - component-agent
+      - layout-agent
+      - panel-agent
+      - cost-agent
+    blocks: []
+    capabilities:
+      - html
+      - javascript
+      - integration
+merge_order:
+  - component-agent
+  - layout-agent
+  - panel-agent
+  - cost-agent
+  - wiring-agent

@@ -1,0 +1,113 @@
+<!-- cost-section.html — Cost Visualization Section
+     Agent: cost-agent
+     Contract: NUTRIENTS.md §8 (COST_MODEL), §2 (DESIGN_TOKENS)
+-->
+<section id="cost-section" class="cost-section">
+  <header class="cost-header">
+    <h2 class="cost-title">Parallel vs Sequential Execution</h2>
+    <p class="cost-subtitle">The win is <strong>time</strong>, not raw token cost</p>
+  </header>
+
+  <div class="cost-comparison">
+    <!-- Model Pricing Reference -->
+    <div class="model-pricing">
+      <div class="model-card">
+        <span class="model-name">claude-sonnet-4-6</span>
+        <div class="model-rates">
+          <span class="rate">$3.00<small>/1M input</small></span>
+          <span class="rate">$15.00<small>/1M output</small></span>
+        </div>
+      </div>
+      <div class="model-card">
+        <span class="model-name">claude-opus-4-7</span>
+        <div class="model-rates">
+          <span class="rate">$15.00<small>/1M input</small></span>
+          <span class="rate">$75.00<small>/1M output</small></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Time Comparison Bars -->
+    <div class="time-comparison">
+      <div class="comparison-row sequential">
+        <div class="row-label">
+          <span class="execution-type">Sequential</span>
+          <span class="execution-formula">5 agents x avg_time</span>
+        </div>
+        <div class="bar-container">
+          <div class="time-bar sequential-bar" data-time="5">
+            <div class="bar-segments">
+              <span class="segment" data-agent="1">A1</span>
+              <span class="segment" data-agent="2">A2</span>
+              <span class="segment" data-agent="3">A3</span>
+              <span class="segment" data-agent="4">A4</span>
+              <span class="segment" data-agent="5">A5</span>
+            </div>
+          </div>
+          <span class="time-label">5T</span>
+        </div>
+        <div class="row-cost">
+          <span class="cost-value">$1.50</span>
+          <span class="cost-breakdown">5 x $0.30</span>
+        </div>
+      </div>
+
+      <div class="comparison-row parallel">
+        <div class="row-label">
+          <span class="execution-type">Parallel</span>
+          <span class="execution-formula">max(leaf_costs) x 1.1</span>
+        </div>
+        <div class="bar-container">
+          <div class="time-bar parallel-bar" data-time="1">
+            <div class="bar-segments stacked">
+              <span class="segment" data-agent="1">A1</span>
+              <span class="segment" data-agent="2">A2</span>
+              <span class="segment" data-agent="3">A3</span>
+              <span class="segment" data-agent="4">A4</span>
+              <span class="segment" data-agent="5">A5</span>
+            </div>
+          </div>
+          <span class="time-label">1T</span>
+        </div>
+        <div class="row-cost">
+          <span class="cost-value">$1.50</span>
+          <span class="cost-breakdown">same tokens</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Speedup Badge -->
+    <div class="speedup-badge">
+      <span class="speedup-value">5x</span>
+      <span class="speedup-label">faster</span>
+    </div>
+
+    <!-- Formula Display -->
+    <div class="formula-section">
+      <div class="formula-card">
+        <h4>Per-Agent Cost (Sonnet)</h4>
+        <code class="formula">
+          (50,000 x $3.00/1M) + (10,000 x $15.00/1M)<br>
+          = $0.15 + $0.15 = <strong>$0.30</strong>
+        </code>
+      </div>
+      <div class="formula-card">
+        <h4>Time Comparison</h4>
+        <code class="formula">
+          Sequential: 5T (one after another)<br>
+          Parallel: 1T (all at once)
+        </code>
+      </div>
+    </div>
+
+    <!-- Key Insight -->
+    <div class="insight-box">
+      <span class="insight-icon">&#x26A1;</span>
+      <p class="insight-text">
+        Parallel execution completes in <strong>1T</strong> instead of <strong>5T</strong>
+        while spending the same tokens. The cost visualization emphasizes
+        <em>time-to-completion</em> as the primary benefit.
+      </p>
+    </div>
+  </div>
+</section>

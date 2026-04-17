@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mycelium × Digital Dash — Scale Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#08080a;--bg2:#111114;--bg3:#18181c;--bg4:#1f1f24;
+  --border:#27272d;--border2:#3f3f48;
+  --text:#f4f4f5;--muted:#71717a;--muted2:#52525b;
+  --green:#22c55e;--green2:#16a34a;--green3:#052e16;
+  --teal:#2dd4bf;--teal2:#0d9488;
+  --amber:#fbbf24;--red:#f87171;
+  --dd:#7c3aed;--dd2:#a78bfa;--dd3:#2e1065;
+}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:52px 52px;opacity:.22;pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:1140px;margin:0 auto;padding:36px 28px 80px}
+
+/* HEADER */
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;gap:20px;flex-wrap:wrap}
+.eyebrow{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.18em;color:var(--teal);text-transform:uppercase;margin-bottom:8px}
+h1{font-size:clamp(1.9rem,4vw,2.9rem);font-weight:800;line-height:1.05;letter-spacing:-.02em}
+h1 .g{color:var(--green)}h1 .d{color:var(--dd2)}
+.sub{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.65;max-width:440px}
+.badges{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--border2);border-radius:100px;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);background:var(--bg2)}
+.bdot{width:6px;height:6px;border-radius:50%}
+.bdot.g{background:var(--green);animation:bpulse 2s ease-in-out infinite}
+.bdot.p{background:var(--dd2)}
+@keyframes bpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
+
+/* PHASES */
+.phases{display:flex;align-items:center;margin-bottom:24px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg2)}
+.ph{flex:1;display:flex;align-items:center;gap:8px;padding:11px 16px;border-right:1px solid var(--border);transition:.25s}
+.ph:last-child{border-right:none}
+.ph-n{font-family:'Space Mono',monospace;font-size:9px;width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid var(--border2);color:var(--muted2);flex-shrink:0;transition:.25s}
+.ph-l{font-size:11px;color:var(--muted);font-weight:500;transition:.25s}
+.ph.active .ph-n{border-color:var(--teal);color:var(--teal);background:rgba(45,212,191,.08)}
+.ph.active .ph-l{color:var(--text)}
+.ph.done .ph-n{border-color:var(--green);background:var(--green);color:#000}
+.ph.done .ph-l{color:var(--green)}
+.ph.dd-on .ph-n{border-color:var(--dd2);color:var(--dd2);background:rgba(167,139,250,.1)}
+.ph.dd-on .ph-l{color:var(--dd2)}
+.ph-arr{color:var(--border2);font-size:12px;padding:0 2px;flex-shrink:0}
+
+/* EQ BAR */
+.eq-bar{display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;background:var(--bg2)}
+.eq-seg{flex:1;padding:14px 12px;border-right:1px solid var(--border);text-align:center}
+.eq-seg:last-child{border-right:none}
+.eq-op{flex:0 0 26px;text-align:center;color:var(--muted2);font-family:'Space Mono',monospace;font-size:13px;border-right:1px solid var(--border);padding:14px 0}
+.eq-n{font-family:'Space Mono',monospace;font-size:19px;font-weight:700;line-height:1}
+.eq-k{font-size:9px;color:var(--muted);margin-top:3px;letter-spacing:.04em}
+.eq-total .eq-n{color:var(--green)}
+
+/* LAYOUT */
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:720px){.row{grid-template-columns:1fr}}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
+.ptitle{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.13em;color:var(--muted);text-transform:uppercase;margin-bottom:12px}
+
+/* TREE */
+.tree-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+#treeCanvas{width:100%;display:block}
+
+/* SLIDERS */
+.sl-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.sl-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);width:86px;flex-shrink:0}
+.sl-val{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text);width:34px;text-align:right;flex-shrink:0}
+input[type=range]{flex:1;-webkit-appearance:none;height:2px;background:var(--border2);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--teal);cursor:pointer;border:2px solid var(--bg);transition:.1s}
+input[type=range]:hover::-webkit-slider-thumb{background:var(--green)}
+
+/* MC BLOCK */
+.mc-block{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:11px 13px;margin:12px 0 10px}
+.mc-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.mc-name{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);flex:1}
+.mc-val{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--text);min-width:36px;text-align:right}
+.mc-hint{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted2);line-height:1.5}
+
+/* TIMER */
+.timer-big{font-family:'Space Mono',monospace;font-size:33px;font-weight:700;line-height:1;margin-bottom:3px;transition:color .3s}
+.timer-big.idle{color:var(--muted2)}
+.timer-big.running{color:var(--teal)}
+.timer-big.done{color:var(--green)}
+.timer-big.deployed{color:var(--dd2);font-size:22px;letter-spacing:.04em}
+.timer-phase{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:10px;min-height:14px}
+.hbar-wrap{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin:8px 0 3px}
+#hbar{height:100%;width:0%;border-radius:2px;transition:width .1s,background .4s;background:var(--teal)}
+.hbar-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--muted2);font-family:'Space Mono',monospace;margin-bottom:12px}
+.time-compare{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.tc-cell{background:var(--bg3);border-radius:7px;padding:9px 11px}
+.tc-n{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;margin-bottom:2px}
+.tc-k{font-size:9px;color:var(--muted)}
+.speedup-box{text-align:center;padding:9px;background:rgba(34,197,94,.05);border:1px solid rgba(34,197,94,.12);border-radius:7px}
+.speedup-n{font-family:'Space Mono',monospace;font-size:22px;font-weight:700;color:var(--green);line-height:1}
+.speedup-k{font-size:9px;color:var(--muted);margin-top:2px}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:580px){.stats-row{grid-template-columns:repeat(3,1fr)}}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:11px 10px}
+.stat-n{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;margin-bottom:2px;transition:color .3s}
+.stat-k{font-size:9px;color:var(--muted)}
+
+/* SIM BTN */
+.sim-btn{width:100%;margin-top:12px;padding:10px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text);font-family:'Space Mono',monospace;font-size:11px;cursor:pointer;transition:.15s;letter-spacing:.06em}
+.sim-btn:hover{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.04)}
+.sim-btn.run{border-color:var(--amber);color:var(--amber)}
+.sim-btn.fin{border-color:var(--green);color:var(--green)}
+
+/* POOL */
+.pool-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+#poolCanvas{width:100%;display:block;border-radius:5px}
+.legend{display:flex;gap:14px;margin-top:9px;flex-wrap:wrap}
+.leg{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace}
+.leg-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+
+/* PRESETS */
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px}
+.pbtn{padding:4px 11px;border:1px solid var(--border2);border-radius:100px;background:transparent;color:var(--muted);font-family:'Space Mono',monospace;font-size:9px;cursor:pointer;transition:.15s}
+.pbtn:hover{border-color:var(--teal);color:var(--teal)}
+.pbtn.on{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.06)}
+
+/* DIGITAL DASH */
+.ddp-wrap{background:var(--bg2);border:1px solid var(--dd);border-radius:10px;padding:18px;margin-bottom:14px;opacity:0;transform:translateY(8px);transition:opacity .5s,transform .5s;pointer-events:none}
+.ddp-wrap.visible{opacity:1;transform:translateY(0);pointer-events:auto}
+.ddp-hdr{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.ddp-logo{width:26px;height:26px;border-radius:6px;background:var(--dd3);border:1px solid var(--dd);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:8px;color:var(--dd2);font-weight:700;letter-spacing:.05em}
+.ddp-name{font-size:12px;font-weight:700;color:var(--dd2)}
+.ddp-sub{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:1px}
+.ddp-elapsed{margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:var(--dd2)}
+.pipeline{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:4px;margin-bottom:14px}
+.pipe-stage{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:86px}
+.pipe-conn{flex-shrink:0;height:2px;width:18px;background:var(--border2);margin-top:19px;transition:background .3s}
+.pipe-conn.done{background:var(--dd)}
+.stage-box{width:38px;height:38px;border-radius:7px;border:1px solid var(--border2);background:var(--bg3);display:flex;align-items:center;justify-content:center;transition:.3s;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted2)}
+.stage-box.active{border-color:var(--dd2);background:var(--dd3);color:var(--dd2);animation:stagepulse 1s ease-in-out infinite}
+.stage-box.done{border-color:var(--green);background:rgba(22,163,74,.1);color:var(--green)}
+@keyframes stagepulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.35)}60%{box-shadow:0 0 0 5px rgba(124,58,237,0)}}
+.stage-lbl{font-family:'Space Mono',monospace;font-size:8px;color:var(--muted);text-align:center;line-height:1.3;transition:color .3s}
+.stage-lbl.active{color:var(--dd2)}
+.stage-lbl.done{color:var(--muted)}
+.stage-dur{font-family:'Space Mono',monospace;font-size:8px;color:var(--muted2);min-height:10px;transition:color .3s}
+.stage-dur.live{color:var(--dd2)}
+.stage-dur.fin{color:var(--green2)}
+.ddp-footer{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.ddp-stat{background:var(--dd3);border:1px solid rgba(124,58,237,.3);border-radius:7px;padding:9px 11px}
+.ddp-stat-n{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--dd2);margin-bottom:2px}
+.ddp-stat-k{font-size:9px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hdr">
+    <div>
+      <div class="eyebrow">MYC × DD — full pipeline execution</div>
+      <h1><span class="g">Mycelium</span> × <span class="d">Digital Dash</span></h1>
+      <p class="sub">Parallel cultivation → harvest → agentic CI/CD. Every requirement, every leaf, every deploy — automated end to end.</p>
+    </div>
+    <div class="badges">
+      <div class="badge"><span class="bdot g"></span>organism active</div>
+      <div class="badge"><span class="bdot p"></span>ddp pipeline ready</div>
+      <div class="badge">contract-freeze gating</div>
+    </div>
+  </header>
+
+  <!-- phases -->
+  <div class="phases">
+    <div class="ph active" id="ph1"><div class="ph-n">1</div><div class="ph-l">cultivate</div></div>
+    <div class="ph-arr">›</div>
+    <div class="ph" id="ph2"><div class="ph-n">2</div><div class="ph-l">harvest</div></div>
+    <div class="ph-arr">›</div>
+    <div class="ph" id="ph3"><div class="ph-n">3</div><div class="ph-l">digital dash CI/CD</div></div>
+  </div>
+
+  <!-- eq bar -->
+  <div class="eq-bar">
+    <div class="eq-seg"><div class="eq-n" id="eq-b">5</div><div class="eq-k">biomes</div></div>
+    <div class="eq-op">×</div>
+    <div class="eq-seg"><div class="eq-n" id="eq-s">8</div><div class="eq-k">specialists</div></div>
+    <div class="eq-op">×</div>
+    <div class="eq-seg"><div class="eq-n" id="eq-l">25</div><div class="eq-k">leaves</div></div>
+    <div class="eq-op">=</div>
+    <div class="eq-seg eq-total"><div class="eq-n" id="eq-t">1,000</div><div class="eq-k">Claude sessions</div></div>
+  </div>
+
+  <!-- tree -->
+  <div class="tree-wrap">
+    <div class="ptitle">organism tree — fan density scales with leaves per biome</div>
+    <canvas id="treeCanvas" height="230"></canvas>
+  </div>
+
+  <!-- controls + timer -->
+  <div class="row">
+    <div class="panel">
+      <div class="ptitle">configure organism</div>
+      <div class="presets">
+        <button class="pbtn" onclick="preset(2,2,2,event)">2×2×2 = 8</button>
+        <button class="pbtn on" onclick="preset(5,8,25,event)">5×8×25 = 1k</button>
+        <button class="pbtn" onclick="preset(10,20,50,event)">10×20×50 = 10k</button>
+      </div>
+      <div class="sl-row"><span class="sl-label">biomes</span><input type="range" id="sl-b" min="2" max="10" value="5" step="1" oninput="upd()"><span class="sl-val" id="lb-b">5</span></div>
+      <div class="sl-row"><span class="sl-label">specialists</span><input type="range" id="sl-s" min="1" max="20" value="8" step="1" oninput="upd()"><span class="sl-val" id="lb-s">8</span></div>
+      <div class="sl-row"><span class="sl-label">leaves</span><input type="range" id="sl-l" min="1" max="50" value="25" step="1" oninput="upd()"><span class="sl-val" id="lb-l">25</span></div>
+      <div class="mc-block">
+        <div class="mc-top">
+          <span class="mc-name">--max-concurrency</span>
+          <input type="range" id="sl-mc" min="1" max="999" value="50" step="1" oninput="upd()" style="width:80px;flex:none">
+          <span class="mc-val" id="lb-mc">50</span>
+        </div>
+        <div class="mc-hint">higher = more sessions in flight simultaneously<br>directly controls wall-clock execution time</div>
+      </div>
+      <button class="sim-btn" id="simbtn" onclick="handleBtn()">▶ run cultivate</button>
+    </div>
+
+    <div class="panel">
+      <div class="ptitle">execution time</div>
+      <div class="timer-big idle" id="timer-disp">00:00.000</div>
+      <div class="timer-phase" id="timer-phase">awaiting cultivate</div>
+      <div class="hbar-wrap"><div id="hbar"></div></div>
+      <div class="hbar-labels"><span>0%</span><span id="harvest-mid">harvest @ 80%</span><span id="pct-lbl">0%</span></div>
+      <div class="time-compare">
+        <div class="tc-cell"><div class="tc-n" id="tc-par" style="color:var(--green)">—</div><div class="tc-k">mycelium (parallel)</div></div>
+        <div class="tc-cell"><div class="tc-n" id="tc-seq" style="color:var(--muted)">—</div><div class="tc-k">sequential equiv.</div></div>
+      </div>
+      <div class="speedup-box">
+        <div class="speedup-n" id="speedup-n">—</div>
+        <div class="speedup-k">parallel speedup vs sequential</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- stats -->
+  <div class="stats-row">
+    <div class="stat"><div class="stat-n" id="st-t">1,000</div><div class="stat-k">total</div></div>
+    <div class="stat"><div class="stat-n" id="st-r" style="color:var(--teal)">0</div><div class="stat-k">running</div></div>
+    <div class="stat"><div class="stat-n" id="st-q">1,000</div><div class="stat-k">queued</div></div>
+    <div class="stat"><div class="stat-n" id="st-d" style="color:var(--green)">0</div><div class="stat-k">FRUIT_READY</div></div>
+    <div class="stat"><div class="stat-n" id="st-p">0%</div><div class="stat-k">harvest %</div></div>
+  </div>
+
+  <!-- pool -->
+  <div class="pool-wrap">
+    <div class="ptitle" id="pool-title">session pool — each cell = one Claude Agent SDK session</div>
+    <canvas id="poolCanvas"></canvas>
+    <div class="legend">
+      <div class="leg"><div class="leg-dot" style="background:var(--teal)"></div>running</div>
+      <div class="leg"><div class="leg-dot" style="background:var(--green2)"></div>FRUIT_READY</div>
+      <div class="leg"><div class="leg-dot" style="background:#27272d"></div>queued</div>
+    </div>
+  </div>
+
+  <!-- digital dash -->
+  <div class="ddp-wrap" id="ddp-wrap">
+    <div class="ddp-hdr">
+      <div class="ddp-logo">DD</div>
+      <div><div class="ddp-name">digital dash — agentic CI/CD</div><div class="ddp-sub">auto-triggered after harvest passes threshold</div></div>
+      <div class="ddp-elapsed" id="ddp-elapsed">+00:00.000</div>
+    </div>
+    <div class="pipeline" id="pipeline"></div>
+    <div class="ddp-footer" id="ddp-footer"></div>
+  </div>
+
+</div>
+<script>
+const DNAMES=['auth','data','api','ui','jobs','ml','infra','cdn','mq','evt'];
+const DDP=[
+  {id:'merge',lbl:'merge-order',dur:3000,icon:'M'},
+  {id:'lint', lbl:'lint',       dur:1300,icon:'L'},
+  {id:'types',lbl:'typecheck',  dur:2000,icon:'T'},
+  {id:'test', lbl:'test suite', dur:5600,icon:'✓'},
+  {id:'build',lbl:'build',      dur:3400,icon:'B'},
+  {id:'stage',lbl:'deploy:stg', dur:2200,icon:'S'},
+  {id:'smoke',lbl:'smoke tests',dur:1700,icon:'~'},
+  {id:'prod', lbl:'deploy:prod',dur:2000,icon:'P'},
+];
+
+let curT=1000,done=0;
+let simOn=false,simTimer=null,startMs=0,elapsedMs=0;
+let rafId=null,poolFrame=0;
+let ddpOn=false,ddpIdx=-1,ddpTimer=null,ddpStart=0,ddpRaf=null;
+let phase=0; // 0=idle 1=running 2=harvest 3=ddp 4=done
+
+function V(){return{b:+sl('sl-b'),s:+sl('sl-s'),l:+sl('sl-l'),mc:+sl('sl-mc')};}
+function sl(id){return document.getElementById(id).value;}
+function el(id){return document.getElementById(id);}
+
+function upd(){
+  const {b,s,l,mc}=V();const tot=b*s*l;
+  if(tot!==curT){done=0;hardReset();}
+  curT=tot;
+  el('lb-b').textContent=b;el('lb-s').textContent=s;el('lb-l').textContent=l;
+  el('lb-mc').textContent=mc;
+  el('eq-b').textContent=b;el('eq-s').textContent=s;el('eq-l').textContent=l;
+  el('eq-t').textContent=tot.toLocaleString();
+  el('st-t').textContent=tot.toLocaleString();
+  el('tc-seq').textContent=fmtMs(tot*45000);
+  drawTree(b,s,l);updateStats(mc);drawPool(mc);
+}
+
+// ── TIMER ─────────────────────────────────────────────────────
+function startRAF(){
+  if(rafId)return;
+  function step(){
+    if(!simOn&&phase<3){rafId=null;return;}
+    elapsedMs=Date.now()-startMs;
+    renderTimer();
+    rafId=requestAnimationFrame(step);
+  }
+  rafId=requestAnimationFrame(step);
+}
+function stopRAF(){if(rafId){cancelAnimationFrame(rafId);rafId=null;}}
+
+function renderTimer(){
+  const e=elapsedMs;
+  const td=el('timer-disp');
+  td.textContent=fmtClock(e);
+  el('tc-par').textContent=fmtMs(e);
+  const su=e>200?Math.round(curT*45000/e):0;
+  el('speedup-n').textContent=su>0?su+'×':'—';
+}
+
+function fmtClock(ms){
+  const m=Math.floor(ms/60000);
+  const s=Math.floor((ms%60000)/1000);
+  const r=ms%1000;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(r).padStart(3,'0')}`;
+}
+function fmtMs(ms){
+  if(ms<1000)return ms+'ms';
+  if(ms<60000)return (ms/1000).toFixed(1)+'s';
+  const m=Math.floor(ms/60000);
+  return `${m}m ${((ms%60000)/1000).toFixed(0)}s`;
+}
+
+// ── PHASES ────────────────────────────────────────────────────
+function setPhase(p){
+  phase=p;
+  ['ph1','ph2','ph3'].forEach(id=>el(id).className='ph');
+  const msgs={1:'cultivating — sessions in flight',2:'harvest passed — triggering Digital Dash',3:'digital dash CI/CD running',4:'deployed to production'};
+  el('timer-phase').textContent=msgs[p]||'';
+  if(p===1)el('ph1').classList.add('active');
+  if(p===2){el('ph1').classList.add('done');el('ph2').classList.add('active');}
+  if(p===3){el('ph1').classList.add('done');el('ph2').classList.add('done');el('ph3').classList.add('dd-on');}
+  if(p===4){el('ph1').classList.add('done');el('ph2').classList.add('done');el('ph3').classList.add('done');}
+}
+
+function resetPhases(){
+  el('ph1').className='ph active';el('ph2').className='ph';el('ph3').className='ph';
+  el('timer-disp').textContent='00:00.000';el('timer-disp').className='timer-big idle';
+  el('timer-phase').textContent='awaiting cultivate';
+  el('tc-par').textContent='—';el('speedup-n').textContent='—';
+  el('hbar').style.width='0%';el('hbar').style.background='var(--teal)';
+  el('pct-lbl').textContent='0%';
+  el('ddp-wrap').classList.remove('visible');
+  el('ddp-footer').innerHTML='';
+  elapsedMs=0;
+}
+
+// ── SIM ───────────────────────────────────────────────────────
+function handleBtn(){
+  if(phase===0||phase===4||(phase>=1&&!simOn)){
+    hardReset();done=0;startSim();
+  } else {
+    hardReset();done=0;upd();
+  }
+}
+
+function startSim(){
+  simOn=true;phase=1;startMs=Date.now();
+  setPhase(1);
+  el('timer-disp').className='timer-big running';
+  el('simbtn').textContent='■ reset';el('simbtn').className='sim-btn run';
+  startRAF();
+  simTimer=setInterval(tick,75);
+}
+
+function tick(){
+  const {mc}=V();
+  if(done>=curT){endCultivation();return;}
+  // sessions completed per tick scales directly with mc
+  // this is what makes concurrency slider visually meaningful
+  const perTick=Math.max(1,Math.round(mc*0.055));
+  done=Math.min(curT,done+perTick);
+  const pct=Math.round(done/curT*100);
+  el('hbar').style.width=pct+'%';
+  el('pct-lbl').textContent=pct+'%';
+  el('st-p').textContent=pct+'%';
+  el('st-p').style.color=pct>=80?'var(--green)':pct>30?'var(--amber)':'';
+  updateStats(mc);drawPool(mc);
+  if(pct>=80&&phase===1){setPhase(2);el('hbar').style.background='var(--green)';}
+}
+
+function endCultivation(){
+  clearInterval(simTimer);simTimer=null;simOn=false;
+  done=curT;
+  elapsedMs=Date.now()-startMs;
+  stopRAF();renderTimer();
+  el('timer-disp').className='timer-big done';
+  el('hbar').style.width='100%';el('hbar').style.background='var(--green)';
+  el('pct-lbl').textContent='100%';el('st-p').textContent='100%';
+  el('st-p').style.color='var(--green)';
+  updateStats(V().mc);drawPool(V().mc);
+  el('st-r').textContent='0';el('st-q').textContent='0';
+  setTimeout(startDDP,700);
+}
+
+function hardReset(){
+  if(simTimer){clearInterval(simTimer);simTimer=null;}
+  if(ddpTimer){clearTimeout(ddpTimer);ddpTimer=null;}
+  if(ddpRaf){cancelAnimationFrame(ddpRaf);ddpRaf=null;}
+  stopRAF();
+  simOn=false;ddpOn=false;ddpIdx=-1;phase=0;
+  el('simbtn').textContent='▶ run cultivate';el('simbtn').className='sim-btn';
+  resetPhases();
+}
+
+// ── DIGITAL DASH ──────────────────────────────────────────────
+function buildPipeline(){
+  const pipe=el('pipeline');pipe.innerHTML='';
+  DDP.forEach((st,i)=>{
+    const s=document.createElement('div');
+    s.className='pipe-stage';s.id='pst-'+st.id;
+    s.innerHTML=`<div class="stage-box" id="sbox-${st.id}">${st.icon}</div><div class="stage-lbl" id="slbl-${st.id}">${st.lbl}</div><div class="stage-dur" id="sdur-${st.id}"></div>`;
+    pipe.appendChild(s);
+    if(i<DDP.length-1){
+      const c=document.createElement('div');c.className='pipe-conn';c.id='conn-'+st.id;pipe.appendChild(c);
+    }
+  });
+}
+
+function startDDP(){
+  ddpOn=true;ddpIdx=0;ddpStart=Date.now();
+  setPhase(3);
+  el('ddp-wrap').classList.add('visible');
+  buildPipeline();
+  // ddp clock
+  const ddpClockStep=()=>{
+    if(!ddpOn)return;
+    const e=Date.now()-ddpStart;
+    el('ddp-elapsed').textContent='+'+fmtClock(e);
+    ddpRaf=requestAnimationFrame(ddpClockStep);
+  };
+  ddpRaf=requestAnimationFrame(ddpClockStep);
+  runDDPStage(0);
+}
+
+function runDDPStage(idx){
+  if(idx>=DDP.length){endDDP();return;}
+  const st=DDP[idx];
+  el('sbox-'+st.id).className='stage-box active';
+  el('slbl-'+st.id).className='stage-lbl active';
+  const sdur=el('sdur-'+st.id);
+  sdur.className='stage-dur live';
+  const t0=Date.now();
+  let durInt=setInterval(()=>{sdur.textContent=((Date.now()-t0)/1000).toFixed(1)+'s';},60);
+  ddpTimer=setTimeout(()=>{
+    clearInterval(durInt);
+    const took=((Date.now()-t0)/1000).toFixed(2)+'s';
+    sdur.textContent=took;sdur.className='stage-dur fin';
+    el('sbox-'+st.id).className='stage-box done';
+    el('slbl-'+st.id).className='stage-lbl done';
+    if(idx<DDP.length-1)el('conn-'+st.id).className='pipe-conn done';
+    runDDPStage(idx+1);
+  },st.dur);
+}
+
+function endDDP(){
+  ddpOn=false;
+  if(ddpRaf){cancelAnimationFrame(ddpRaf);ddpRaf=null;}
+  const ddpTotal=DDP.reduce((a,s)=>a+s.dur,0);
+  setPhase(4);
+  el('timer-disp').className='timer-big deployed';
+  el('timer-disp').textContent='DEPLOYED';
+  el('timer-phase').textContent='production deploy complete — organism fulfilled';
+  el('simbtn').textContent='↺ run again';el('simbtn').className='sim-btn fin';
+  const total=elapsedMs+ddpTotal;
+  const su=Math.round(curT*45000/total);
+  el('ddp-footer').innerHTML=[
+    {n:fmtMs(elapsedMs),k:'cultivation time'},
+    {n:fmtMs(ddpTotal),k:'CI/CD pipeline'},
+    {n:fmtMs(total),k:'total end-to-end'},
+    {n:su+'×',k:'vs sequential'},
+  ].map(i=>`<div class="ddp-stat"><div class="ddp-stat-n">${i.n}</div><div class="ddp-stat-k">${i.k}</div></div>`).join('');
+}
+
+// ── STATS ─────────────────────────────────────────────────────
+function updateStats(mc){
+  const running=Math.min(mc,curT-done);
+  const queued=Math.max(0,curT-done-running);
+  el('st-r').textContent=running.toLocaleString();
+  el('st-q').textContent=queued.toLocaleString();
+  el('st-d').textContent=done.toLocaleString();
+  // update pool title to show concurrency in action
+  el('pool-title').textContent=simOn
+    ?`session pool — ${running.toLocaleString()} running (mc=${mc}), ${queued.toLocaleString()} queued, ${done.toLocaleString()} done`
+    :'session pool — each cell = one Claude Agent SDK session';
+}
+
+// ── TREE ──────────────────────────────────────────────────────
+function drawTree(b,s,l){
+  const cv=document.getElementById('treeCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const W=cv.offsetWidth||1000,H=230;
+  cv.width=W*dpr;cv.height=H*dpr;
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+  const pad=24,avail=W-pad*2;
+  const bw=Math.min(78,Math.floor((avail-(b-1)*8)/b));
+  const gap=b>1?(avail-b*bw)/(b-1):0;
+  const rx=W/2,ry=12;
+  rrect(ctx,rx-50,ry,100,26,5,'#18181c','#2dd4bf');
+  tctx(ctx,'my-app',rx,ry+13,9,'#2dd4bf');
+  const by=75,bh=26,fy=H-6;
+  for(let i=0;i<b;i++){
+    const bx=pad+i*(bw+gap),cx=bx+bw/2;
+    ctx.beginPath();ctx.moveTo(rx,ry+26);ctx.lineTo(cx,by);
+    ctx.strokeStyle='#27272d';ctx.lineWidth=.7;ctx.setLineDash([]);ctx.stroke();
+    rrect(ctx,bx,by,bw,bh,5,'#18181c','#0d9488');
+    tctx(ctx,b<=10?DNAMES[i]:String(i+1),cx,by+bh/2,9,'#2dd4bf');
+    const fw=Math.min(bw*.88,60),fn=Math.min(s*l,50);
+    for(let j=0;j<fn;j++){
+      const t=fn<=1?.5:j/(fn-1);
+      const lx=bx+(bw-fw)*.5+t*fw;
+      const a=.05+.3*(1-Math.abs(t-.5)*2);
+      const col=done>0?`rgba(34,197,94,${a})`:`rgba(45,212,191,${a*.65})`;
+      ctx.beginPath();ctx.moveTo(cx,by+bh);
+      ctx.bezierCurveTo(cx,by+bh+30,lx,fy-28,lx,fy);
+      ctx.strokeStyle=col;ctx.lineWidth=.7;ctx.setLineDash([]);ctx.stroke();
+    }
+    ctx.font=`700 8px 'Space Mono',monospace`;
+    ctx.fillStyle='#22c55e';ctx.textAlign='center';
+    ctx.fillText('×'+(s*l).toLocaleString(),cx,H-1);
+  }
+}
+function rrect(ctx,x,y,w,h,r,fill,stroke){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
+  ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
+  ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=.7;ctx.stroke();
+}
+function tctx(ctx,t,x,y,fs,c){
+  ctx.font=`700 ${fs}px 'Space Mono',monospace`;ctx.fillStyle=c;ctx.textAlign='center';
+  ctx.fillText(t,x,y+fs*.35);
+}
+
+// ── POOL ──────────────────────────────────────────────────────
+function drawPool(mc){
+  const cv=document.getElementById('poolCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const W=(cv.parentElement.clientWidth-32)||800;
+  const MAX=2500,display=Math.min(curT,MAX);
+  const cols=Math.min(display,100);
+  const rows=Math.ceil(display/cols);
+  const cell=Math.max(4,Math.floor((W-1)/cols)-1);
+  const H=rows*(cell+1)+1;
+  cv.width=W*dpr;cv.height=H*dpr;cv.style.height=H+'px';
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
+  const running=Math.min(mc,curT-done);
+  const dC=curT>0?Math.min(display,Math.round(done/curT*display)):0;
+  const rC=curT>0?Math.min(display-dC,Math.round(running/curT*display)):0;
+  poolFrame++;
+  for(let i=0;i<display;i++){
+    const col=i%cols,row=Math.floor(i/cols);
+    const x=col*(cell+1),y=row*(cell+1);
+    let color;
+    if(i<dC) color='#16a34a';
+    else if(i<dC+rC){
+      const osc=Math.sin(poolFrame*.18+i*.5)*.12+.88;
+      color=`rgba(45,212,191,${osc})`;
+    } else color='#27272d';
+    ctx.fillStyle=color;
+    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,cell,cell,1);ctx.fill();}
+    else ctx.fillRect(x,y,cell,cell);
+  }
+}
+
+// ── PRESETS ───────────────────────────────────────────────────
+function preset(b,s,l,e){
+  document.getElementById('sl-b').value=b;
+  document.getElementById('sl-s').value=s;
+  document.getElementById('sl-l').value=l;
+  done=0;hardReset();upd();
+  document.querySelectorAll('.pbtn').forEach(btn=>btn.classList.remove('on'));
+  if(e&&e.target)e.target.classList.add('on');
+}
+
+window.addEventListener('resize',()=>upd());
+window.addEventListener('load',()=>upd());
+</script>
+</body>
+</html>

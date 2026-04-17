@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture — Legendary Funicular / Mycelium DDP</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <!-- layout-styles.css will be inlined here by wiring-agent -->
+  <link rel="stylesheet" href="layout-styles.css">
+</head>
+<body>
+  <!-- Canvas particle background -->
+  <canvas id="particle-canvas" aria-hidden="true"></canvas>
+
+  <!-- Main container -->
+  <div class="arch-container">
+    <!-- Header -->
+    <header class="arch-header">
+      <div class="header-content">
+        <div class="header-eyebrow">Legendary Funicular / Mycelium DDP</div>
+        <h1 class="header-title">Architecture</h1>
+        <p class="header-desc">Interactive visualization of the ecosystem. Click any component to view source code and exports.</p>
+      </div>
+      <div class="header-badges">
+        <span class="badge badge-active"><span class="badge-dot"></span>Live</span>
+        <span class="badge">No external JS</span>
+      </div>
+    </header>
+
+    <!-- Search placeholder - wiring-agent will implement functionality -->
+    <div class="search-container" id="search-container">
+      <!-- Search input will be injected by wiring-agent -->
+    </div>
+
+    <!-- Layered diagram -->
+    <main class="layers-container">
+      <!-- Layer 1: CLI Commands -->
+      <section class="layer" data-layer="cli-commands">
+        <div class="layer-header">
+          <div class="layer-accent" style="--layer-color: var(--accent-cli)"></div>
+          <div class="layer-info">
+            <h2 class="layer-title">CLI Commands</h2>
+            <p class="layer-desc">Entry points: brief, ddp, cultivate, sporenet, harvest, plant, integrate</p>
+          </div>
+          <span class="layer-badge" style="--layer-color: var(--accent-cli)">Layer 1</span>
+        </div>
+        <div class="layer-grid" id="grid-cli-commands">
+          <!-- Component cards injected by wiring-agent -->
+        </div>
+        <!-- Flow connector to next layer -->
+        <div class="flow-connector" aria-hidden="true">
+          <svg class="flow-svg" viewBox="0 0 100 40" preserveAspectRatio="none">
+            <path class="flow-path" d="M50,0 Q50,20 50,40" />
+            <circle class="flow-particle flow-particle-1" r="3" />
+            <circle class="flow-particle flow-particle-2" r="3" />
+            <circle class="flow-particle flow-particle-3" r="3" />
+          </svg>
+        </div>
+      </section>
+
+      <!-- Layer 2: Upgrades -->
+      <section class="layer" data-layer="upgrades">
+        <div class="layer-header">
+          <div class="layer-accent" style="--layer-color: var(--accent-upgrades)"></div>
+          <div class="layer-info">
+            <h2 class="layer-title">Upgrades</h2>
+            <p class="layer-desc">Enhancement modules: telemetry-emitter, cost-tracker, alerting, registry</p>
+          </div>
+          <span class="layer-badge" style="--layer-color: var(--accent-upgrades)">Layer 2</span>
+        </div>
+        <div class="layer-grid" id="grid-upgrades">
+          <!-- Component cards injected by wiring-agent -->
+        </div>
+        <!-- Flow connector to next layer -->
+        <div class="flow-connector" aria-hidden="true">
+          <svg class="flow-svg" viewBox="0 0 100 40" preserveAspectRatio="none">
+            <path class="flow-path" d="M50,0 Q50,20 50,40" />
+            <circle class="flow-particle flow-particle-1" r="3" />
+            <circle class="flow-particle flow-particle-2" r="3" />
+            <circle class="flow-particle flow-particle-3" r="3" />
+          </svg>
+        </div>
+      </section>
+
+      <!-- Layer 3: Telemetry -->
+      <section class="layer" data-layer="telemetry">
+        <div class="layer-header">
+          <div class="layer-accent" style="--layer-color: var(--accent-telemetry)"></div>
+          <div class="layer-info">
+            <h2 class="layer-title">Telemetry</h2>
+            <p class="layer-desc">Observability: events, ddp-stages, alert-triggers</p>
+          </div>
+          <span class="layer-badge" style="--layer-color: var(--accent-telemetry)">Layer 3</span>
+        </div>
+        <div class="layer-grid" id="grid-telemetry">
+          <!-- Component cards injected by wiring-agent -->
+        </div>
+        <!-- Flow connector to next layer -->
+        <div class="flow-connector" aria-hidden="true">
+          <svg class="flow-svg" viewBox="0 0 100 40" preserveAspectRatio="none">
+            <path class="flow-path" d="M50,0 Q50,20 50,40" />
+            <circle class="flow-particle flow-particle-1" r="3" />
+            <circle class="flow-particle flow-particle-2" r="3" />
+            <circle class="flow-particle flow-particle-3" r="3" />
+          </svg>
+        </div>
+      </section>
+
+      <!-- Layer 4: Fleet -->
+      <section class="layer" data-layer="fleet">
+        <div class="layer-header">
+          <div class="layer-accent" style="--layer-color: var(--accent-fleet)"></div>
+          <div class="layer-info">
+            <h2 class="layer-title">Fleet</h2>
+            <p class="layer-desc">Data layer: duckdb, queries</p>
+          </div>
+          <span class="layer-badge" style="--layer-color: var(--accent-fleet)">Layer 4</span>
+        </div>
+        <div class="layer-grid" id="grid-fleet">
+          <!-- Component cards injected by wiring-agent -->
+        </div>
+      </section>
+    </main>
+
+    <!-- Cost visualization placeholder - cost-agent will build this -->
+    <section class="cost-section" id="cost-section">
+      <!-- Cost visualization injected by cost-agent -->
+    </section>
+
+    <!-- Detail panel placeholder - panel-agent will build this -->
+    <aside class="detail-panel" id="detail-panel" aria-hidden="true">
+      <!-- Panel content injected by panel-agent -->
+    </aside>
+    <div class="panel-backdrop" id="panel-backdrop" aria-hidden="true"></div>
+
+    <!-- Footer -->
+    <footer class="arch-footer">
+      <div class="footer-content">
+        <span class="footer-brand">Mycelium Framework</span>
+        <span class="footer-divider">&middot;</span>
+        <span class="footer-org">VibeSpace LLC</span>
+        <span class="footer-divider">&middot;</span>
+        <span class="footer-motto">the network provides</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Particle canvas script will be inlined here by wiring-agent -->
+  <script src="layout-particles.js"></script>
+</body>
+</html>

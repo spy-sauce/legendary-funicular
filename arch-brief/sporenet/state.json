@@ -1,0 +1,44 @@
+{
+  "session_id": "exec-2026-04-17T22-34-53-155Z",
+  "organism": "arch-brief",
+  "started_at": "2026-04-17T22:34:53.161Z",
+  "ship_target": "2024-01-15",
+  "total": 5,
+  "leaves": [
+    {
+      "id": "component-agent",
+      "agent": "component-agent",
+      "tag": "COMPONENT",
+      "scope": "Read source files, extract metadata, produce arch-data.json with component map",
+      "status": "pending"
+    },
+    {
+      "id": "layout-agent",
+      "agent": "layout-agent",
+      "tag": "LAYOUT",
+      "scope": "Build visual shell with canvas particles, layer headers, flow connectors, responsive grid",
+      "status": "pending"
+    },
+    {
+      "id": "panel-agent",
+      "agent": "panel-agent",
+      "tag": "PANEL",
+      "scope": "Build slide-in detail panel showing source code, exports, and file path",
+      "status": "pending"
+    },
+    {
+      "id": "cost-agent",
+      "agent": "cost-agent",
+      "tag": "COST",
+      "scope": "Build cost visualization comparing sequential vs parallel execution costs",
+      "status": "pending"
+    },
+    {
+      "id": "wiring-agent",
+      "agent": "wiring-agent",
+      "tag": "WIRING",
+      "scope": "Wire all components into final ARCHITECTURE.html, validate links, add search/filter",
+      "status": "pending"
+    }
+  ]
+}

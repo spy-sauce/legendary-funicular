@@ -1,0 +1,52 @@
+<!-- panel-component.html — Slide-in detail panel for ARCHITECTURE.html -->
+<!-- Contract: NUTRIENTS.md §6 PANEL_SPEC -->
+<!-- Agent: panel-agent | Branch: feat/panel-agent -->
+
+<!-- Backdrop overlay -->
+<div class="panel-backdrop" id="panel-backdrop" aria-hidden="true"></div>
+
+<!-- Slide-in panel -->
+<aside class="detail-panel" id="detail-panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+  <!-- Header -->
+  <header class="panel-header">
+    <div class="panel-header-content">
+      <h2 class="panel-title" id="panel-title">Component Details</h2>
+      <p class="panel-desc" id="panel-desc"></p>
+    </div>
+    <button class="panel-close" id="panel-close" aria-label="Close panel" title="Close (Esc)">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 4l12 12M16 4L4 16"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- File path with copy button -->
+  <div class="panel-filepath">
+    <code class="filepath-text" id="panel-filepath"></code>
+    <button class="filepath-copy" id="filepath-copy" aria-label="Copy file path" title="Copy path">
+      <svg class="copy-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="5" y="5" width="9" height="9" rx="1"/>
+        <path d="M11 5V3a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h2"/>
+      </svg>
+      <svg class="check-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+        <path d="M3 8l4 4 6-7"/>
+      </svg>
+      <span class="copy-label">Copy</span>
+    </button>
+  </div>
+
+  <!-- Source code block -->
+  <div class="panel-code-container" id="panel-code-container">
+    <div class="panel-code-loading" id="panel-loading">
+      <span class="loading-spinner"></span>
+      <span>Loading source...</span>
+    </div>
+    <pre class="panel-code"><code class="panel-code-content" id="panel-code"></code></pre>
+  </div>
+
+  <!-- Exports section -->
+  <div class="panel-exports" id="panel-exports-section">
+    <h3 class="exports-title">Exported Symbols</h3>
+    <ul class="exports-list" id="panel-exports"></ul>
+  </div>
+</aside>

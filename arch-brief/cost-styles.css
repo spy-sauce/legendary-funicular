@@ -1,0 +1,404 @@
+/* cost-styles.css — Cost Visualization Styles
+   Agent: cost-agent
+   Contract: NUTRIENTS.md §2 (DESIGN_TOKENS), §8 (COST_MODEL)
+*/
+
+/* ============================================
+   Cost Section Container
+   ============================================ */
+.cost-section {
+  --cost-sequential: #ef4444;
+  --cost-parallel: #22c55e;
+  --cost-savings: #fbbf24;
+  --bg-surface: #12121a;
+  --bg-elevated: #1a1a24;
+  --text-primary: #e8e8ed;
+  --text-secondary: #9090a0;
+  --text-muted: #606070;
+  --border-default: #2a2a3a;
+  --font-mono: 'Space Mono', monospace;
+  --font-display: 'Syne', sans-serif;
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.cost-header {
+  text-align: center;
+  margin-bottom: var(--space-6);
+}
+
+.cost-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2);
+}
+
+.cost-subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.cost-subtitle strong {
+  color: var(--cost-savings);
+}
+
+/* ============================================
+   Model Pricing Cards
+   ============================================ */
+.model-pricing {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: center;
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.model-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 180px;
+}
+
+.model-name {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.model-rates {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.rate {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.rate small {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  display: block;
+}
+
+/* ============================================
+   Time Comparison Bars
+   ============================================ */
+.time-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.comparison-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 100px;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .comparison-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+}
+
+.row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.execution-type {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.comparison-row.sequential .execution-type {
+  color: var(--cost-sequential);
+}
+
+.comparison-row.parallel .execution-type {
+  color: var(--cost-parallel);
+}
+
+.execution-formula {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+
+.bar-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.time-bar {
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  transition: width 800ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sequential-bar {
+  width: 100%;
+  background: var(--cost-sequential);
+}
+
+.parallel-bar {
+  width: 20%;
+  background: var(--cost-parallel);
+}
+
+/* Animation: bars start at 0 and grow */
+.cost-section.animate .sequential-bar {
+  animation: growBar 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: 200ms;
+}
+
+.cost-section.animate .parallel-bar {
+  animation: growBarParallel 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: 400ms;
+}
+
+@keyframes growBar {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes growBarParallel {
+  from { width: 0; }
+  to { width: 20%; }
+}
+
+.bar-segments {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+.bar-segments.stacked {
+  /* All segments overlap in parallel mode */
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.bar-segments.stacked .segment {
+  grid-row: 1;
+  grid-column: 1;
+  opacity: 0.7;
+}
+
+.segment {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 600;
+  border-right: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.segment:last-child {
+  border-right: none;
+}
+
+.time-label {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 40px;
+}
+
+.comparison-row.sequential .time-label {
+  color: var(--cost-sequential);
+}
+
+.comparison-row.parallel .time-label {
+  color: var(--cost-parallel);
+}
+
+.row-cost {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.cost-value {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cost-breakdown {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+
+/* ============================================
+   Speedup Badge
+   ============================================ */
+.speedup-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: linear-gradient(135deg, var(--cost-parallel), #16a34a);
+  border-radius: 50px;
+  padding: var(--space-3) var(--space-6);
+  margin: 0 auto var(--space-6);
+  width: fit-content;
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3);
+  animation: pulseBadge 2s ease-in-out infinite;
+}
+
+@keyframes pulseBadge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+.speedup-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.speedup-label {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ============================================
+   Formula Section
+   ============================================ */
+.formula-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.formula-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: var(--space-4);
+}
+
+.formula-card h4 {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.formula {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+  display: block;
+}
+
+.formula strong {
+  color: var(--cost-savings);
+}
+
+/* ============================================
+   Insight Box
+   ============================================ */
+.insight-box {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 6px;
+  padding: var(--space-4);
+}
+
+.insight-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.insight-text {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.insight-text strong {
+  color: var(--cost-savings);
+}
+
+.insight-text em {
+  color: var(--cost-parallel);
+  font-style: normal;
+}
+
+/* ============================================
+   Hover Replay Animation
+   ============================================ */
+.cost-section:hover .sequential-bar,
+.cost-section:hover .parallel-bar {
+  animation-play-state: running;
+}
+
+.cost-section.replay .sequential-bar {
+  animation: growBar 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: 0ms;
+}
+
+.cost-section.replay .parallel-bar {
+  animation: growBarParallel 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: 200ms;
+}

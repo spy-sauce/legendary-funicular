@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ecosystem · Mycelium × DDP</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07070a;--s1:#0f0f13;--s2:#161619;--s3:#1c1c21;
+  --b1:#232329;--b2:#35353e;--b3:#4a4a56;
+  --t1:#f0f0f2;--t2:#a1a1b0;--t3:#5c5c6e;
+  --green:#22c55e;--teal:#2dd4bf;--purple:#a78bfa;
+  --amber:#fbbf24;--red:#f87171;--blue:#60a5fa;
+  --glow-t:rgba(45,212,191,.15);--glow-p:rgba(167,139,250,.15);
+  --glow-g:rgba(34,197,94,.15);--glow-a:rgba(251,191,36,.15);
+}
+html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'Syne',sans-serif;overflow-x:hidden}
+#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* ── APP SHELL ── */
+#app{position:relative;z-index:1;min-height:100vh;padding:0 0 120px}
+
+/* ── HEADER ── */
+.hdr{padding:40px 48px 0;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:20px}
+.hdr-left{}
+.eyebrow{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.25em;color:var(--teal);text-transform:uppercase;margin-bottom:10px}
+.hdr h1{font-size:clamp(1.8rem,3.5vw,2.8rem);font-weight:800;letter-spacing:-.03em;line-height:1.05}
+.hdr h1 em{font-style:normal;color:var(--purple)}
+.hdr h1 span{color:var(--t3);margin:0 8px}
+.hdr h1 b{color:var(--teal)}
+.tagline{font-size:12px;color:var(--t3);margin-top:8px;line-height:1.7;max-width:420px}
+.hdr-right{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.search-wrap{position:relative}
+.search-wrap input{background:var(--s1);border:1px solid var(--b2);border-radius:8px;color:var(--t1);font-family:'Space Mono',monospace;font-size:11px;padding:8px 12px 8px 34px;width:220px;outline:none;transition:.2s}
+.search-wrap input:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--glow-t)}
+.search-wrap input::placeholder{color:var(--t3)}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--t3);font-size:12px;pointer-events:none}
+.legend{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.leg{display:flex;align-items:center;gap:5px;font-family:'Space Mono',monospace;font-size:9px;color:var(--t3)}
+.leg-dot{width:7px;height:7px;border-radius:50%}
+
+/* ── DIAGRAM ── */
+#diagram{padding:36px 48px}
+
+/* ── LAYER ── */
+.layer{margin-bottom:6px}
+.layer-hdr{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.layer-num{font-family:'Space Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:var(--s2);border:1px solid var(--b1);color:var(--t3)}
+.layer-name{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.18em;text-transform:uppercase;font-weight:700}
+.layer-line{flex:1;height:1px;background:var(--b1)}
+.layer-body{display:flex;gap:10px;flex-wrap:wrap}
+
+/* ── COMPONENT CARD ── */
+.comp{
+  background:var(--s1);border:1px solid var(--b1);border-radius:10px;
+  padding:14px 16px;cursor:pointer;transition:all .2s;
+  position:relative;overflow:hidden;
+  min-width:140px;flex:1;
+}
+.comp::before{content:'';position:absolute;inset:0;opacity:0;transition:.2s;border-radius:10px}
+.comp:hover{border-color:var(--b3);transform:translateY(-2px)}
+.comp:hover::before{opacity:1}
+.comp.active{transform:translateY(-2px)}
+.comp[data-color="teal"]:hover,.comp[data-color="teal"].active{border-color:rgba(45,212,191,.5);box-shadow:0 0 24px var(--glow-t)}
+.comp[data-color="teal"]::before{background:linear-gradient(135deg,var(--glow-t),transparent)}
+.comp[data-color="purple"]:hover,.comp[data-color="purple"].active{border-color:rgba(167,139,250,.5);box-shadow:0 0 24px var(--glow-p)}
+.comp[data-color="purple"]::before{background:linear-gradient(135deg,var(--glow-p),transparent)}
+.comp[data-color="green"]:hover,.comp[data-color="green"].active{border-color:rgba(34,197,94,.5);box-shadow:0 0 24px var(--glow-g)}
+.comp[data-color="green"]::before{background:linear-gradient(135deg,var(--glow-g),transparent)}
+.comp[data-color="amber"]:hover,.comp[data-color="amber"].active{border-color:rgba(251,191,36,.5);box-shadow:0 0 24px var(--glow-a)}
+.comp[data-color="amber"]::before{background:linear-gradient(135deg,var(--glow-a),transparent)}
+.comp[data-color="blue"]:hover,.comp[data-color="blue"].active{border-color:rgba(96,165,250,.5);box-shadow:0 0 24px rgba(96,165,250,.15)}
+.comp[data-color="blue"]::before{background:linear-gradient(135deg,rgba(96,165,250,.1),transparent)}
+.comp[data-color="red"]:hover,.comp[data-color="red"].active{border-color:rgba(248,113,113,.5);box-shadow:0 0 24px rgba(248,113,113,.15)}
+.comp[data-color="red"]::before{background:linear-gradient(135deg,rgba(248,113,113,.1),transparent)}
+.comp.dimmed{opacity:.25;transform:none!important;box-shadow:none!important}
+.comp-icon{font-size:18px;margin-bottom:8px;display:block}
+.comp-cmd{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;margin-bottom:4px}
+.comp[data-color="teal"] .comp-cmd{color:var(--teal)}
+.comp[data-color="purple"] .comp-cmd{color:var(--purple)}
+.comp[data-color="green"] .comp-cmd{color:var(--green)}
+.comp[data-color="amber"] .comp-cmd{color:var(--amber)}
+.comp[data-color="blue"] .comp-cmd{color:var(--blue)}
+.comp[data-color="red"] .comp-cmd{color:var(--red)}
+.comp-title{font-size:12px;font-weight:700;margin-bottom:4px;line-height:1.3}
+.comp-sub{font-size:10px;color:var(--t3);line-height:1.5}
+.comp-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:10px}
+.ctag{font-family:'Space Mono',monospace;font-size:8px;padding:2px 6px;border-radius:3px;background:var(--s3);border:1px solid var(--b2);color:var(--t3)}
+/* every child inside a clickable comp inherits pointer */
+.comp[data-id] *{cursor:pointer}
+
+/* ── FLOW CONNECTOR ── */
+.flow{height:32px;display:flex;align-items:center;justify-content:center;gap:0;position:relative;margin:0 0 6px}
+.flow-track{width:100%;height:2px;background:var(--b1);position:relative;overflow:visible}
+.flow-track::after{content:'▼';position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);color:var(--b2);font-size:10px}
+.flow-particle{position:absolute;top:50%;transform:translateY(-50%);width:5px;height:5px;border-radius:50%;animation:particle-move 2.5s linear infinite}
+.flow-particle:nth-child(2){animation-delay:.8s}
+.flow-particle:nth-child(3){animation-delay:1.6s}
+@keyframes particle-move{0%{left:-1%;opacity:0}5%{opacity:1}95%{opacity:1}100%{left:101%;opacity:0}}
+.flow-particle.teal{background:var(--teal);box-shadow:0 0 8px var(--teal)}
+.flow-particle.purple{background:var(--purple);box-shadow:0 0 8px var(--purple)}
+.flow-particle.green{background:var(--green);box-shadow:0 0 8px var(--green)}
+.flow-particle.amber{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+
+/* ── WIDE COMP (operator, framework) ── */
+.comp.wide{min-width:100%;flex:none}
+.comp.fw-pipeline{display:flex;flex-direction:column;gap:12px}
+.pipe-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pipe-box{font-family:'Space Mono',monospace;font-size:10px;padding:6px 12px;border-radius:6px;border:1px solid rgba(45,212,191,.3);background:rgba(45,212,191,.06);color:var(--teal);font-weight:700;white-space:nowrap}
+.pipe-arr{color:var(--b3);font-size:11px}
+.upgrade-row{display:flex;gap:8px;flex-wrap:wrap}
+.upg{background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:8px 12px;flex:1;min-width:150px}
+.upg-name{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;margin-bottom:4px}
+.upg-hooks{font-size:9px;color:var(--t3);line-height:1.8}
+.upg-hooks code{font-family:'Space Mono',monospace;font-size:8px;padding:1px 4px;background:var(--s3);border-radius:2px}
+
+/* ── TOOLS GRID (operator) ── */
+.tools-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.tool-card{background:var(--s2);border:1px solid rgba(167,139,250,.15);border-radius:6px;padding:9px 12px}
+.tool-fn{font-family:'Space Mono',monospace;font-size:9px;color:var(--purple);font-weight:700;margin-bottom:2px}
+.tool-ret{font-family:'Space Mono',monospace;font-size:8px;color:var(--t3);margin-bottom:4px}
+.tool-desc{font-size:9px;color:var(--t2);line-height:1.5}
+
+/* ── EVENT LOG ── */
+.event-log-inline{background:var(--s2);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:12px 14px;flex:1}
+.elog-title{font-family:'Space Mono',monospace;font-size:9px;color:var(--green);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.pulse{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.65)}}
+.ek-grid{display:flex;flex-wrap:wrap;gap:4px}
+.ek{font-family:'Space Mono',monospace;font-size:8px;padding:2px 6px;border-radius:3px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);color:var(--green)}
+
+/* ── DDP PIPELINE ── */
+.ddp-strip{display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--b1)}
+.ddp-stage-box{flex:1;background:var(--s1);padding:10px 6px;text-align:center;border-right:1px solid var(--b1);cursor:pointer;transition:.2s;position:relative}
+.ddp-stage-box:last-child{border-right:none}
+.ddp-stage-box:hover{background:var(--s2)}
+.ddp-icon{font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--amber);display:block;margin-bottom:3px}
+.ddp-lbl{font-family:'Space Mono',monospace;font-size:8px;color:var(--t3);display:block}
+.ddp-stage-box.active-stage{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.3)}
+.ddp-stage-box.active-stage .ddp-icon{text-shadow:0 0 12px var(--amber)}
+
+/* ── SINKS ROW ── */
+.sink-card{text-align:center;min-width:120px}
+.sink-icon-big{font-size:24px;margin-bottom:6px;display:block}
+
+/* ── FLEET CARDS ── */
+.fleet-sql{font-family:'Space Mono',monospace;font-size:8px;color:var(--t3);background:var(--bg);border:1px solid var(--b1);border-radius:4px;padding:8px 10px;line-height:1.8;white-space:pre;overflow:auto;margin-top:8px}
+
+/* ── SIDE PANEL ── */
+#panel{
+  position:fixed;right:0;top:0;height:100vh;width:380px;
+  background:var(--s1);border-left:1px solid var(--b2);
+  transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  z-index:100;overflow-y:auto;
+  box-shadow:-20px 0 60px rgba(0,0,0,.5);
+}
+#panel.open{transform:translateX(0)}
+.panel-close{position:absolute;top:16px;right:16px;background:var(--s2);border:1px solid var(--b2);color:var(--t2);width:32px;height:32px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:.15s}
+.panel-close:hover{background:var(--s3);color:var(--t1)}
+.panel-inner{padding:24px}
+.panel-eyebrow{font-family:'Space Mono',monospace;font-size:8px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:8px}
+.panel-title{font-size:20px;font-weight:800;margin-bottom:4px;line-height:1.2}
+.panel-cmd{font-family:'Space Mono',monospace;font-size:10px;margin-bottom:16px}
+.panel-desc{font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:16px}
+.panel-section{margin-bottom:16px}
+.panel-section-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--t3);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--b1)}
+.panel-file{font-family:'Space Mono',monospace;font-size:9px;padding:6px 10px;background:var(--s2);border-radius:4px;border-left:2px solid;color:var(--t2)}
+.panel-tags{display:flex;flex-wrap:wrap;gap:5px}
+.ptag{font-family:'Space Mono',monospace;font-size:9px;padding:3px 8px;border-radius:4px;border:1px solid}
+.panel-items{list-style:none}
+.panel-items li{font-size:11px;color:var(--t2);padding:5px 0;border-bottom:1px solid var(--b1);display:flex;gap:8px;line-height:1.5}
+.panel-items li::before{content:'→';color:var(--t3);flex-shrink:0}
+.panel-items li:last-child{border-bottom:none}
+
+/* ── FOOTER ── */
+.footer{text-align:center;padding:40px 48px;color:var(--t3);font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.1em}
+
+/* ── SEARCH HIGHLIGHT ── */
+.comp.search-match{border-color:var(--teal)!important;box-shadow:0 0 20px var(--glow-t)!important;opacity:1!important}
+
+@media(max-width:900px){
+  .hdr,#diagram{padding:24px 20px}
+  #panel{width:100%;border-left:none;border-top:1px solid var(--b2);height:60vh;top:auto;bottom:0;transform:translateY(100%)}
+  #panel.open{transform:translateY(0)}
+  .ddp-strip{flex-wrap:wrap}
+  .ddp-stage-box{flex:0 0 calc(25% - 1px)}
+  .tools-row{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<div id="app">
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="eyebrow">ecosystem architecture</div>
+      <h1><b>Mycelium</b><span>×</span><em>Digital Dash</em></h1>
+      <p class="tagline">Framework owns execution. Claude owns decisions.<br>Brief → Plant → Cultivate → Harvest → Ship.</p>
+    </div>
+    <div class="hdr-right">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="search" type="text" placeholder="search components...">
+      </div>
+      <div class="legend">
+        <div class="leg"><div class="leg-dot" style="background:var(--teal)"></div>framework</div>
+        <div class="leg"><div class="leg-dot" style="background:var(--purple)"></div>claude / ai</div>
+        <div class="leg"><div class="leg-dot" style="background:var(--green)"></div>data / storage</div>
+        <div class="leg"><div class="leg-dot" style="background:var(--amber)"></div>ci / cd</div>
+        <div class="leg"><div class="leg-dot" style="background:var(--blue)"></div>fleet / query</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="diagram">
+
+    <!-- LAYER 0: ENTRY POINTS -->
+    <div class="layer">
+      <div class="layer-hdr">
+        <div class="layer-num">0</div>
+        <div class="layer-name" style="color:var(--teal)">Entry Points</div>
+        <div class="layer-line"></div>
+      </div>
+      <div class="layer-body">
+        <div class="comp" data-color="teal" data-id="brief">
+          <span class="comp-icon">💬</span>
+          <div class="comp-cmd">mycelium brief</div>
+          <div class="comp-title">Conversational Brief Generator</div>
+          <div class="comp-sub">Talk to Claude → structured brief.md → plant → ddp</div>
+          <div class="comp-tags"><span class="ctag">streaming</span><span class="ctag">→ brief.md</span><span class="ctag">auto-plant</span></div>
+        </div>
+        <div class="comp" data-color="green" data-id="ddp-cmd">
+          <span class="comp-icon">⚡</span>
+          <div class="comp-cmd">mycelium ddp</div>
+          <div class="comp-title">Single-Command Pipeline</div>
+          <div class="comp-sub">plant → freeze → init → cultivate → harvest → serve</div>
+          <div class="comp-tags"><span class="ctag">--brief</span><span class="ctag">-c 30</span><span class="ctag">-t 0.8</span><span class="ctag">--port</span></div>
+        </div>
+        <div class="comp" data-color="purple" data-id="sporenet-serve">
+          <span class="comp-icon">🌐</span>
+          <div class="comp-cmd">mycelium sporenet serve</div>
+          <div class="comp-title">Live Dashboard + Claude Chat</div>
+          <div class="comp-sub">Cultivation tree · DDP bars · fleet view · operator panel</div>
+          <div class="comp-tags"><span class="ctag">SSE live</span><span class="ctag">operator tools</span><span class="ctag">localhost</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow"><div class="flow-track"><div class="flow-particle teal"></div><div class="flow-particle purple"></div><div class="flow-particle green"></div></div></div>
+
+    <!-- LAYER 1: CLAUDE OPERATOR -->
+    <div class="layer">
+      <div class="layer-hdr">
+        <div class="layer-num">1</div>
+        <div class="layer-name" style="color:var(--purple)">Claude Operator — Decision Intelligence</div>
+        <div class="layer-line"></div>
+      </div>
+      <div class="layer-body">
+        <div class="comp wide" data-color="purple" data-id="claude-op" style="background:linear-gradient(135deg,rgba(46,16,101,.3),var(--s1))">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <span class="comp-icon" style="margin:0;font-size:22px">🧠</span>
+            <div>
+              <div class="comp-cmd" style="font-size:10px">Claude Operator Layer</div>
+              <div class="comp-title" style="font-size:14px">Decision intelligence on top of the framework. Reads state + events. Reasons about failures. Calls tools to act. Never owns the execution loop.</div>
+            </div>
+          </div>
+          <div class="tools-row">
+            <div class="tool-card"><div class="tool-fn">read_state()</div><div class="tool-ret">→ SporeNetState</div><div class="tool-desc">Leaf statuses, health %, organism metadata</div></div>
+            <div class="tool-card"><div class="tool-fn">read_events(since?)</div><div class="tool-ret">→ BaseEvent[]</div><div class="tool-desc">Tail JSONL log — costs, alerts, DDP stages</div></div>
+            <div class="tool-card"><div class="tool-fn">cultivate_biome(id)</div><div class="tool-ret">→ void</div><div class="tool-desc">Re-run a biome subtree via --only-biome</div></div>
+            <div class="tool-card"><div class="tool-fn">harvest(threshold?)</div><div class="tool-ret">→ verdict</div><div class="tool-desc">Threshold check, health score + cost rollup</div></div>
+            <div class="tool-card"><div class="tool-fn">run_ddp(opts?)</div><div class="tool-ret">→ void</div><div class="tool-desc">Trigger full pipeline from the chat panel</div></div>
+            <div class="tool-card"><div class="tool-fn">mark_leaf(id, status)</div><div class="tool-ret">→ void</div><div class="tool-desc">Manually update leaf state in state.json</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow"><div class="flow-track"><div class="flow-particle teal"></div><div class="flow-particle teal" style="animation-delay:.9s"></div><div class="flow-particle teal" style="animation-delay:1.8s"></div></div></div>
+
+    <!-- LAYER 2: FRAMEWORK -->
+    <div class="layer">
+      <div class="layer-hdr">
+        <div class="layer-num">2</div>
+        <div class="layer-name" style="color:var(--teal)">Framework Execution — Parallel Cultivation</div>
+        <div class="layer-line"></div>
+      </div>
+      <div class="layer-body">
+        <div class="comp fw-pipeline wide" data-color="teal" data-id="framework">
+          <div class="pipe-row">
+            <div class="pipe-box">plant</div><span class="pipe-arr">→</span>
+            <div class="pipe-box">contracts freeze</div><span class="pipe-arr">→</span>
+            <div class="pipe-box">sporenet init</div><span class="pipe-arr">→</span>
+            <div class="pipe-box">cultivate <span style="color:var(--amber)">-c 30</span></div><span class="pipe-arr">→</span>
+            <div class="pipe-box">harvest <span style="color:var(--amber)">-t 0.8</span></div>
+          </div>
+          <div style="font-size:10px;color:var(--t3);line-height:1.6;padding:4px 0">
+            <strong style="color:var(--teal)">contract-freeze gating</strong> — all 30 leaves fan out simultaneously once NUTRIENTS.md is frozen.
+            Each leaf = one Claude Agent SDK session writing code in its scoped lane.
+          </div>
+          <div class="upgrade-row">
+            <div class="upg">
+              <div class="upg-name" style="color:var(--teal)">telemetry-emitter</div>
+              <div class="upg-hooks"><code>beforePlan</code> generate run_id · emit run_started<br><code>afterLeaf</code> leaf_fruited / leaf_failed<br><code>onCrash</code> run_ended health=0</div>
+            </div>
+            <div class="upg">
+              <div class="upg-name" style="color:var(--amber)">cost-tracker</div>
+              <div class="upg-hooks"><code>afterLeaf</code> parse SDK usage metadata<br>reconcile tokens → USD estimate<br>emit cost_recorded to JSONL</div>
+            </div>
+            <div class="upg">
+              <div class="upg-name" style="color:var(--red)">alerting</div>
+              <div class="upg-hooks"><code>onCrash</code> severity=critical always<br><code>afterLeaf</code> on failure → sink<br>end-of-run health gate check</div>
+            </div>
+            <div class="event-log-inline">
+              <div class="elog-title"><div class="pulse"></div>.mycelium/events/&lt;run_id&gt;.jsonl</div>
+              <div class="ek-grid">
+                <span class="ek">run_started</span><span class="ek">leaf_started</span><span class="ek">leaf_fruited</span>
+                <span class="ek">leaf_failed</span><span class="ek">run_ended</span><span class="ek">ddp_stage_started</span>
+                <span class="ek">ddp_stage_ended</span><span class="ek">alert</span><span class="ek">cost_recorded</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow"><div class="flow-track"><div class="flow-particle green"></div><div class="flow-particle green" style="animation-delay:.6s"></div><div class="flow-particle green" style="animation-delay:1.2s"></div></div></div>
+
+    <!-- LAYER 3: SINKS -->
+    <div class="layer">
+      <div class="layer-hdr">
+        <div class="layer-num">3</div>
+        <div class="layer-name" style="color:var(--green)">Observability Sinks — Telemetry Fan-out</div>
+        <div class="layer-line"></div>
+      </div>
+      <div class="layer-body">
+        <div class="comp sink-card" data-color="green" data-id="sink-jsonl">
+          <span class="sink-icon-big">📄</span>
+          <div class="comp-cmd">sink-jsonl.ts</div>
+          <div class="comp-title">Local JSONL</div>
+          <div class="comp-sub">Atomic append-only write. Always on. No config.</div>
+        </div>
+        <div class="comp sink-card" data-color="blue" data-id="sink-s3">
+          <span class="sink-icon-big">☁️</span>
+          <div class="comp-cmd">sink-s3.ts</div>
+          <div class="comp-title">S3 Upload</div>
+          <div class="comp-sub">Best-effort, never throws.<br><code style="font-family:'Space Mono',monospace;font-size:8px;color:var(--t3)">MYCELIUM_S3_BUCKET</code></div>
+        </div>
+        <div class="comp sink-card" data-color="purple" data-id="sink-slack">
+          <span class="sink-icon-big">💬</span>
+          <div class="comp-cmd">sink-slack.ts</div>
+          <div class="comp-title">Slack Alert</div>
+          <div class="comp-sub">Block Kit JSON POST.<br><code style="font-family:'Space Mono',monospace;font-size:8px;color:var(--t3)">MYCELIUM_SLACK_WEBHOOK</code></div>
+        </div>
+        <div class="comp sink-card" data-color="teal" data-id="sink-github">
+          <span class="sink-icon-big">🐙</span>
+          <div class="comp-cmd">sink-github.ts</div>
+          <div class="comp-title">GitHub Issue</div>
+          <div class="comp-sub">gh CLI subprocess. Feature-detects gh. Never throws.</div>
+        </div>
+        <div class="comp sink-card" data-color="green" data-id="state-json">
+          <span class="sink-icon-big">🗂️</span>
+          <div class="comp-cmd">sporenet/state.json</div>
+          <div class="comp-title">Live State</div>
+          <div class="comp-sub">Leaf statuses, organism metadata. Drives phase 1/2 dashboard.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow"><div class="flow-track"><div class="flow-particle purple"></div><div class="flow-particle blue" style="animation-delay:.7s"></div><div class="flow-particle purple" style="animation-delay:1.4s"></div></div></div>
+
+    <!-- LAYER 4: DASHBOARD -->
+    <div class="layer">
+      <div class="layer-hdr">
+        <div class="layer-num">4</div>
+        <div class="layer-name" style="color:var(--purple)">Live Dashboard — sporenet serve</div>
+        <div class="layer-line"></div>
+      </div>
+      <div class="layer-body">
+        <div class="comp" data-color="teal" data-id="scale-html">
+          <span class="comp-icon">🌿</span>
+          <div class="comp-cmd">GET /</div>
+          <div class="comp-title">Cultivation View</div>
+          <div class="comp-sub">scale.html — leaf tree, biome bars, DDP pipeline status. Data-bound via mycelium-data JSON slot.</div>
+          <div class="comp-tags"><span class="ctag">GET /api/state</span><span class="ctag">GET /api/events</span><span class="ctag">SSE /api/events/stream</span></div>
+        </div>
+        <div class="comp" data-color="blue" data-id="fleet-html">
+          <span class="comp-icon">🗺️</span>
+          <div class="comp-cmd">GET /fleet</div>
+          <div class="comp-title">Fleet Overview</div>
+          <div class="comp-sub">Cross-organism cards. DuckDB over all JSONL runs. Health rollups, cost totals, p95 stage durations.</div>
+          <div class="comp-tags"><span class="ctag">/api/fleet/organisms</span><span class="ctag">/api/fleet/organism/:name</span></div>
+        </div>
+        <div class="comp" data-color="purple" data-id="chat-panel">
+          <span class="comp-icon">🤖</span>
+          <div class="comp-cmd">POST /api/chat</div>
+          <div class="comp-title">Claude Operator Chat</div>
+          <div class="comp-sub">Streaming chat panel. Claude gets live organism context. Reads state, explains failures, fires operator tools.</div>
+          <div class="comp-tags"><span class="ctag">streaming SSE</span><span class="ctag">tool execution</span><span class="ctag">live context</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow"><div class="flow-track"><div class="flow-particle blue"></div><div class="flow-particle blue" style="animation-delay:.9s"></div><div class="flow-particle blue" style="animation-delay:1.8s"></div></div></div>
+
+    <!-- LAYER 5: FLEET QUERY -->
+    <div class="layer">
+      <div class="layer-hdr">
+        <div class="layer-num">5</div>
+        <div class="layer-name" style="color:var(--blue)">Fleet Query — DuckDB over JSONL</div>
+        <div class="layer-line"></div>
+      </div>
+      <div class="layer-body">
+        <div class="comp" data-color="blue" data-id="duckdb">
+          <span class="comp-icon">🦆</span>
+          <div class="comp-cmd">cli/src/lib/fleet/duckdb.ts</div>
+          <div class="comp-title">DuckDB WASM Layer</div>
+          <div class="comp-sub">Reads .mycelium/events/*.jsonl directly. No ETL. No schema migration. Zero-config cross-run analytics.</div>
+          <div class="comp-tags"><span class="ctag">duckdb npm</span><span class="ctag">read_json_auto</span><span class="ctag">WASM</span></div>
+        </div>
+        <div class="comp" data-color="blue" data-id="fleet-queries">
+          <span class="comp-icon">📊</span>
+          <div class="comp-cmd">cli/src/lib/fleet/queries.ts</div>
+          <div class="comp-title">Typed Query Functions</div>
+          <div class="comp-sub">No raw SQL leaks outside this file. All queries return typed JS objects.</div>
+          <div class="comp-tags"><span class="ctag">listOrganisms()</span><span class="ctag">organismRollup()</span><span class="ctag">stageDurations()</span><span class="ctag">leafFailureRate()</span></div>
+          <div class="fleet-sql">SELECT organism, AVG(health) AS avg_health
+FROM read_json_auto(
+  '.mycelium/events/*.jsonl',
+  format='newline_delimited'
+)
+WHERE kind = 'run_ended'
+GROUP BY organism</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow"><div class="flow-track"><div class="flow-particle amber"></div><div class="flow-particle amber" style="animation-delay:.8s"></div><div class="flow-particle amber" style="animation-delay:1.6s"></div></div></div>
+
+    <!-- LAYER 6: CI/CD -->
+    <div class="layer">
+      <div class="layer-hdr">
+        <div class="layer-num">6</div>
+        <div class="layer-name" style="color:var(--amber)">DDP CI/CD — GitHub Actions</div>
+        <div class="layer-line"></div>
+      </div>
+      <div class="layer-body" style="flex-direction:column">
+        <div class="ddp-strip" id="ddp-strip">
+          <div class="ddp-stage-box" data-stage="merge-order" title="Validate YAML, print execution plan"><span class="ddp-icon">M</span><span class="ddp-lbl">merge-order</span></div>
+          <div class="ddp-stage-box" data-stage="lint" title="npm run lint if script exists, else skip"><span class="ddp-icon">L</span><span class="ddp-lbl">lint</span></div>
+          <div class="ddp-stage-box" data-stage="typecheck" title="npx tsc --noEmit"><span class="ddp-icon">T</span><span class="ddp-lbl">typecheck</span></div>
+          <div class="ddp-stage-box" data-stage="test" title="npm test if present, else skip"><span class="ddp-icon">✓</span><span class="ddp-lbl">test suite</span></div>
+          <div class="ddp-stage-box" data-stage="build" title="npm run build — must produce dist/index.js"><span class="ddp-icon">B</span><span class="ddp-lbl">build</span></div>
+          <div class="ddp-stage-box" data-stage="deploy-stg" title="Placeholder — override with hook"><span class="ddp-icon">S</span><span class="ddp-lbl">deploy:stg</span></div>
+          <div class="ddp-stage-box" data-stage="smoke" title="Smoke tests — placeholder"><span class="ddp-icon">~</span><span class="ddp-lbl">smoke</span></div>
+          <div class="ddp-stage-box" data-stage="deploy-prod" title="Gated on manual approval env var"><span class="ddp-icon">P</span><span class="ddp-lbl">deploy:prod</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:10px">
+          <div class="comp" data-color="amber" data-id="gha-action" style="min-width:unset;flex:none">
+            <div class="comp-cmd">.github/actions/mycelium-run/action.yml</div>
+            <div class="comp-title">Composite Action</div>
+            <div class="comp-sub">Inputs: brief-path, organism-name, concurrency, threshold, api-key. Outputs: run-id, health, event-log-path.</div>
+          </div>
+          <div class="comp" data-color="amber" data-id="gha-workflow" style="min-width:unset;flex:none">
+            <div class="comp-cmd">.github/workflows/cultivate.yml</div>
+            <div class="comp-title">Example Workflow</div>
+            <div class="comp-sub">workflow_dispatch trigger. Uses composite action. Uploads JSONL + state.json + CELLULAR-MAP.md as artifacts.</div>
+          </div>
+          <div class="comp" data-color="amber" data-id="ddp-emit" style="min-width:unset;flex:none">
+            <div class="comp-cmd">.github/scripts/ddp-emit.sh</div>
+            <div class="comp-title">Stage Event Emitter</div>
+            <div class="comp-sub">Wraps every DDP stage. Writes ddp_stage_started / ddp_stage_ended into the run JSONL. Dashboard picks up live.</div>
+          </div>
+          <div class="comp" data-color="amber" data-id="stage-scripts" style="min-width:unset;flex:none">
+            <div class="comp-cmd">.github/scripts/stages/*.sh</div>
+            <div class="comp-title">Stage Scripts (8)</div>
+            <div class="comp-sub">Individual scripts per stage. Deploy stages have override hook points for custom logic.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /diagram -->
+  <div class="footer">Mycelium Framework · VibeSpace LLC · the network provides 🍄</div>
+</div><!-- /app -->
+
+<!-- SIDE PANEL -->
+<div id="panel">
+  <button class="panel-close" id="panel-close">✕</button>
+  <div class="panel-inner" id="panel-inner"></div>
+</div>
+
+<script>
+// ── COMPONENT DATA ──
+const COMPONENTS = {
+  'brief': {
+    icon:'💬', color:'var(--teal)', colorName:'teal',
+    cmd:'mycelium brief',
+    title:'Conversational Brief Generator',
+    file:'cli/src/commands/brief.ts',
+    desc:'Opens an interactive streaming conversation with Claude via the Anthropic SDK. Asks structured questions about your project — biomes, scope, contracts, gating. The conversation produces a fully structured brief.md. Optionally pipes straight into plant → ddp automatically. Zero manual YAML.',
+    items:['Multi-turn streaming conversation (Anthropic SDK direct)','Asks: organism name, biomes, agents, scope, ship target','Produces brief.md in cwd or --output path','--auto flag: pipes into mycelium plant + mycelium ddp immediately','No new npm deps — uses claude-agent-sdk's underlying client'],
+    tags:['streaming','→ brief.md','multi-turn','auto-plant'],
+  },
+  'ddp-cmd': {
+    icon:'⚡', color:'var(--green)', colorName:'green',
+    cmd:'mycelium ddp',
+    title:'Single-Command Pipeline Runner',
+    file:'cli/src/commands/ddp.ts',
+    desc:'Chains the entire organism lifecycle into one invocation. Previously required 5+ separate commands. Now: one command, full lifecycle, live dashboard at the end.',
+    items:['1. Validate organism dir (mycelium.yaml, NUTRIENTS.md, CLAUDE.md)','2. Optional plant step if --brief is passed','3. contracts freeze — stamps frozen timestamps','4. sporenet init — seeds state.json with all leaves pending','5. cultivate -c <n> — fans out all leaves in parallel','6. harvest -t <threshold> — gates on pass rate + prints cost summary','7. sporenet serve --port <p> — launches live dashboard (unless --no-serve)'],
+    tags:['--brief','--concurrency 30','-t 0.8','--port 4444','--no-serve','--dry-run'],
+  },
+  'sporenet-serve': {
+    icon:'🌐', color:'var(--purple)', colorName:'purple',
+    cmd:'mycelium sporenet serve',
+    title:'Live Dashboard + Claude Operator Interface',
+    file:'cli/src/commands/sporenet.ts',
+    desc:'Serves a full dashboard at localhost with three panels: live cultivation tree (scale.html), cross-organism fleet view, and a streaming Claude chat panel where the operator can ask questions and fire tools.',
+    items:['GET / → scale.html data-bound via mycelium-data JSON slot','GET /api/state → sporenet/state.json (polling)','GET /api/events → JSONL event log with ?since and ?limit','GET /api/events/stream → SSE tail of live event log','GET /fleet → fleet overview page','GET /api/fleet/organisms → DuckDB rollup','POST /api/chat → streaming Claude operator (SSE)'],
+    tags:['SSE','localhost only','no auth v1','live reload'],
+  },
+  'claude-op': {
+    icon:'🧠', color:'var(--purple)', colorName:'purple',
+    cmd:'Claude Operator Layer',
+    title:'Decision Intelligence',
+    file:'cli/src/commands/sporenet.ts → /api/chat',
+    desc:'Claude runs as the decision layer on top of the framework. It does not own the execution loop — the TypeScript cultivate command owns parallelism. Claude reads structured state and event data, reasons about what happened (failures, costs, health), and calls framework-primitive tools to act.',
+    items:['System prompt injects: organism, run_id, leaf summary, DDP stage status','read_state() → current sporenet/state.json','read_events(since?) → JSONL tail with full telemetry','cultivate_biome(id) → re-run one biome subtree','harvest(threshold?) → threshold check + cost rollup','run_ddp(opts?) → full pipeline from the chat panel','mark_leaf(id, status, commit?) → manual state override'],
+    tags:['advisor + operator','streaming responses','full tool set','live context injection'],
+  },
+  'framework': {
+    icon:'⚙️', color:'var(--teal)', colorName:'teal',
+    cmd:'Framework Execution Layer',
+    title:'Parallel Cultivation Engine',
+    file:'cli/src/commands/cultivate.ts (DO NOT modify public contract)',
+    desc:'The TypeScript orchestration loop. Walks the biome → specialist → leaf tree and fans out one Claude Agent SDK session per leaf in parallel. contract-freeze gating means all 30 leaves start simultaneously once NUTRIENTS.md is frozen. This is what Claude cannot do well: predictable parallelism, structured audit, crash recovery.',
+    items:['contract-freeze: all leaves start once NUTRIENTS.md is frozen','wave gating: blocked_by dependencies respected otherwise','Upgrade hooks fire at: beforePlan, beforeSpawn, transformPrompt, afterLeaf, onCrash','crash-recovery: skips already-fruited leaves on re-run','--only-biome: targeted re-run of one biome subtree','FRUIT_READY / FRUIT_FAILED: last line of each leaf session'],
+    tags:['contract-freeze','30 parallel leaves','upgrade hooks','crash-recovery'],
+  },
+  'sink-jsonl': {
+    icon:'📄', color:'var(--green)', colorName:'green',
+    cmd:'cli/src/lib/telemetry/sink-jsonl.ts',
+    title:'Local JSONL Sink',
+    file:'cli/src/lib/telemetry/sink-jsonl.ts',
+    desc:'Append-only JSONL writer. Atomic write operations (write to temp, rename). Always on — no configuration needed. The primary source of truth for all other sinks and the dashboard.',
+    items:['Path: .mycelium/events/<run_id>.jsonl','Atomic: write to .tmp file, fs.rename to target','UTF-8, newline-terminated per event','Creates .mycelium/events/ dir if missing','Never throws — errors are swallowed to not interrupt cultivation'],
+    tags:['always on','atomic write','append-only'],
+  },
+  'sink-s3': {
+    icon:'☁️', color:'var(--blue)', colorName:'blue',
+    cmd:'cli/src/lib/telemetry/sink-s3.ts',
+    title:'S3 Upload Sink',
+    file:'cli/src/lib/telemetry/sink-s3.ts',
+    desc:'Best-effort S3 upload adapter. Activates only when MYCELIUM_S3_BUCKET env is set. Silently no-ops otherwise. Never throws — failures are swallowed so cultivation continues.',
+    items:['Gated on MYCELIUM_S3_BUCKET env var','Uses Node built-in https.request — no aws-sdk dep','Key: <organism>/<run_id>.jsonl','Uploads after each event (streaming) or batch at run_ended','Best-effort: network failure = silent skip'],
+    tags:['MYCELIUM_S3_BUCKET','best-effort','no aws-sdk'],
+  },
+  'sink-slack': {
+    icon:'💬', color:'var(--purple)', colorName:'purple',
+    cmd:'cli/src/lib/telemetry/sink-slack.ts',
+    title:'Slack Alert Sink',
+    file:'cli/src/lib/telemetry/sink-slack.ts',
+    desc:'Posts Block Kit formatted alerts to a Slack webhook. Activates on crash, leaf failure, health-below-threshold, and high biome fail rate. Silently skips if MYCELIUM_SLACK_WEBHOOK is not set.',
+    items:['Gated on MYCELIUM_SLACK_WEBHOOK env var','Block Kit: header block + fields block + context','Severity mapped to emoji + color attachment','Triggered by alert-triggers.ts policy evaluation','Never throws — POST failure = silent skip'],
+    tags:['MYCELIUM_SLACK_WEBHOOK','Block Kit','severity levels'],
+  },
+  'sink-github': {
+    icon:'🐙', color:'var(--teal)', colorName:'teal',
+    cmd:'cli/src/lib/telemetry/sink-github.ts',
+    title:'GitHub Issue Sink',
+    file:'cli/src/lib/telemetry/sink-github.ts',
+    desc:'Creates GitHub issues for critical alerts via the gh CLI subprocess. Feature-detects gh availability at runtime. Silently skips if gh is not installed or not authenticated.',
+    items:['Feature-detects: which gh → if not found, skip','gh issue create --title "${title}" --body "${detail}"','Only fires on severity=critical or severity=error','Label: mycelium-alert added to issues','Never throws — subprocess failure = silent skip'],
+    tags:['gh CLI','auto-detect','critical/error severity'],
+  },
+  'state-json': {
+    icon:'🗂️', color:'var(--green)', colorName:'green',
+    cmd:'sporenet/state.json',
+    title:'Live Organism State',
+    file:'sporenet/state.json (written by sporenet init + mark)',
+    desc:'The primary state file for the dashboard phase 1/2. Contains all leaf statuses, organism metadata, and timing information. Written by sporenet init, updated by sporenet mark, read by the dashboard on every refresh.',
+    items:['session_id, organism, started_at, ship_target, gating, total','Leaf: id, agent, tag, scope, status, commit, started_at, completed_at','status enum: pending | active | done | failed — never modified','Extended by dashboard: wall_ms?, usd_estimate? (optional fields)','Shape is frozen — do not remove or rename existing fields'],
+    tags:['frozen shape','append optional fields only','dashboard source'],
+  },
+  'scale-html': {
+    icon:'🌿', color:'var(--teal)', colorName:'teal',
+    cmd:'cli/src/commands/sporenet/templates/scale.html',
+    title:'Live Cultivation Dashboard',
+    file:'cli/src/commands/sporenet/templates/scale.html',
+    desc:'The cultivation visualization — leaf tree, biome progress bars, DDP pipeline status, recent fruiting events. Data-bound via a <script id="mycelium-data"> JSON slot injected server-side. Sliders/demo mode available via ?demo=1.',
+    items:['<script id="mycelium-data"> JSON injection slot','Live update: EventSource /api/events/stream SSE','Phases: 1=cultivate 2=harvest 3=ddp 4=done','drawTree, drawPool, updateStats, DDP renderer stay','?demo=1 keeps simulator sliders for standalone use','Ported from templates/scale.html with simulation stripped'],
+    tags:['SSE live','mycelium-data slot','?demo=1','phase 1-4'],
+  },
+  'fleet-html': {
+    icon:'🗺️', color:'var(--blue)', colorName:'blue',
+    cmd:'GET /fleet',
+    title:'Fleet Overview Dashboard',
+    file:'cli/src/commands/sporenet/templates/fleet.html',
+    desc:'Cross-organism dashboard. Shows one card per organism with health rollup, run count, last run time, cost totals, and DDP stage duration stats. Data comes from DuckDB queries over all JSONL event logs.',
+    items:['Card per organism: avg_health, total_runs, total_cost_usd, last_run_wall_ms','Stage duration bars: avg + p95 per DDP stage','Pulls from /api/fleet/organisms and /api/fleet/organism/:name','DuckDB query layer — no ETL, direct JSONL reads','Updates on page load, manual refresh button'],
+    tags:['cross-organism','DuckDB backed','health rollup','cost totals'],
+  },
+  'chat-panel': {
+    icon:'🤖', color:'var(--purple)', colorName:'purple',
+    cmd:'POST /api/chat',
+    title:'Claude Operator Chat Panel',
+    file:'cli/src/commands/sporenet.ts → /api/chat handler',
+    desc:'Streaming chat panel in the dashboard. Claude receives a system prompt with full organism context on every message — current state.json summary, recent JSONL events, DDP stage status. Responds as an advisor and can execute operator tools to act on the system.',
+    items:['System prompt: organism, run_id, leaf summary, DDP status, recent events','Streaming SSE response to the chat panel','Tool execution visible inline in chat','Context refreshes on every message (no stale state)','Level A: advisor with context. Level B: full operator tool execution'],
+    tags:['streaming SSE','live context','operator tools','advisor + operator'],
+  },
+  'duckdb': {
+    icon:'🦆', color:'var(--blue)', colorName:'blue',
+    cmd:'cli/src/lib/fleet/duckdb.ts',
+    title:'DuckDB WASM Query Layer',
+    file:'cli/src/lib/fleet/duckdb.ts',
+    desc:'Thin wrapper around the duckdb npm package (WASM-based, ~8MB). Provides a typed query<T>(sql, params) function that reads .mycelium/events/*.jsonl directly using DuckDB\'s native JSONL reader. No ETL, no schema migration, no separate database.',
+    items:['duckdb npm package (WASM, ~8MB — only approved new dep)','query<T>(sql: string, params: unknown[]): Promise<T[]>','Glob pattern: .mycelium/events/*.jsonl','format=\'newline_delimited\' for JSONL','Errors propagate to caller — fleet routes catch and return 500'],
+    tags:['duckdb npm','WASM','no ETL','direct JSONL'],
+  },
+  'fleet-queries': {
+    icon:'📊', color:'var(--blue)', colorName:'blue',
+    cmd:'cli/src/lib/fleet/queries.ts',
+    title:'Typed Fleet Query Functions',
+    file:'cli/src/lib/fleet/queries.ts',
+    desc:'All DuckDB queries go through typed wrapper functions here. No raw SQL leaks to the dashboard or routes. Returns plain JS objects that are JSON-serializable.',
+    items:['listOrganisms() → OrganismSummary[] — all organisms, run count, last run','organismRollup(name) → OrganismRollup — avg health, cost, p95 wall_ms','stageDurations(organism, lastN?) → StageDuration[] — per-stage avg/p95','leafFailureRate(organism) → LeafFailureRate[] — biome fail rates'],
+    tags:['typed wrappers','no raw SQL','OrganismSummary','stageDurations'],
+  },
+  'gha-action': {
+    icon:'⚙️', color:'var(--amber)', colorName:'amber',
+    cmd:'.github/actions/mycelium-run/action.yml',
+    title:'Composite GitHub Action',
+    file:'.github/actions/mycelium-run/action.yml',
+    desc:'Composite action that encapsulates the full Mycelium cultivation pipeline for use in any GitHub Actions workflow. Takes a brief path and org config, runs the full DDP pipeline, outputs telemetry artifacts.',
+    items:['Inputs: brief-path, organism-name, max-concurrency, harvest-threshold, stack, anthropic-api-key','Outputs: run-id, health (ok/total ratio), event-log-path','Steps: checkout → Node 20 → npm ci → build → plant → contracts freeze → DDP stages → cultivate → harvest → deploy placeholders → artifacts','Artifacts: .mycelium/events/<run_id>.jsonl + sporenet/state.json + CELLULAR-MAP.md'],
+    tags:['composite action','reusable','all inputs optional except api-key'],
+  },
+  'gha-workflow': {
+    icon:'🔄', color:'var(--amber)', colorName:'amber',
+    cmd:'.github/workflows/cultivate.yml',
+    title:'Example Cultivate Workflow',
+    file:'.github/workflows/cultivate.yml',
+    desc:'Example workflow showing how to use the mycelium-run composite action. Triggered manually via workflow_dispatch with input overrides. Demonstrates the full pipeline with artifact upload.',
+    items:['Trigger: workflow_dispatch (manual + API)','Inputs: brief-path (required), concurrency, threshold','Uses: ./.github/actions/mycelium-run','Secrets: ANTHROPIC_API_KEY from repo secrets','Upload-artifact: JSONL event log, state.json, CELLULAR-MAP.md'],
+    tags:['workflow_dispatch','manual trigger','artifact upload'],
+  },
+  'ddp-emit': {
+    icon:'📡', color:'var(--amber)', colorName:'amber',
+    cmd:'.github/scripts/ddp-emit.sh',
+    title:'DDP Stage Event Emitter',
+    file:'.github/scripts/ddp-emit.sh',
+    desc:'Shell script that wraps every DDP stage step. Called before and after each stage. Writes typed JSONL events (ddp_stage_started, ddp_stage_ended) into the current run\'s event log. This is what makes the CI/CD pipeline visible in the live dashboard.',
+    items:['ddp-emit.sh start <stage_id> [gh_run_id] [gh_run_url]','ddp-emit.sh end <stage_id> <status> <wall_ms> [logs_url]','Appends to .mycelium/events/$RUN_ID.jsonl','RUN_ID read from env (set by mycelium ddp or composite action)','status: success | failure | skipped'],
+    tags:['JSONL events','ddp_stage_started','ddp_stage_ended','dashboard-visible'],
+  },
+  'stage-scripts': {
+    icon:'🔧', color:'var(--amber)', colorName:'amber',
+    cmd:'.github/scripts/stages/*.sh',
+    title:'DDP Stage Scripts (8)',
+    file:'.github/scripts/stages/{merge-order,lint,typecheck,test,build,deploy-stg,smoke,deploy-prod}.sh',
+    desc:'Individual scripts for each DDP stage. Each script is wrapped by ddp-emit.sh in the composite action. Deploy stages (deploy-stg, smoke, deploy-prod) are placeholder scripts with override hook points for custom deploy logic.',
+    items:['merge-order.sh: validate YAML, print execution plan','lint.sh: npm run lint if script exists, else emit skipped','typecheck.sh: npx tsc --noEmit','test.sh: npm test if present, else emit skipped','build.sh: npm run build, validate dist/index.js exists','deploy-stg.sh: placeholder — set DEPLOY_STG_CMD env to override','smoke.sh: placeholder — set SMOKE_CMD env to override','deploy-prod.sh: gated on DEPLOY_PROD_APPROVAL=true env'],
+    tags:['override via env','skipped if n/a','placeholder deploys'],
+  },
+};
+
+// ── HELPERS ──
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const COLOR_HEX = {teal:'#2dd4bf',purple:'#a78bfa',green:'#22c55e',amber:'#fbbf24',blue:'#60a5fa',red:'#f87171'};
+
+// ── CANVAS BACKGROUND ──
+const canvas = document.getElementById('bg');
+const ctx = canvas.getContext('2d');
+let W, H, spores = [], animId;
+
+function initCanvas() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = Math.max(document.body.scrollHeight, window.innerHeight);
+  spores = Array.from({length:60}, () => ({
+    x: Math.random() * W, y: Math.random() * H,
+    vx: (Math.random()-.5)*.25, vy: (Math.random()-.5)*.25,
+    r: Math.random()*1.8+.4,
+  }));
+}
+
+function drawBg() {
+  ctx.clearRect(0,0,W,H);
+  const D = 150;
+  for (let i=0;i<spores.length;i++) {
+    const a = spores[i];
+    for (let j=i+1;j<spores.length;j++) {
+      const b=spores[j], dx=a.x-b.x, dy=a.y-b.y, d=Math.sqrt(dx*dx+dy*dy);
+      if (d<D) { ctx.beginPath(); ctx.strokeStyle=`rgba(45,212,191,${(1-d/D)*.055})`; ctx.lineWidth=.4; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
+    }
+    ctx.beginPath(); ctx.fillStyle='rgba(167,139,250,.2)'; ctx.arc(a.x,a.y,a.r,0,Math.PI*2); ctx.fill();
+    a.x+=a.vx; a.y+=a.vy;
+    if(a.x<0||a.x>W) a.vx*=-1;
+    if(a.y<0||a.y>H) a.vy*=-1;
+  }
+  animId = requestAnimationFrame(drawBg);
+}
+
+initCanvas(); drawBg();
+window.addEventListener('resize', () => { cancelAnimationFrame(animId); initCanvas(); drawBg(); });
+window.addEventListener('scroll', () => { if(canvas.height < document.body.scrollHeight) { canvas.height = document.body.scrollHeight; } });
+
+// ── PANEL ──
+const panel = document.getElementById('panel');
+const panelInner = document.getElementById('panel-inner');
+const panelClose = document.getElementById('panel-close');
+let activeComp = null;
+
+function buildPanel(d) {
+  const hex = COLOR_HEX[d.colorName] || '#2dd4bf';
+  const hexAlpha = hex + '22';
+  const items = d.items.map(i => `<li>${esc(i)}</li>`).join('');
+  const tags  = d.tags.map(t  => `<span class="ptag" style="color:${hex};border-color:${hex}44;background:${hex}11">${esc(t)}</span>`).join('');
+  return `
+    <div class="panel-eyebrow" style="color:${hex}">${esc(d.colorName)} · component</div>
+    <div class="panel-title" style="color:${hex}">${d.icon} ${esc(d.title)}</div>
+    <div class="panel-cmd" style="color:var(--t3)">${esc(d.cmd)}</div>
+    <div class="panel-desc">${esc(d.desc)}</div>
+    <div class="panel-section">
+      <div class="panel-section-title">File</div>
+      <div class="panel-file" style="border-color:${hex}">${esc(d.file)}</div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Key Details</div>
+      <ul class="panel-items">${items}</ul>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Tags</div>
+      <div class="panel-tags">${tags}</div>
+    </div>`;
+}
+
+function openPanel(id) {
+  const d = COMPONENTS[id];
+  if (!d) return;
+  activeComp = id;
+  document.querySelectorAll('.comp').forEach(c => {
+    c.classList.toggle('dimmed', c.dataset.id !== id);
+    c.classList.toggle('active', c.dataset.id === id);
+  });
+  panelInner.innerHTML = buildPanel(d);
+  panel.classList.add('open');
+}
+
+function closePanel() {
+  activeComp = null;
+  panel.classList.remove('open');
+  document.querySelectorAll('.comp').forEach(c => c.classList.remove('active','dimmed'));
+}
+
+panelClose.addEventListener('click', closePanel);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+// ── EVENT DELEGATION — catches clicks on any child inside a .comp ──
+document.addEventListener('click', e => {
+  // Close if clicking backdrop (outside panel and not on a comp)
+  if (panel.classList.contains('open') && !panel.contains(e.target) && !e.target.closest('.comp[data-id]')) {
+    closePanel(); return;
+  }
+  const comp = e.target.closest('.comp[data-id]');
+  if (!comp) return;
+  const id = comp.dataset.id;
+  if (activeComp === id) closePanel();
+  else openPanel(id);
+});
+
+// ── DDP STAGE HOVER ──
+const DDP_STAGE_INFO = {
+  'merge-order': 'Validate mycelium.yaml, print the execution plan, check merge order dependencies.',
+  'lint':        'npm run lint if script exists — emits status=skipped if absent.',
+  'typecheck':   'npx tsc --noEmit — must pass with zero type errors.',
+  'test':        'npm test if present, else emit status=skipped.',
+  'build':       'npm run build — must produce dist/index.js.',
+  'deploy-stg':  'Placeholder — set DEPLOY_STG_CMD env to override.',
+  'smoke':       'Placeholder — set SMOKE_CMD env to override.',
+  'deploy-prod': 'Gated on DEPLOY_PROD_APPROVAL=true — manual approval required.',
+};
+document.querySelectorAll('.ddp-stage-box').forEach(box => {
+  box.addEventListener('mouseenter', () => box.classList.add('active-stage'));
+  box.addEventListener('mouseleave', () => box.classList.remove('active-stage'));
+  const info = DDP_STAGE_INFO[box.dataset.stage];
+  if (info) box.title = info;
+});
+
+// ── SEARCH ──
+const searchInput = document.getElementById('search');
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim().toLowerCase();
+  if (!q) {
+    document.querySelectorAll('.comp').forEach(c => c.classList.remove('dimmed','search-match'));
+    return;
+  }
+  document.querySelectorAll('.comp[data-id]').forEach(el => {
+    const id = el.dataset.id;
+    const d = COMPONENTS[id];
+    const text = [id, d?.title, d?.cmd, d?.desc, ...(d?.tags||[]), ...(d?.items||[])].join(' ').toLowerCase();
+    if (text.includes(q)) {
+      el.classList.remove('dimmed');
+      el.classList.add('search-match');
+    } else {
+      el.classList.add('dimmed');
+      el.classList.remove('search-match');
+    }
+  });
+});
+
+// Resize canvas when content grows
+const ro = new ResizeObserver(() => {
+  canvas.height = document.body.scrollHeight;
+});
+ro.observe(document.body);
+</script>
+</body>
+</html>

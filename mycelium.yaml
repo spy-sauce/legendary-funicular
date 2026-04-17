@@ -1,0 +1,291 @@
+# Mycelium Framework — VibeSpace LLC — The network provides.
+
+organism:
+  name: ddp-integration
+  ship_target: 48 hours
+  health_pulse_interval: 30
+  harvest_threshold: 0.8
+  cellular: true
+  gating: contract-freeze
+  max_depth: 3
+  upgrades:
+    - hypha-validator
+    - depth-3-enforcement
+    - cache-headers
+    - routing-map
+    - crash-recovery
+  routing:
+    telemetry-agent:
+      - cicd-agent
+      - cost-agent
+      - alerting-agent
+      - dashboard-agent
+      - fleet-agent
+    cicd-agent:
+      - telemetry-agent
+    cost-agent:
+      - telemetry-agent
+    alerting-agent:
+      - telemetry-agent
+    dashboard-agent:
+      - telemetry-agent
+      - fleet-agent
+    fleet-agent:
+      - telemetry-agent
+      - dashboard-agent
+    docs-agent:
+      - telemetry-agent
+      - dashboard-agent
+      - cicd-agent
+    "*":
+      - telemetry-agent
+contracts:
+  - path: NUTRIENTS.md#1-event-log
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#2-ddp-stage-list
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#3-upgrade-module-shape
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#4-sporenetstatejson
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#5-sporenet-server-routes
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#6-github-actions
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#7-alert-payload
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#8-cost-estimation-table
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#9-scalehtml-data-binding
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+  - path: NUTRIENTS.md#10-fleet-query
+    frozen: true
+    frozenAt: 2026-04-17T04:45:51.974Z
+agents:
+  - id: telemetry-agent
+    scope: Event emitter upgrade + JSONL/S3 sinks
+    branch: feat/telemetry
+    blocked_by: []
+    blocks:
+      - cicd-agent
+      - cost-agent
+      - alerting-agent
+      - dashboard-agent
+      - fleet-agent
+    capabilities:
+      - typescript
+      - node
+      - jsonl
+    sub_agents:
+      - id: telemetry.emitter
+        scope: telemetry-emitter Upgrade + event payload builders
+        sub_agents:
+          - id: telemetry.emitter.upgrade
+            scope: Upgrade module with beforePlan/beforeSpawn/afterLeaf/onCrash hooks in
+              cli/src/upgrades/telemetry-emitter.ts
+          - id: telemetry.emitter.events
+            scope: Event payload builders for every EventKind in
+              cli/src/lib/telemetry/events.ts
+      - id: telemetry.sink
+        scope: Sinks — JSONL local + optional S3
+        sub_agents:
+          - id: telemetry.sink.jsonl
+            scope: Append-only JSONL writer to .mycelium/events/<run_id>.jsonl with atomic
+              fs ops
+          - id: telemetry.sink.s3
+            scope: S3 sink adapter gated on MYCELIUM_S3_BUCKET env — best-effort, never
+              throws
+  - id: cicd-agent
+    scope: GitHub Actions composite action + DDP stage emitters
+    branch: feat/cicd
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - github-actions
+      - bash
+      - yaml
+    sub_agents:
+      - id: cicd.action
+        scope: Composite action + example workflow
+        sub_agents:
+          - id: cicd.action.composite
+            scope: Author .github/actions/mycelium-run/action.yml per NUTRIENTS.md section 6
+          - id: cicd.action.workflow
+            scope: Author .github/workflows/cultivate.yml using the composite, triggered on
+              workflow_dispatch
+      - id: cicd.ddp
+        scope: DDP stage scripts with event emission
+        sub_agents:
+          - id: cicd.ddp.emit
+            scope: Shared .github/scripts/ddp-emit.sh that writes ddp_stage_started/ended
+              events to the run JSONL
+          - id: cicd.ddp.stages
+            scope: Individual stage scripts for merge-order/lint/typecheck/test under
+              .github/scripts/stages/
+          - id: cicd.ddp.deploy
+            scope: Placeholder deploy-stg/smoke/deploy-prod scripts with override hook
+              points
+  - id: cost-agent
+    scope: Token-cost tracking upgrade
+    branch: feat/cost
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - typescript
+      - telemetry
+    sub_agents:
+      - id: cost.tracker
+        scope: cost-tracker Upgrade module
+        sub_agents:
+          - id: cost.tracker.upgrade
+            scope: Upgrade in cli/src/upgrades/cost-tracker.ts; emits cost_recorded via
+              telemetry on afterLeaf
+          - id: cost.tracker.reconcile
+            scope: Parse SDK usage metadata from leaf result into tokens per category
+      - id: cost.attribution
+        scope: Rollup + harvest integration
+        sub_agents:
+          - id: cost.attribution.rollup
+            scope: Aggregate costs by organism/biome/leaf from event log in
+              cli/src/lib/telemetry/cost-rollup.ts
+          - id: cost.attribution.report
+            scope: Extend mycelium harvest output with cost summary section
+  - id: alerting-agent
+    scope: Alert upgrade with Slack + GitHub issue sinks
+    branch: feat/alerting
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - typescript
+      - webhooks
+    sub_agents:
+      - id: alerting.hook
+        scope: alerting Upgrade + trigger policy
+        sub_agents:
+          - id: alerting.hook.upgrade
+            scope: Upgrade in cli/src/upgrades/alerting.ts with onCrash + afterLeaf handlers
+          - id: alerting.hook.triggers
+            scope: "Trigger policy evaluator: crash, leaf-failure, health-below-threshold,
+              biome-fail-rate"
+      - id: alerting.sinks
+        scope: Slack webhook + GitHub issue
+        sub_agents:
+          - id: alerting.sinks.slack
+            scope: Slack poster via MYCELIUM_SLACK_WEBHOOK env; Block Kit JSON; never throws
+          - id: alerting.sinks.github
+            scope: GitHub issue creator via gh CLI subprocess; feature-detect gh; never
+              throws
+  - id: dashboard-agent
+    scope: Port scale.html to sporenet live dashboard
+    branch: feat/dashboard
+    blocked_by: []
+    blocks:
+      - fleet-agent
+    capabilities:
+      - html
+      - canvas
+      - sse
+      - typescript
+    sub_agents:
+      - id: dashboard.template
+        scope: Template port + data-binding slots
+        sub_agents:
+          - id: dashboard.template.port
+            scope: Copy templates/scale.html to
+              cli/src/commands/sporenet/templates/scale.html with the simulation
+              stripped
+          - id: dashboard.template.databind
+            scope: Inject <script id=mycelium-data> slot per NUTRIENTS.md section 9; expose
+              ?demo=1 for simulator mode
+      - id: dashboard.live
+        scope: Server-side data wiring
+        sub_agents:
+          - id: dashboard.live.state
+            scope: Wire /api/state and initial render to sporenet/state.json for phase 1/2
+          - id: dashboard.live.events
+            scope: Wire /api/events + /api/events/stream to JSONL event log for phase 3
+              (DDP)
+          - id: dashboard.live.poll
+            scope: SSE handler that tails JSONL file and streams new events to the dashboard
+  - id: fleet-agent
+    scope: Fleet dashboard + DuckDB query layer
+    branch: feat/fleet
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - duckdb
+      - sql
+      - typescript
+    sub_agents:
+      - id: fleet.query
+        scope: DuckDB-over-JSONL query layer
+        sub_agents:
+          - id: fleet.query.duckdb
+            scope: DuckDB wrapper in cli/src/lib/fleet/duckdb.ts reading
+              .mycelium/events/*.jsonl
+          - id: fleet.query.api
+            scope: "Typed query helpers in cli/src/lib/fleet/queries.ts: listOrganisms,
+              organismRollup, stageDurations"
+      - id: fleet.view
+        scope: Cross-organism dashboard routes
+        sub_agents:
+          - id: fleet.view.route
+            scope: Add /fleet route + /api/fleet/* endpoints to sporenet server
+          - id: fleet.view.render
+            scope: Render fleet overview template with one mini scale.html card per organism
+  - id: docs-agent
+    scope: Developer docs for CI/CD, dashboard, polyglot embedding
+    branch: feat/docs
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - documentation
+    sub_agents:
+      - id: docs.guide
+        scope: DEVELOPER_GUIDE.md extensions
+        sub_agents:
+          - id: docs.guide.cicd
+            scope: "Append CI/CD section: composite action, inputs/outputs, DDP stages,
+              secrets"
+          - id: docs.guide.dashboard
+            scope: "Append Dashboard section: sporenet routes, phases, fleet view,
+              scale.html slots"
+      - id: docs.polyglot
+        scope: Python + Java embedding guides
+        sub_agents:
+          - id: docs.polyglot.python
+            scope: "Create impl/python/README.md: when to embed (not orchestrate), install,
+              BaseAgent example"
+          - id: docs.polyglot.java
+            scope: "Create impl/java/README.md: when to embed, Spring Boot setup,
+              MyceliumAgent example"
+merge_order:
+  - telemetry-agent
+  - cicd-agent
+  - cost-agent
+  - alerting-agent
+  - dashboard-agent
+  - fleet-agent
+  - docs-agent
+timeline:
+  parallel_phases:
+    - hours: 0-2
+      active:
+        - telemetry-agent
+        - cicd-agent
+        - cost-agent
+        - alerting-agent
+        - dashboard-agent
+        - fleet-agent
+        - docs-agent
+      description: All biomes germinate simultaneously under contract-freeze —
+        NUTRIENTS.md is the only cross-agent surface

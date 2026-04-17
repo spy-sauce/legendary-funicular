@@ -26,3 +26,6 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Mycelium telemetry (runtime, local)
+.mycelium/

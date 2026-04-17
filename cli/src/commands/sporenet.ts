@@ -473,6 +473,183 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// Fleet route handlers
+
+async function handleFleetOrganismsRequest(res: http.ServerResponse, dir: string): Promise<void> {
+  try {
+    // Import query functions dynamically (will be provided by fleet.query.api leaf)
+    const queriesPath = path.join(dir, "cli/src/lib/fleet/queries.js");
+
+    if (!fs.existsSync(queriesPath)) {
+      // Fallback: scan .mycelium/events directory for organism names
+      const eventsDir = path.join(dir, ".mycelium/events");
+      const organisms: Array<{ name: string; last_run_at: string | null; run_count: number }> = [];
+
+      if (fs.existsSync(eventsDir)) {
+        const files = fs.readdirSync(eventsDir).filter(f => f.endsWith(".jsonl"));
+        const organismSet = new Set<string>();
+
+        for (const file of files) {
+          const match = file.match(/^([^-]+)-/);
+          if (match) {
+            organismSet.add(match[1]);
+          }
+        }
+
+        for (const name of organismSet) {
+          organisms.push({ name, last_run_at: null, run_count: 0 });
+        }
+      }
+
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify(organisms));
+      return;
+    }
+
+    // Use the fleet query API when available
+    const { listOrganisms } = await import(queriesPath);
+    const organisms = await listOrganisms();
+
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify(organisms));
+  } catch (err: any) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: err?.message ?? String(err) }));
+  }
+}
+
+async function handleFleetOrganismDetailRequest(res: http.ServerResponse, dir: string, name: string): Promise<void> {
+  try {
+    const queriesPath = path.join(dir, "cli/src/lib/fleet/queries.js");
+
+    if (!fs.existsSync(queriesPath)) {
+      // Fallback: return stub data
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify({
+        organism: name,
+        avg_health: null,
+        total_runs: 0,
+        total_cost_usd: null,
+        last_health: null,
+        last_run_wall_ms: null,
+        stage_durations: []
+      }));
+      return;
+    }
+
+    // Use the fleet query API when available
+    const { organismRollup, stageDurations } = await import(queriesPath);
+    const rollup = await organismRollup(name);
+    const stages = await stageDurations(name);
+
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ ...rollup, stage_durations: stages }));
+  } catch (err: any) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: err?.message ?? String(err) }));
+  }
+}
+
+async function handleFleetPageRequest(res: http.ServerResponse, dir: string): Promise<void> {
+  try {
+    const templatePath = path.join(dir, "cli/src/commands/sporenet/templates/fleet.html");
+
+    if (!fs.existsSync(templatePath)) {
+      // Render a minimal fleet page inline if template doesn't exist yet
+      const html = renderFleetPageFallback();
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      res.end(html);
+      return;
+    }
+
+    // Serve the template when available (will be provided by fleet.view.render leaf)
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(fs.readFileSync(templatePath, "utf-8"));
+  } catch (err: any) {
+    res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end("Error rendering fleet page: " + (err?.message ?? String(err)));
+  }
+}
+
+function renderFleetPageFallback(): string {
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Fleet · Mycelium</title>
+<style>
+:root { --bg:#0a0a0f; --panel:#12121a; --fg:#e5e7eb; --muted:#6b7280; --red:#e11d48; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.5 ui-monospace,"SF Mono",Menlo,monospace; }
+header { padding:24px 32px; border-bottom:1px solid #222; }
+h1 { margin:0; font:600 22px/1 ui-serif,Georgia,serif; color:var(--red); letter-spacing:-.5px; }
+.subtitle { color:var(--muted); font-size:11px; margin-top:4px; }
+main { padding:24px 32px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:16px; margin-top:24px; }
+.card { background:var(--panel); border:1px solid #1f1f2a; border-radius:8px; padding:20px; border-left:3px solid var(--red); }
+.card h2 { margin:0 0 12px; font:600 16px/1.2 ui-monospace,Menlo,monospace; color:var(--fg); }
+.card .stat { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1f1f2a; font-size:11px; }
+.card .stat:last-child { border:0; }
+.card .stat dt { color:var(--muted); }
+.card .stat dd { margin:0; color:var(--fg); font-weight:600; }
+.empty { text-align:center; padding:80px 32px; color:var(--muted); }
+footer { padding:16px 32px; color:var(--muted); font-size:10px; border-top:1px solid #222; text-align:center; margin-top:40px; }
+</style>
+</head><body>
+<header>
+  <h1>Fleet Overview</h1>
+  <div class="subtitle">Cross-organism dashboard · the network provides</div>
+</header>
+<main id="main">
+  <div class="empty">Loading organisms...</div>
+</main>
+<footer>Mycelium Framework · VibeSpace LLC · the network provides 🍄</footer>
+<script>
+(function(){
+  fetch("/api/fleet/organisms")
+    .then(r => r.json())
+    .then(organisms => {
+      const main = document.getElementById("main");
+      if (!organisms || organisms.length === 0) {
+        main.innerHTML = '<div class="empty">No organisms found. Run a cultivation to see results here.</div>';
+        return;
+      }
+
+      const cards = organisms.map(org => {
+        const runCount = org.run_count ?? 0;
+        const lastRun = org.last_run_at ? new Date(org.last_run_at).toLocaleString() : "—";
+
+        return \`<div class="card">
+          <h2>\${escapeHtml(org.name)}</h2>
+          <dl class="stat">
+            <dt>Total runs</dt>
+            <dd>\${runCount}</dd>
+          </dl>
+          <dl class="stat">
+            <dt>Last run</dt>
+            <dd>\${escapeHtml(lastRun)}</dd>
+          </dl>
+        </div>\`;
+      }).join("");
+
+      main.innerHTML = '<div class="grid">' + cards + '</div>';
+    })
+    .catch(err => {
+      document.getElementById("main").innerHTML =
+        '<div class="empty">Error loading organisms: ' + escapeHtml(String(err)) + '</div>';
+    });
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+})();
+</script>
+</body></html>`;
+}
+
 export function registerSporenetCommand(program: Command): void {
   const sn = program
     .command("sporenet")
@@ -595,10 +772,29 @@ export function registerSporenetCommand(program: Command): void {
         process.exit(1);
       }
       const port = parseInt(opts.port, 10);
-      const server = http.createServer((req, res) => {
+      const server = http.createServer(async (req, res) => {
         const raw = req.url ?? "/";
         const pathOnly = raw.split("?")[0];
 
+        // Fleet API routes
+        if (pathOnly === "/api/fleet/organisms") {
+          await handleFleetOrganismsRequest(res, dir);
+          return;
+        }
+
+        if (pathOnly.startsWith("/api/fleet/organism/")) {
+          const name = decodeURIComponent(pathOnly.slice("/api/fleet/organism/".length));
+          await handleFleetOrganismDetailRequest(res, dir, name);
+          return;
+        }
+
+        // Fleet overview page
+        if (pathOnly === "/fleet") {
+          await handleFleetPageRequest(res, dir);
+          return;
+        }
+
+        // Existing diff endpoint
         if (pathOnly.startsWith("/diff/")) {
           const leafId = decodeURIComponent(pathOnly.slice("/diff/".length));
           handleDiffRequest(res, dir, leafId);

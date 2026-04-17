@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>SporeNet — arch-brief Cultivation exec-2026-04-17T22-34-53-155Z</title>
+<style>
+:root { --bg:#0a0a0f; --panel:#12121a; --fg:#e5e7eb; --muted:#6b7280; --red:#e11d48; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.5 ui-monospace,"SF Mono",Menlo,monospace; }
+header { padding:24px 32px; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:baseline; }
+h1 { margin:0; font:600 22px/1 ui-serif,Georgia,serif; color:var(--red); letter-spacing:-.5px; }
+.session { color:var(--muted); font-size:11px; }
+.hero { padding:24px 32px; border-bottom:1px solid #222; }
+.pct { font:300 72px/1 ui-serif,Georgia,serif; color:var(--fg); }
+.pct small { font-size:18px; color:var(--muted); margin-left:8px; }
+.bar { height:4px; background:#1f1f2a; border-radius:2px; overflow:hidden; margin-top:16px; }
+.fill { height:100%; background:linear-gradient(90deg,var(--red),#f97316); transition:width .6s; }
+.meta { display:flex; gap:32px; margin-top:16px; color:var(--muted); font-size:11px; flex-wrap:wrap; }
+.meta b { color:var(--fg); font-weight:600; }
+main { display:grid; grid-template-columns:1fr 320px; gap:0; }
+.grid { padding:24px 32px; display:grid; grid-template-columns:repeat(auto-fill,minmax(380px,1fr)); gap:16px; }
+.agent { background:var(--panel); border:1px solid #1f1f2a; border-radius:8px; padding:16px; border-left:3px solid var(--agent-color); }
+.agent-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.agent-name { font-weight:600; color:var(--agent-color); }
+.agent-count { color:var(--muted); font-size:11px; }
+.agent-bar { height:2px; background:#1f1f2a; margin-bottom:12px; }
+.agent-fill { height:100%; background:var(--agent-color); transition:width .6s; }
+.leaves { display:flex; flex-direction:column; gap:4px; }
+.leaf { padding:6px 8px; border-radius:4px; font-size:11px; border-left:2px solid transparent; }
+.leaf.done { opacity:.55; border-left-color:var(--agent-color); }
+.leaf.active { background:#1f1f2a; border-left-color:var(--red); animation:pulse 1s infinite; }
+.leaf.pending { opacity:.35; }
+.leaf.failed { background:#2a0a0a; border-left-color:#ef4444; }
+.leaf .dot { margin-right:6px; color:var(--agent-color); }
+.leaf.pending .dot { color:var(--muted); }
+.leaf.failed .dot { color:#ef4444; }
+.lid { color:var(--fg); }
+.commit { color:var(--muted); margin-left:6px; font-size:10px; }
+.scope { color:var(--muted); font-size:10px; margin-top:2px; margin-left:16px; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+aside { background:var(--panel); border-left:1px solid #1f1f2a; padding:24px; height:100vh; overflow-y:auto; position:sticky; top:0; }
+aside h2 { margin:0 0 12px; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:600; }
+.event { display:grid; grid-template-columns:60px 80px 1fr 60px; gap:8px; padding:6px 0; border-bottom:1px solid #1f1f2a; font-size:10px; }
+.ev-time { color:var(--muted); }
+.ev-tag { font-weight:600; }
+.ev-id { color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ev-commit { color:var(--muted); font-family:ui-monospace; }
+footer { padding:16px 32px; color:var(--muted); font-size:10px; border-top:1px solid #222; text-align:center; }
+@media (max-width: 900px) {
+  main { grid-template-columns:1fr; }
+  aside { position:static; height:auto; border-left:0; border-top:1px solid #1f1f2a; }
+}
+.leaf { cursor:pointer; transition:background .15s,border-left-color .15s; }
+.leaf:hover { background:#1f1f2a; border-left-color:var(--agent-color); opacity:1; }
+.leaf:focus { outline:1px solid var(--agent-color); outline-offset:1px; }
+.modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(4px); display:none; z-index:100; align-items:center; justify-content:center; padding:24px; }
+.modal-backdrop.open { display:flex; }
+.modal { background:var(--panel); border:1px solid #2a2a3a; border-left:3px solid var(--modal-color,var(--red)); border-radius:10px; max-width:560px; width:100%; padding:24px; font:13px/1.5 ui-monospace,"SF Mono",Menlo,monospace; color:var(--fg); box-shadow:0 20px 60px rgba(0,0,0,.5); max-height:90vh; overflow-y:auto; }
+.modal h3 { margin:0 0 4px; font:600 16px/1.3 ui-monospace,Menlo,monospace; color:var(--modal-color,var(--fg)); word-break:break-all; }
+.modal .modal-tag { display:inline-block; font-size:10px; padding:2px 8px; border-radius:3px; background:var(--modal-color,var(--red)); color:#0a0a0f; font-weight:600; letter-spacing:.5px; }
+.modal .modal-status { display:inline-block; font-size:10px; padding:2px 8px; border-radius:3px; margin-left:6px; font-weight:600; text-transform:uppercase; }
+.modal .modal-status.done { background:#10b981; color:#0a0a0f; }
+.modal .modal-status.active { background:#e11d48; color:#fff; animation:pulse 1s infinite; }
+.modal .modal-status.pending { background:#1f1f2a; color:var(--muted); }
+.modal .modal-status.failed { background:#ef4444; color:#fff; }
+.modal dl { display:grid; grid-template-columns:100px 1fr; gap:8px 12px; margin:16px 0 0; }
+.modal dt { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+.modal dd { margin:0; color:var(--fg); font-size:12px; word-break:break-all; }
+.modal dd.scope { color:#a3a3a3; line-height:1.6; }
+.modal dd .commit-sha { color:#f59e0b; font-weight:600; }
+.modal .modal-actions { margin-top:20px; display:flex; gap:8px; justify-content:flex-end; }
+.modal button { background:#1f1f2a; border:1px solid #2a2a3a; color:var(--fg); padding:6px 14px; border-radius:4px; font:12px ui-monospace,Menlo,monospace; cursor:pointer; }
+.modal button:hover { background:#2a2a3a; }
+.modal .empty { color:var(--muted); font-style:italic; }
+.modal .diff-section { margin-top:18px; border-top:1px solid #1f1f2a; padding-top:14px; }
+.modal .diff-section h4 { margin:0 0 8px; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; }
+.modal .diff-subject { color:var(--fg); font-size:12px; margin-bottom:10px; padding:8px 10px; background:#1f1f2a; border-radius:4px; border-left:2px solid var(--modal-color,var(--red)); white-space:pre-wrap; }
+.modal .diff-stat { color:#a3a3a3; font-size:10px; white-space:pre; margin-bottom:10px; padding:8px 10px; background:#0a0a0f; border-radius:4px; overflow-x:auto; }
+.modal .diff-patch { font-size:10px; background:#0a0a0f; border-radius:4px; padding:10px; overflow:auto; max-height:360px; white-space:pre; border:1px solid #1f1f2a; }
+.modal .diff-patch .diff-hunk { color:#6366f1; }
+.modal .diff-patch .diff-add  { color:#22c55e; background:#042f1f; display:block; }
+.modal .diff-patch .diff-del  { color:#ef4444; background:#2f0a0a; display:block; }
+.modal .diff-patch .diff-meta { color:var(--muted); }
+.modal .diff-loading { color:var(--muted); font-style:italic; font-size:11px; }
+</style></head><body>
+<header>
+  <div><h1>SporeNet · arch-brief</h1><div class="session">execution exec-2026-04-17T22-34-53-155Z · the network provides</div></div>
+  <div class="session">auto-refresh 3s</div>
+</header>
+<section class="hero">
+  <div class="pct">0<small>/ 5 leaves fruited · 0.0%</small></div>
+  <div class="bar"><div class="fill" style="width:0.0%"></div></div>
+  <div class="meta">
+    <div>started <b>2026-04-17T22:34:53.161Z</b></div>
+    <div>last <b>—</b></div>
+    <div>ship target <b>2024-01-15</b></div>
+    
+  </div>
+</section>
+<main>
+  <div class="grid">
+<div class="agent" style="--agent-color:#8b5cf6">
+  <div class="agent-head">
+    <span class="agent-name">component-agent</span>
+    <span class="agent-count">0/1</span>
+  </div>
+  <div class="agent-bar"><div class="agent-fill" style="width:0.0%"></div></div>
+  <div class="leaves"><div class="leaf pending" data-leaf-id="component-agent" role="button" tabindex="0"><span class="dot">●</span><span class="lid">component-agent</span> <div class="scope">Read source files, extract metadata, produce arch-data.json with component map</div></div></div>
+</div>
+<div class="agent" style="--agent-color:#06b6d4">
+  <div class="agent-head">
+    <span class="agent-name">layout-agent</span>
+    <span class="agent-count">0/1</span>
+  </div>
+  <div class="agent-bar"><div class="agent-fill" style="width:0.0%"></div></div>
+  <div class="leaves"><div class="leaf pending" data-leaf-id="layout-agent" role="button" tabindex="0"><span class="dot">●</span><span class="lid">layout-agent</span> <div class="scope">Build visual shell with canvas particles, layer headers, flow connectors, responsive grid</div></div></div>
+</div>
+<div class="agent" style="--agent-color:#f59e0b">
+  <div class="agent-head">
+    <span class="agent-name">panel-agent</span>
+    <span class="agent-count">0/1</span>
+  </div>
+  <div class="agent-bar"><div class="agent-fill" style="width:0.0%"></div></div>
+  <div class="leaves"><div class="leaf pending" data-leaf-id="panel-agent" role="button" tabindex="0"><span class="dot">●</span><span class="lid">panel-agent</span> <div class="scope">Build slide-in detail panel showing source code, exports, and file path</div></div></div>
+</div>
+<div class="agent" style="--agent-color:#10b981">
+  <div class="agent-head">
+    <span class="agent-name">cost-agent</span>
+    <span class="agent-count">0/1</span>
+  </div>
+  <div class="agent-bar"><div class="agent-fill" style="width:0.0%"></div></div>
+  <div class="leaves"><div class="leaf pending" data-leaf-id="cost-agent" role="button" tabindex="0"><span class="dot">●</span><span class="lid">cost-agent</span> <div class="scope">Build cost visualization comparing sequential vs parallel execution costs</div></div></div>
+</div>
+<div class="agent" style="--agent-color:#e11d48">
+  <div class="agent-head">
+    <span class="agent-name">wiring-agent</span>
+    <span class="agent-count">0/1</span>
+  </div>
+  <div class="agent-bar"><div class="agent-fill" style="width:0.0%"></div></div>
+  <div class="leaves"><div class="leaf pending" data-leaf-id="wiring-agent" role="button" tabindex="0"><span class="dot">●</span><span class="lid">wiring-agent</span> <div class="scope">Wire all components into final ARCHITECTURE.html, validate links, add search/filter</div></div></div>
+</div>
+  </div>
+  <aside>
+    <h2>Recent fruits</h2>
+    <div class="session">no completions yet</div>
+  </aside>
+</main>
+<footer>Mycelium Framework · VibeSpace LLC · the network provides 🍄</footer>
+<div class="modal-backdrop" id="modal-backdrop" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" id="modal-body"></div>
+</div>
+<script>
+(function(){
+  const AGENT_PALETTE = ["#8b5cf6","#06b6d4","#f59e0b","#10b981","#e11d48","#ec4899","#3b82f6","#84cc16","#f97316","#a855f7","#14b8a6","#eab308","#6366f1","#22c55e","#ef4444"];
+  const BIOMES = ["component-agent","layout-agent","panel-agent","cost-agent","wiring-agent"];
+  function agentColor(agentId){ const idx = BIOMES.indexOf(agentId); return AGENT_PALETTE[idx % AGENT_PALETTE.length] || "#e11d48"; }
+  function esc(s){ return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function fmtTime(iso){ if(!iso) return null; try { return new Date(iso).toLocaleString(); } catch(e){ return iso; } }
+  function duration(start, end){ if(!start || !end) return null; const ms = new Date(end) - new Date(start); if(isNaN(ms) || ms < 0) return null; if(ms < 1000) return ms + "ms"; if(ms < 60000) return (ms/1000).toFixed(1) + "s"; if(ms < 3600000) return (ms/60000).toFixed(1) + "m"; return (ms/3600000).toFixed(1) + "h"; }
+
+  const backdrop = document.getElementById("modal-backdrop");
+  const body = document.getElementById("modal-body");
+
+  function openLeafModal(leafId){
+    fetch("/state.json?t=" + Date.now()).then(r => r.json()).then(state => {
+      const leaf = state.leaves.find(l => l.id === leafId);
+      if (!leaf) return;
+      const color = agentColor(leaf.agent);
+      body.style.setProperty("--modal-color", color);
+      const dur = duration(leaf.started_at, leaf.completed_at);
+      const rows = [
+        ["Biome", esc(leaf.agent)],
+        ["Tag", esc(leaf.tag)],
+        ["Scope", '<span class="scope">' + esc(leaf.scope) + '</span>'],
+        leaf.commit ? ["Commit", '<span class="commit-sha">' + esc(leaf.commit) + '</span>'] : null,
+        leaf.started_at ? ["Started", esc(fmtTime(leaf.started_at))] : null,
+        leaf.completed_at ? ["Completed", esc(fmtTime(leaf.completed_at))] : null,
+        dur ? ["Duration", esc(dur)] : null,
+      ].filter(Boolean);
+      const diffSection = leaf.commit
+        ? '<div class="diff-section" id="diff-section"><h4>Code change</h4><div class="diff-loading">loading diff for ' + esc(leaf.commit.slice(0,7)) + '…</div></div>'
+        : (leaf.status === "done" ? '<div class="diff-section"><h4>Code change</h4><div class="empty">no commit SHA recorded for this leaf</div></div>' : '');
+      body.innerHTML =
+        '<span class="modal-tag">' + esc(leaf.tag) + '</span>' +
+        '<span class="modal-status ' + esc(leaf.status) + '">' + esc(leaf.status) + '</span>' +
+        '<h3>' + esc(leaf.id) + '</h3>' +
+        '<dl>' + rows.map(([k,v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join("") + '</dl>' +
+        diffSection +
+        '<div class="modal-actions">' +
+        (leaf.commit ? '<button onclick="navigator.clipboard.writeText(\'' + esc(leaf.commit) + '\')">copy SHA</button>' : '') +
+        '<button onclick="closeModal()">close</button>' +
+        '</div>';
+      backdrop.classList.add("open");
+      backdrop.setAttribute("aria-hidden", "false");
+
+      if (leaf.commit) {
+        fetch("/diff/" + encodeURIComponent(leaf.id) + "?t=" + Date.now())
+          .then(r => r.json())
+          .then(data => {
+            const target = document.getElementById("diff-section");
+            if (!target) return;
+            if (!data.diff && data.message) {
+              target.innerHTML = '<h4>Code change</h4><div class="empty">' + esc(data.message) + '</div>';
+              return;
+            }
+            target.innerHTML =
+              '<h4>Code change · <span class="commit-sha">' + esc(leaf.commit.slice(0,7)) + '</span></h4>' +
+              (data.subject ? '<div class="diff-subject">' + esc(data.subject) + '</div>' : '') +
+              (data.stat    ? '<div class="diff-stat">'    + esc(data.stat)    + '</div>' : '') +
+              (data.diff    ? '<div class="diff-patch">'   + highlightDiff(data.diff) + '</div>' : '');
+          })
+          .catch(err => {
+            const target = document.getElementById("diff-section");
+            if (target) target.innerHTML = '<h4>Code change</h4><div class="empty">error loading diff: ' + esc(String(err)) + '</div>';
+          });
+      }
+    }).catch(err => console.error("sporenet fetch error", err));
+  }
+
+  function highlightDiff(text){
+    const lines = String(text).split("\n");
+    return lines.map(line => {
+      const escaped = esc(line);
+      if (line.startsWith("@@")) return '<span class="diff-hunk">' + escaped + '</span>';
+      if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff --git") || line.startsWith("index ")) return '<span class="diff-meta">' + escaped + '</span>';
+      if (line.startsWith("+")) return '<span class="diff-add">' + escaped + '</span>';
+      if (line.startsWith("-")) return '<span class="diff-del">' + escaped + '</span>';
+      return escaped;
+    }).join("\n");
+  }
+
+  window.closeModal = function(){
+    backdrop.classList.remove("open");
+    backdrop.setAttribute("aria-hidden", "true");
+  };
+
+  document.addEventListener("click", function(e){
+    const leaf = e.target.closest("[data-leaf-id]");
+    if (leaf) { e.preventDefault(); openLeafModal(leaf.dataset.leafId); return; }
+    if (e.target === backdrop) closeModal();
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape") closeModal();
+    if (e.key === "Enter" || e.key === " ") {
+      const leaf = e.target.closest && e.target.closest("[data-leaf-id]");
+      if (leaf) { e.preventDefault(); openLeafModal(leaf.dataset.leafId); }
+    }
+  });
+
+  // Polling refresh that preserves modal state + scroll position.
+  setInterval(function(){
+    if (backdrop.classList.contains("open")) return;
+    const y = window.scrollY;
+    fetch(window.location.pathname + "?t=" + Date.now()).then(r => r.text()).then(html => {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const freshMain = doc.querySelector("main");
+      const freshHero = doc.querySelector(".hero");
+      if (freshMain) document.querySelector("main").replaceWith(freshMain);
+      if (freshHero) document.querySelector(".hero").replaceWith(freshHero);
+      window.scrollTo(0, y);
+    }).catch(()=>{});
+  }, 3000);
+})();
+</script>
+</body></html>

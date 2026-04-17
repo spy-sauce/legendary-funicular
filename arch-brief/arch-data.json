@@ -1,0 +1,238 @@
+{
+  "generatedAt": "2026-04-17T18:35:00.000Z",
+  "components": [
+    {
+      "id": "brief",
+      "file": "cli/src/commands/brief.ts",
+      "title": "Brief",
+      "desc": "Stub — file not found",
+      "exports": [],
+      "color": "#7c3aed",
+      "layer": "cli-commands"
+    },
+    {
+      "id": "ddp",
+      "file": "cli/src/commands/ddp.ts",
+      "title": "DDP",
+      "desc": "Stub — file not found",
+      "exports": [],
+      "color": "#7c3aed",
+      "layer": "cli-commands"
+    },
+    {
+      "id": "cultivate",
+      "file": "cli/src/commands/cultivate.ts",
+      "title": "Cultivate",
+      "desc": "`mycelium cultivate` — bring the organism to life. Cellular execution: each biome orchestrates a petri dish.",
+      "exports": [
+        "registerCultivateCommand"
+      ],
+      "color": "#7c3aed",
+      "layer": "cli-commands"
+    },
+    {
+      "id": "sporenet",
+      "file": "cli/src/commands/sporenet.ts",
+      "title": "Sporenet",
+      "desc": "`mycelium sporenet` — cellular cultivation dashboard. Reads mycelium.yaml + state.json and emits a single auto-refreshing index.html.",
+      "exports": [
+        "registerSporenetCommand"
+      ],
+      "color": "#7c3aed",
+      "layer": "cli-commands"
+    },
+    {
+      "id": "harvest",
+      "file": "cli/src/commands/harvest.ts",
+      "title": "Harvest",
+      "desc": "Collect all FRUIT_READY deliverables from the organism.",
+      "exports": [
+        "registerHarvestCommand"
+      ],
+      "color": "#7c3aed",
+      "layer": "cli-commands"
+    },
+    {
+      "id": "plant",
+      "file": "cli/src/commands/plant.ts",
+      "title": "Plant",
+      "desc": "`mycelium plant <brief>` — read a business-requirements brief and let the Claude Agent SDK scaffold the organism.",
+      "exports": [
+        "registerPlantCommand"
+      ],
+      "color": "#7c3aed",
+      "layer": "cli-commands"
+    },
+    {
+      "id": "integrate",
+      "file": "cli/src/commands/integrate.ts",
+      "title": "Integrate",
+      "desc": "`mycelium integrate <sourceDir>` — read a source organism's mycelium.yaml, NUTRIENTS.md, and CLAUDE.md, then wire into target platform.",
+      "exports": [
+        "registerIntegrateCommand"
+      ],
+      "color": "#7c3aed",
+      "layer": "cli-commands"
+    },
+    {
+      "id": "telemetry-emitter",
+      "file": "cli/src/upgrades/telemetry-emitter.ts",
+      "title": "Telemetry Emitter",
+      "desc": "Stub — file not found",
+      "exports": [],
+      "color": "#2563eb",
+      "layer": "upgrades"
+    },
+    {
+      "id": "cost-tracker",
+      "file": "cli/src/upgrades/cost-tracker.ts",
+      "title": "Cost Tracker",
+      "desc": "Stub — file not found",
+      "exports": [],
+      "color": "#2563eb",
+      "layer": "upgrades"
+    },
+    {
+      "id": "alerting",
+      "file": "cli/src/upgrades/alerting.ts",
+      "title": "Alerting",
+      "desc": "Stub — file not found",
+      "exports": [],
+      "color": "#2563eb",
+      "layer": "upgrades"
+    },
+    {
+      "id": "registry",
+      "file": "cli/src/upgrades/registry.ts",
+      "title": "Registry",
+      "desc": "Bundled upgrade registry. Every upgrade that ships with the framework is imported here and exposed through the public resolve/list API.",
+      "exports": [
+        "REGISTRY",
+        "listAll",
+        "resolveUpgrades"
+      ],
+      "color": "#2563eb",
+      "layer": "upgrades"
+    },
+    {
+      "id": "events",
+      "file": "cli/src/lib/telemetry/events.ts",
+      "title": "Events",
+      "desc": "Telemetry event builders. Event schema is frozen per NUTRIENTS.md. Every event conforms to BaseEvent with kind-specific payload.",
+      "exports": [
+        "EventKind",
+        "BaseEvent",
+        "DDPStageId",
+        "RunStartedData",
+        "LeafStartedData",
+        "LeafFruitedData",
+        "LeafFailedData",
+        "RunEndedData",
+        "DDPStageStartedData",
+        "DDPStageEndedData",
+        "AlertData",
+        "CostRecordedData",
+        "buildRunStarted",
+        "buildLeafStarted",
+        "buildLeafFruited",
+        "buildLeafFailed",
+        "buildRunEnded",
+        "buildDDPStageStarted",
+        "buildDDPStageEnded",
+        "buildAlert",
+        "buildCostRecorded"
+      ],
+      "color": "#059669",
+      "layer": "telemetry"
+    },
+    {
+      "id": "ddp-stages",
+      "file": "cli/src/lib/telemetry/ddp-stages.ts",
+      "title": "DDP Stages",
+      "desc": "DDP stage definitions — frozen contract. Canonical list of Digital Dash agentic CI/CD stages. Order defines pipeline sequence.",
+      "exports": [
+        "DDPStage",
+        "DDP_STAGES",
+        "getDDPStage",
+        "isValidDDPStageId"
+      ],
+      "color": "#059669",
+      "layer": "telemetry"
+    },
+    {
+      "id": "alert-triggers",
+      "file": "cli/src/lib/telemetry/alert-triggers.ts",
+      "title": "Alert Triggers",
+      "desc": "Alert trigger policy evaluator. Decides when to fire alerts based on organism.alerting configuration and runtime events.",
+      "exports": [
+        "AlertPayload",
+        "AlertPolicy",
+        "evaluateCrashTrigger",
+        "evaluateLeafFailureTrigger",
+        "evaluateEndOfRunTriggers",
+        "evaluateAllTriggers"
+      ],
+      "color": "#059669",
+      "layer": "telemetry"
+    },
+    {
+      "id": "duckdb",
+      "file": "cli/src/lib/fleet/duckdb.ts",
+      "title": "DuckDB",
+      "desc": "DuckDB stub — real WASM implementation requires the `duckdb` npm package. Until installed, all queries return empty arrays.",
+      "exports": [
+        "query"
+      ],
+      "color": "#d97706",
+      "layer": "fleet"
+    },
+    {
+      "id": "queries",
+      "file": "cli/src/lib/fleet/queries.ts",
+      "title": "Queries",
+      "desc": "Fleet query API — typed wrappers over DuckDB JSONL queries. Contract: NUTRIENTS.md. Provides typed query functions for cross-organism rollups.",
+      "exports": [
+        "OrganismSummary",
+        "OrganismRollup",
+        "StageDuration",
+        "LeafFailureRate",
+        "listOrganisms",
+        "organismRollup",
+        "stageDurations",
+        "leafFailureRate"
+      ],
+      "color": "#d97706",
+      "layer": "fleet"
+    }
+  ],
+  "layers": [
+    {
+      "id": "cli-commands",
+      "label": "CLI Commands",
+      "description": "Entry points: brief, ddp, cultivate, sporenet, harvest, plant, integrate",
+      "color": "#7c3aed",
+      "order": 1
+    },
+    {
+      "id": "upgrades",
+      "label": "Upgrades",
+      "description": "Enhancement modules: telemetry-emitter, cost-tracker, alerting, registry",
+      "color": "#2563eb",
+      "order": 2
+    },
+    {
+      "id": "telemetry",
+      "label": "Telemetry",
+      "description": "Observability: events, ddp-stages, alert-triggers",
+      "color": "#059669",
+      "order": 3
+    },
+    {
+      "id": "fleet",
+      "label": "Fleet",
+      "description": "Data layer: duckdb, queries",
+      "color": "#d97706",
+      "order": 4
+    }
+  ]
+}
