@@ -17,6 +17,7 @@ import routingMap from "./routing-map.js";
 import telemetryEmitter from "./telemetry-emitter.js";
 import costTracker from "./cost-tracker.js";
 import alerting from "./alerting.js";
+import sporenetUpdater from "./sporenet-updater.js";
 
 const BUNDLED: Upgrade[] = [
   hyphaValidator,
@@ -27,6 +28,7 @@ const BUNDLED: Upgrade[] = [
   telemetryEmitter,
   costTracker,
   alerting,
+  sporenetUpdater,
 ];
 
 export const REGISTRY: Map<string, Upgrade> = new Map(

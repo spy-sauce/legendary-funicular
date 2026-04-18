@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mycelium × Digital Dash — Scale Visualizer</title>
+<title>SporeNet — Live Cultivation</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -13,149 +13,141 @@
   --text:#f4f4f5;--muted:#71717a;--muted2:#52525b;
   --green:#22c55e;--green2:#16a34a;--green3:#052e16;
   --teal:#2dd4bf;--teal2:#0d9488;
-  --amber:#fbbf24;--red:#f87171;
+  --amber:#fbbf24;--red:#f87171;--red2:#ef4444;
   --dd:#7c3aed;--dd2:#a78bfa;--dd3:#2e1065;
 }
 html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;overflow-x:hidden}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:52px 52px;opacity:.22;pointer-events:none;z-index:0}
-.wrap{position:relative;z-index:1;max-width:1140px;margin:0 auto;padding:36px 28px 80px}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:52px 52px;opacity:.18;pointer-events:none;z-index:0}
+
+.wrap{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:28px 24px 80px}
 
 /* HEADER */
-.hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;gap:20px;flex-wrap:wrap}
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:20px;flex-wrap:wrap}
 .eyebrow{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.18em;color:var(--teal);text-transform:uppercase;margin-bottom:8px}
-h1{font-size:clamp(1.9rem,4vw,2.9rem);font-weight:800;line-height:1.05;letter-spacing:-.02em}
+h1{font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:800;line-height:1.05;letter-spacing:-.02em}
 h1 .g{color:var(--green)}h1 .d{color:var(--dd2)}
-.sub{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.65;max-width:440px}
-.badges{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.badges{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:4px}
 .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--border2);border-radius:100px;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);background:var(--bg2)}
 .bdot{width:6px;height:6px;border-radius:50%}
 .bdot.g{background:var(--green);animation:bpulse 2s ease-in-out infinite}
-.bdot.p{background:var(--dd2)}
+.bdot.t{background:var(--teal);animation:bpulse 1.5s ease-in-out infinite}
+.bdot.d{background:var(--dd2)}
 @keyframes bpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
 
+/* HERO STATS */
+.hero{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:20px}
+@media(max-width:700px){.hero{grid-template-columns:1fr 1fr}}
+.hstat{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.hstat-n{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;line-height:1;margin-bottom:4px}
+.hstat-k{font-size:10px;color:var(--muted);letter-spacing:.04em}
+
+/* PROGRESS BAR */
+.prog-wrap{margin-bottom:20px}
+.prog-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:6px}
+.prog-fill{height:100%;border-radius:3px;transition:width .4s,background .4s;background:var(--teal)}
+.prog-fill.green{background:linear-gradient(90deg,var(--green2),var(--green))}
+.prog-labels{display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+
 /* PHASES */
-.phases{display:flex;align-items:center;margin-bottom:24px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg2)}
-.ph{flex:1;display:flex;align-items:center;gap:8px;padding:11px 16px;border-right:1px solid var(--border);transition:.25s}
+.phases{display:flex;align-items:center;margin-bottom:20px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg2)}
+.ph{flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;border-right:1px solid var(--border);transition:.25s}
 .ph:last-child{border-right:none}
 .ph-n{font-family:'Space Mono',monospace;font-size:9px;width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid var(--border2);color:var(--muted2);flex-shrink:0;transition:.25s}
-.ph-l{font-size:11px;color:var(--muted);font-weight:500;transition:.25s}
+.ph-l{font-size:11px;color:var(--muted);font-weight:500}
 .ph.active .ph-n{border-color:var(--teal);color:var(--teal);background:rgba(45,212,191,.08)}
 .ph.active .ph-l{color:var(--text)}
 .ph.done .ph-n{border-color:var(--green);background:var(--green);color:#000}
 .ph.done .ph-l{color:var(--green)}
 .ph.dd-on .ph-n{border-color:var(--dd2);color:var(--dd2);background:rgba(167,139,250,.1)}
 .ph.dd-on .ph-l{color:var(--dd2)}
-.ph-arr{color:var(--border2);font-size:12px;padding:0 2px;flex-shrink:0}
+.ph-arr{color:var(--border2);font-size:12px;padding:0 4px;flex-shrink:0}
 
-/* EQ BAR */
-.eq-bar{display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;background:var(--bg2)}
-.eq-seg{flex:1;padding:14px 12px;border-right:1px solid var(--border);text-align:center}
-.eq-seg:last-child{border-right:none}
-.eq-op{flex:0 0 26px;text-align:center;color:var(--muted2);font-family:'Space Mono',monospace;font-size:13px;border-right:1px solid var(--border);padding:14px 0}
-.eq-n{font-family:'Space Mono',monospace;font-size:19px;font-weight:700;line-height:1}
-.eq-k{font-size:9px;color:var(--muted);margin-top:3px;letter-spacing:.04em}
-.eq-total .eq-n{color:var(--green)}
+/* MAIN GRID */
+.main-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+@media(max-width:900px){.main-grid{grid-template-columns:1fr}}
 
-/* LAYOUT */
-.row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-@media(max-width:720px){.row{grid-template-columns:1fr}}
-.panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
-.ptitle{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.13em;color:var(--muted);text-transform:uppercase;margin-bottom:12px}
+/* BIOMES */
+.biomes{display:flex;flex-direction:column;gap:10px}
+.biome{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;border-left:3px solid var(--biome-color,var(--teal))}
+.biome-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.biome-name{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--biome-color,var(--teal))}
+.biome-count{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+.biome-bar{height:2px;background:var(--bg3);border-radius:1px;margin-bottom:10px;overflow:hidden}
+.biome-fill{height:100%;border-radius:1px;background:var(--biome-color,var(--teal));transition:width .4s}
+.leaves-grid{display:flex;flex-wrap:wrap;gap:4px}
+.leaf{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:5px;font-family:'Space Mono',monospace;font-size:9px;border:1px solid transparent;transition:all .3s;cursor:default}
+.leaf.pending{background:var(--bg3);color:var(--muted2);border-color:var(--border)}
+.leaf.active{background:rgba(45,212,191,.1);color:var(--teal);border-color:var(--teal);animation:leafpulse 1s ease-in-out infinite}
+.leaf.done{background:var(--green3);color:var(--green);border-color:var(--green2)}
+.leaf.failed{background:rgba(239,68,68,.08);color:var(--red);border-color:#7f1d1d}
+@keyframes leafpulse{0%,100%{opacity:1}50%{opacity:.6}}
+.leaf-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;background:currentColor}
 
-/* TREE */
-.tree-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+/* SIDEBAR */
+.sidebar{display:flex;flex-direction:column;gap:12px}
+
+/* TREE PANEL */
+.tree-panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
+.panel-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.13em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
 #treeCanvas{width:100%;display:block}
 
-/* SLIDERS */
-.sl-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
-.sl-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);width:86px;flex-shrink:0}
-.sl-val{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text);width:34px;text-align:right;flex-shrink:0}
-input[type=range]{flex:1;-webkit-appearance:none;height:2px;background:var(--border2);border-radius:2px;outline:none;cursor:pointer}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--teal);cursor:pointer;border:2px solid var(--bg);transition:.1s}
-input[type=range]:hover::-webkit-slider-thumb{background:var(--green)}
+/* EVENT FEED */
+.feed-panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;max-height:320px;overflow:hidden;display:flex;flex-direction:column}
+.feed-list{overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+.feed-item{display:grid;grid-template-columns:52px 1fr;gap:8px;padding:5px 0;border-bottom:1px solid var(--bg3);font-size:10px;animation:fadeIn .3s ease}
+.feed-item:last-child{border-bottom:none}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.feed-time{font-family:'Space Mono',monospace;color:var(--muted2)}
+.feed-body{min-width:0}
+.feed-kind{font-family:'Space Mono',monospace;font-weight:700}
+.feed-kind.done{color:var(--green)}
+.feed-kind.failed{color:var(--red)}
+.feed-kind.started{color:var(--teal)}
+.feed-kind.ddp{color:var(--dd2)}
+.feed-detail{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 
-/* MC BLOCK */
-.mc-block{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:11px 13px;margin:12px 0 10px}
-.mc-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.mc-name{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);flex:1}
-.mc-val{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--text);min-width:36px;text-align:right}
-.mc-hint{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted2);line-height:1.5}
-
-/* TIMER */
-.timer-big{font-family:'Space Mono',monospace;font-size:33px;font-weight:700;line-height:1;margin-bottom:3px;transition:color .3s}
-.timer-big.idle{color:var(--muted2)}
-.timer-big.running{color:var(--teal)}
+/* TIMER PANEL */
+.timer-panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
+.timer-big{font-family:'Space Mono',monospace;font-size:28px;font-weight:700;line-height:1;margin-bottom:3px;color:var(--teal)}
 .timer-big.done{color:var(--green)}
-.timer-big.deployed{color:var(--dd2);font-size:22px;letter-spacing:.04em}
-.timer-phase{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:10px;min-height:14px}
-.hbar-wrap{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin:8px 0 3px}
-#hbar{height:100%;width:0%;border-radius:2px;transition:width .1s,background .4s;background:var(--teal)}
-.hbar-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--muted2);font-family:'Space Mono',monospace;margin-bottom:12px}
-.time-compare{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-.tc-cell{background:var(--bg3);border-radius:7px;padding:9px 11px}
-.tc-n{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;margin-bottom:2px}
+.timer-big.idle{color:var(--muted2)}
+.timer-label{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:10px}
+.time-compare{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tc-cell{background:var(--bg3);border-radius:7px;padding:8px 10px}
+.tc-n{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;margin-bottom:2px}
 .tc-k{font-size:9px;color:var(--muted)}
-.speedup-box{text-align:center;padding:9px;background:rgba(34,197,94,.05);border:1px solid rgba(34,197,94,.12);border-radius:7px}
-.speedup-n{font-family:'Space Mono',monospace;font-size:22px;font-weight:700;color:var(--green);line-height:1}
+.speedup-box{margin-top:8px;text-align:center;padding:8px;background:rgba(34,197,94,.05);border:1px solid rgba(34,197,94,.12);border-radius:7px}
+.speedup-n{font-family:'Space Mono',monospace;font-size:20px;font-weight:700;color:var(--green);line-height:1}
 .speedup-k{font-size:9px;color:var(--muted);margin-top:2px}
 
-/* STATS */
-.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
-@media(max-width:580px){.stats-row{grid-template-columns:repeat(3,1fr)}}
-.stat{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:11px 10px}
-.stat-n{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;margin-bottom:2px;transition:color .3s}
-.stat-k{font-size:9px;color:var(--muted)}
-
-/* SIM BTN */
-.sim-btn{width:100%;margin-top:12px;padding:10px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text);font-family:'Space Mono',monospace;font-size:11px;cursor:pointer;transition:.15s;letter-spacing:.06em}
-.sim-btn:hover{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.04)}
-.sim-btn.run{border-color:var(--amber);color:var(--amber)}
-.sim-btn.fin{border-color:var(--green);color:var(--green)}
-
-/* POOL */
-.pool-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
-#poolCanvas{width:100%;display:block;border-radius:5px}
-.legend{display:flex;gap:14px;margin-top:9px;flex-wrap:wrap}
-.leg{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace}
-.leg-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
-
-/* PRESETS */
-.presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px}
-.pbtn{padding:4px 11px;border:1px solid var(--border2);border-radius:100px;background:transparent;color:var(--muted);font-family:'Space Mono',monospace;font-size:9px;cursor:pointer;transition:.15s}
-.pbtn:hover{border-color:var(--teal);color:var(--teal)}
-.pbtn.on{border-color:var(--green);color:var(--green);background:rgba(34,197,94,.06)}
-
-/* DIGITAL DASH */
-.ddp-wrap{background:var(--bg2);border:1px solid var(--dd);border-radius:10px;padding:18px;margin-bottom:14px;opacity:0;transform:translateY(8px);transition:opacity .5s,transform .5s;pointer-events:none}
-.ddp-wrap.visible{opacity:1;transform:translateY(0);pointer-events:auto}
-.ddp-hdr{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-.ddp-logo{width:26px;height:26px;border-radius:6px;background:var(--dd3);border:1px solid var(--dd);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:8px;color:var(--dd2);font-weight:700;letter-spacing:.05em}
-.ddp-name{font-size:12px;font-weight:700;color:var(--dd2)}
-.ddp-sub{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:1px}
-.ddp-elapsed{margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:var(--dd2)}
-.pipeline{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:4px;margin-bottom:14px}
-.pipe-stage{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:86px}
-.pipe-conn{flex-shrink:0;height:2px;width:18px;background:var(--border2);margin-top:19px;transition:background .3s}
+/* DDP */
+.ddp-panel{background:var(--bg2);border:1px solid var(--dd);border-radius:10px;padding:14px;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s;pointer-events:none}
+.ddp-panel.visible{opacity:1;transform:translateY(0);pointer-events:auto}
+.ddp-hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.ddp-logo{width:24px;height:24px;border-radius:5px;background:var(--dd3);border:1px solid var(--dd);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:8px;color:var(--dd2);font-weight:700}
+.ddp-name{font-size:11px;font-weight:700;color:var(--dd2)}
+.ddp-elapsed{margin-left:auto;font-family:'Space Mono',monospace;font-size:10px;color:var(--dd2)}
+.pipeline{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:4px}
+.pipe-stage{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:70px}
+.pipe-conn{flex-shrink:0;height:2px;width:14px;background:var(--border2);margin-top:16px;transition:background .3s}
 .pipe-conn.done{background:var(--dd)}
-.stage-box{width:38px;height:38px;border-radius:7px;border:1px solid var(--border2);background:var(--bg3);display:flex;align-items:center;justify-content:center;transition:.3s;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted2)}
+.stage-box{width:32px;height:32px;border-radius:6px;border:1px solid var(--border2);background:var(--bg3);display:flex;align-items:center;justify-content:center;transition:.3s;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted2)}
 .stage-box.active{border-color:var(--dd2);background:var(--dd3);color:var(--dd2);animation:stagepulse 1s ease-in-out infinite}
 .stage-box.done{border-color:var(--green);background:rgba(22,163,74,.1);color:var(--green)}
 @keyframes stagepulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.35)}60%{box-shadow:0 0 0 5px rgba(124,58,237,0)}}
-.stage-lbl{font-family:'Space Mono',monospace;font-size:8px;color:var(--muted);text-align:center;line-height:1.3;transition:color .3s}
+.stage-lbl{font-family:'Space Mono',monospace;font-size:7px;color:var(--muted);text-align:center;line-height:1.3}
 .stage-lbl.active{color:var(--dd2)}
-.stage-lbl.done{color:var(--muted)}
-.stage-dur{font-family:'Space Mono',monospace;font-size:8px;color:var(--muted2);min-height:10px;transition:color .3s}
+.stage-dur{font-family:'Space Mono',monospace;font-size:7px;color:var(--muted2);min-height:10px}
 .stage-dur.live{color:var(--dd2)}
 .stage-dur.fin{color:var(--green2)}
-.ddp-footer{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.ddp-stat{background:var(--dd3);border:1px solid rgba(124,58,237,.3);border-radius:7px;padding:9px 11px}
-.ddp-stat-n{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--dd2);margin-bottom:2px}
-.ddp-stat-k{font-size:9px;color:var(--muted)}
 
-/* DEMO-ONLY: hidden in live mode, visible when ?demo=1 */
-.demo-only{display:none}
-body.demo-mode .demo-only{display:block}
-body.demo-mode .live-only{display:none}
+/* IDLE STATE */
+.idle-msg{text-align:center;padding:60px 24px;color:var(--muted)}
+.idle-msg h2{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px}
+.idle-msg p{font-size:12px;line-height:1.6;font-family:'Space Mono',monospace}
+.idle-msg code{color:var(--teal);background:var(--bg3);padding:2px 6px;border-radius:3px;font-size:11px}
+
+footer{margin-top:40px;text-align:center;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted2)}
 </style>
 </head>
 <body>
@@ -163,748 +155,528 @@ body.demo-mode .live-only{display:none}
 
   <header class="hdr">
     <div>
-      <div class="eyebrow">MYC × DD — full pipeline execution</div>
-      <h1><span class="g">Mycelium</span> × <span class="d">Digital Dash</span></h1>
-      <p class="sub">Parallel cultivation → harvest → agentic CI/CD. Every requirement, every leaf, every deploy — automated end to end.</p>
+      <div class="eyebrow" id="eyebrow">MYC — cultivation dashboard</div>
+      <h1><span class="g" id="h1-organism">Mycelium</span> <span class="d" id="h1-status">loading…</span></h1>
     </div>
     <div class="badges">
-      <div class="badge live-badge" style="display:none;border-color:var(--teal)"><span class="bdot g"></span>live</div>
-      <div class="badge"><span class="bdot g"></span>organism active</div>
-      <div class="badge"><span class="bdot p"></span>ddp pipeline ready</div>
-      <div class="badge demo-only" style="display:none">contract-freeze gating</div>
+      <div class="badge" id="badge-live" style="display:none;border-color:var(--teal)"><span class="bdot t"></span>live</div>
+      <div class="badge" id="badge-sse" style="display:none"><span class="bdot g"></span>sse connected</div>
+      <div class="badge"><span class="bdot d"></span>ddp ready</div>
     </div>
   </header>
 
   <!-- phases -->
   <div class="phases">
-    <div class="ph active" id="ph1"><div class="ph-n">1</div><div class="ph-l">cultivate</div></div>
+    <div class="ph" id="ph1"><div class="ph-n">1</div><div class="ph-l">cultivate</div></div>
     <div class="ph-arr">›</div>
     <div class="ph" id="ph2"><div class="ph-n">2</div><div class="ph-l">harvest</div></div>
     <div class="ph-arr">›</div>
-    <div class="ph" id="ph3"><div class="ph-n">3</div><div class="ph-l">digital dash CI/CD</div></div>
+    <div class="ph" id="ph3"><div class="ph-n">3</div><div class="ph-l">digital dash</div></div>
   </div>
 
-  <!-- eq bar -->
-  <div class="eq-bar">
-    <div class="eq-seg"><div class="eq-n" id="eq-b">5</div><div class="eq-k">biomes</div></div>
-    <div class="eq-op">×</div>
-    <div class="eq-seg"><div class="eq-n" id="eq-s">8</div><div class="eq-k">specialists</div></div>
-    <div class="eq-op">×</div>
-    <div class="eq-seg"><div class="eq-n" id="eq-l">25</div><div class="eq-k">leaves</div></div>
-    <div class="eq-op">=</div>
-    <div class="eq-seg eq-total"><div class="eq-n" id="eq-t">1,000</div><div class="eq-k">Claude sessions</div></div>
+  <!-- hero stats -->
+  <div class="hero">
+    <div class="hstat">
+      <div class="hstat-n" id="stat-done" style="color:var(--green)">0</div>
+      <div class="hstat-k">leaves fruited</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-n" id="stat-total">—</div>
+      <div class="hstat-k">total leaves</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-n" id="stat-health" style="color:var(--teal)">—</div>
+      <div class="hstat-k">health</div>
+    </div>
+    <div class="hstat">
+      <div class="hstat-n" id="stat-failed" style="color:var(--red)">0</div>
+      <div class="hstat-k">failed</div>
+    </div>
   </div>
 
-  <!-- tree -->
-  <div class="tree-wrap">
-    <div class="ptitle">organism tree — fan density scales with leaves per biome</div>
-    <canvas id="treeCanvas" height="230"></canvas>
+  <!-- progress -->
+  <div class="prog-wrap">
+    <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+    <div class="prog-labels">
+      <span>0%</span>
+      <span>harvest @ 80%</span>
+      <span id="prog-pct">0%</span>
+    </div>
   </div>
 
-  <!-- controls + timer -->
-  <div class="row">
-    <!-- demo-only: configuration panel with sliders -->
-    <div class="panel demo-only">
-      <div class="ptitle">configure organism</div>
-      <div class="presets">
-        <button class="pbtn" onclick="preset(2,2,2,event)">2×2×2 = 8</button>
-        <button class="pbtn on" onclick="preset(5,8,25,event)">5×8×25 = 1k</button>
-        <button class="pbtn" onclick="preset(10,20,50,event)">10×20×50 = 10k</button>
-      </div>
-      <div class="sl-row"><span class="sl-label">biomes</span><input type="range" id="sl-b" min="2" max="10" value="5" step="1" oninput="upd()"><span class="sl-val" id="lb-b">5</span></div>
-      <div class="sl-row"><span class="sl-label">specialists</span><input type="range" id="sl-s" min="1" max="20" value="8" step="1" oninput="upd()"><span class="sl-val" id="lb-s">8</span></div>
-      <div class="sl-row"><span class="sl-label">leaves</span><input type="range" id="sl-l" min="1" max="50" value="25" step="1" oninput="upd()"><span class="sl-val" id="lb-l">25</span></div>
-      <div class="mc-block">
-        <div class="mc-top">
-          <span class="mc-name">--max-concurrency</span>
-          <input type="range" id="sl-mc" min="1" max="999" value="50" step="1" oninput="upd()" style="width:80px;flex:none">
-          <span class="mc-val" id="lb-mc">50</span>
+  <div id="idle-state" class="idle-msg" style="display:none">
+    <h2>no cultivation running</h2>
+    <p>Start a run with <code>mycelium cultivate</code> to see leaves populate here in real time.</p>
+  </div>
+
+  <div id="live-state">
+    <div class="main-grid">
+      <!-- biome columns -->
+      <div class="biomes" id="biomes-container"></div>
+
+      <!-- sidebar -->
+      <div class="sidebar">
+        <!-- timer -->
+        <div class="timer-panel">
+          <div class="panel-title">wall clock</div>
+          <div class="timer-big idle" id="timer-disp">00:00.000</div>
+          <div class="timer-label" id="timer-label">awaiting cultivate</div>
+          <div class="time-compare">
+            <div class="tc-cell">
+              <div class="tc-n" id="tc-par" style="color:var(--green)">—</div>
+              <div class="tc-k">parallel (actual)</div>
+            </div>
+            <div class="tc-cell">
+              <div class="tc-n" id="tc-seq" style="color:var(--muted)">—</div>
+              <div class="tc-k">sequential equiv.</div>
+            </div>
+          </div>
+          <div class="speedup-box">
+            <div class="speedup-n" id="speedup-n">—</div>
+            <div class="speedup-k">parallel speedup</div>
+          </div>
         </div>
-        <div class="mc-hint">higher = more sessions in flight simultaneously<br>directly controls wall-clock execution time</div>
-      </div>
-      <button class="sim-btn" id="simbtn" onclick="handleBtn()">▶ run cultivate</button>
-    </div>
 
-    <div class="panel">
-      <div class="ptitle">execution time</div>
-      <div class="timer-big idle" id="timer-disp">00:00.000</div>
-      <div class="timer-phase" id="timer-phase">awaiting cultivate</div>
-      <div class="hbar-wrap"><div id="hbar"></div></div>
-      <div class="hbar-labels"><span>0%</span><span id="harvest-mid">harvest @ 80%</span><span id="pct-lbl">0%</span></div>
-      <div class="time-compare">
-        <div class="tc-cell"><div class="tc-n" id="tc-par" style="color:var(--green)">—</div><div class="tc-k">mycelium (parallel)</div></div>
-        <div class="tc-cell"><div class="tc-n" id="tc-seq" style="color:var(--muted)">—</div><div class="tc-k">sequential equiv.</div></div>
-      </div>
-      <div class="speedup-box">
-        <div class="speedup-n" id="speedup-n">—</div>
-        <div class="speedup-k">parallel speedup vs sequential</div>
+        <!-- tree canvas -->
+        <div class="tree-panel">
+          <div class="panel-title">organism tree</div>
+          <canvas id="treeCanvas" height="180"></canvas>
+        </div>
+
+        <!-- event feed -->
+        <div class="feed-panel">
+          <div class="panel-title">event stream</div>
+          <div class="feed-list" id="feed-list">
+            <div style="color:var(--muted2);font-size:10px;font-family:monospace;padding:8px 0">waiting for events…</div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- stats -->
-  <div class="stats-row">
-    <div class="stat"><div class="stat-n" id="st-t">1,000</div><div class="stat-k">total</div></div>
-    <div class="stat"><div class="stat-n" id="st-r" style="color:var(--teal)">0</div><div class="stat-k">running</div></div>
-    <div class="stat"><div class="stat-n" id="st-q">1,000</div><div class="stat-k">queued</div></div>
-    <div class="stat"><div class="stat-n" id="st-d" style="color:var(--green)">0</div><div class="stat-k">FRUIT_READY</div></div>
-    <div class="stat"><div class="stat-n" id="st-p">0%</div><div class="stat-k">harvest %</div></div>
-  </div>
-
-  <!-- pool -->
-  <div class="pool-wrap">
-    <div class="ptitle" id="pool-title">session pool — each cell = one Claude Agent SDK session</div>
-    <canvas id="poolCanvas"></canvas>
-    <div class="legend">
-      <div class="leg"><div class="leg-dot" style="background:var(--teal)"></div>running</div>
-      <div class="leg"><div class="leg-dot" style="background:var(--green2)"></div>FRUIT_READY</div>
-      <div class="leg"><div class="leg-dot" style="background:#27272d"></div>queued</div>
+    <!-- DDP pipeline -->
+    <div class="ddp-panel" id="ddp-panel">
+      <div class="ddp-hdr">
+        <div class="ddp-logo">DD</div>
+        <div>
+          <div class="ddp-name">digital dash — agentic CI/CD</div>
+        </div>
+        <div class="ddp-elapsed" id="ddp-elapsed">+00:00.000</div>
+      </div>
+      <div class="pipeline" id="pipeline"></div>
     </div>
-  </div>
-
-  <!-- digital dash -->
-  <div class="ddp-wrap" id="ddp-wrap">
-    <div class="ddp-hdr">
-      <div class="ddp-logo">DD</div>
-      <div><div class="ddp-name">digital dash — agentic CI/CD</div><div class="ddp-sub">auto-triggered after harvest passes threshold</div></div>
-      <div class="ddp-elapsed" id="ddp-elapsed">+00:00.000</div>
-    </div>
-    <div class="pipeline" id="pipeline"></div>
-    <div class="ddp-footer" id="ddp-footer"></div>
   </div>
 
 </div>
-
-<!-- Data slot: server injects JSON here; sibling leaf dashboard.template.databind will add renderLive() -->
-<script id="mycelium-data" type="application/json">{{DATA_JSON}}</script>
+<footer>Mycelium Framework · VibeSpace LLC · the network provides 🍄</footer>
 
 <script>
-// ═══════════════════════════════════════════════════════════════════════════
-// MODE DETECTION: ?demo=1 enables simulation mode, otherwise live data mode
-// ═══════════════════════════════════════════════════════════════════════════
-const DEMO_MODE = new URLSearchParams(window.location.search).has('demo');
-if (DEMO_MODE) document.body.classList.add('demo-mode');
+'use strict';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SHARED CONSTANTS
-// ═══════════════════════════════════════════════════════════════════════════
-const DNAMES=['auth','data','api','ui','jobs','ml','infra','cdn','mq','evt'];
-const DDP=[
-  {id:'merge',lbl:'merge-order',dur:3000,icon:'M'},
-  {id:'lint', lbl:'lint',       dur:1300,icon:'L'},
-  {id:'types',lbl:'typecheck',  dur:2000,icon:'T'},
-  {id:'test', lbl:'test suite', dur:5600,icon:'✓'},
-  {id:'build',lbl:'build',      dur:3400,icon:'B'},
-  {id:'stage',lbl:'deploy:stg', dur:2200,icon:'S'},
-  {id:'smoke',lbl:'smoke tests',dur:1700,icon:'~'},
-  {id:'prod', lbl:'deploy:prod',dur:2000,icon:'P'},
+// ── constants ────────────────────────────────────────────────────────────────
+const BIOME_COLORS = ['#2dd4bf','#a78bfa','#fbbf24','#22c55e','#f87171','#60a5fa','#fb923c','#e879f9','#34d399','#f472b6'];
+const DDP_STAGES = [
+  {id:'merge',lbl:'merge-order',icon:'M'},
+  {id:'lint', lbl:'lint',       icon:'L'},
+  {id:'types',lbl:'typecheck',  icon:'T'},
+  {id:'test', lbl:'test',       icon:'✓'},
+  {id:'build',lbl:'build',      icon:'B'},
+  {id:'stage',lbl:'stg',        icon:'S'},
+  {id:'smoke',lbl:'smoke',      icon:'~'},
+  {id:'prod', lbl:'prod',       icon:'P'},
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SHARED STATE (used by both demo and live modes)
-// ═══════════════════════════════════════════════════════════════════════════
-let curT=1000,done=0;
-let elapsedMs=0;
-let poolFrame=0;
-let phase=0; // 0=idle 1=running 2=harvest 3=ddp 4=done
+// ── state ────────────────────────────────────────────────────────────────────
+let state = null;
+let leafMap = {};       // id → leaf element
+let biomeColors = {};   // agentId → color
+let biomeOrder = [];    // ordered list of agent ids
+let startMs = null;
+let rafId = null;
+let phase = 0;
+let ddpLaunched = false;
+let ddpStartMs = null;
+let ddpRafId = null;
+let feedCleared = false;
+let sseSource = null;
+let sseRetry = 1000;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DOM HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-function el(id){return document.getElementById(id);}
-function sl(id){const e=document.getElementById(id);return e?e.value:'0';}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TIMER FORMATTING (shared)
-// ═══════════════════════════════════════════════════════════════════════════
-function fmtClock(ms){
-  const m=Math.floor(ms/60000);
-  const s=Math.floor((ms%60000)/1000);
-  const r=ms%1000;
+// ── helpers ──────────────────────────────────────────────────────────────────
+function el(id) { return document.getElementById(id); }
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtClock(ms) {
+  const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), r=ms%1000;
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(r).padStart(3,'0')}`;
 }
-function fmtMs(ms){
-  if(ms<1000)return ms+'ms';
-  if(ms<60000)return (ms/1000).toFixed(1)+'s';
+function fmtMs(ms) {
+  if(ms<1000) return ms+'ms';
+  if(ms<60000) return (ms/1000).toFixed(1)+'s';
   const m=Math.floor(ms/60000);
   return `${m}m ${((ms%60000)/1000).toFixed(0)}s`;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// PHASE MANAGEMENT (shared)
-// ═══════════════════════════════════════════════════════════════════════════
-function setPhase(p){
-  phase=p;
-  ['ph1','ph2','ph3'].forEach(id=>el(id).className='ph');
-  const msgs={1:'cultivating — sessions in flight',2:'harvest passed — triggering Digital Dash',3:'digital dash CI/CD running',4:'deployed to production'};
-  el('timer-phase').textContent=msgs[p]||'';
-  if(p===1)el('ph1').classList.add('active');
-  if(p===2){el('ph1').classList.add('done');el('ph2').classList.add('active');}
-  if(p===3){el('ph1').classList.add('done');el('ph2').classList.add('done');el('ph3').classList.add('dd-on');}
-  if(p===4){el('ph1').classList.add('done');el('ph2').classList.add('done');el('ph3').classList.add('done');}
+function biomeColor(agentId) {
+  if (!biomeColors[agentId]) {
+    const idx = Object.keys(biomeColors).length;
+    biomeColors[agentId] = BIOME_COLORS[idx % BIOME_COLORS.length];
+  }
+  return biomeColors[agentId];
 }
 
-function resetPhases(){
-  el('ph1').className='ph active';el('ph2').className='ph';el('ph3').className='ph';
-  el('timer-disp').textContent='00:00.000';el('timer-disp').className='timer-big idle';
-  el('timer-phase').textContent='awaiting cultivate';
-  el('tc-par').textContent='—';el('speedup-n').textContent='—';
-  el('hbar').style.width='0%';el('hbar').style.background='var(--teal)';
-  el('pct-lbl').textContent='0%';
-  el('ddp-wrap').classList.remove('visible');
-  el('ddp-footer').innerHTML='';
-  elapsedMs=0;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// STATS RENDERER (shared)
-// ═══════════════════════════════════════════════════════════════════════════
-function updateStats(mc){
-  const running=Math.min(mc,curT-done);
-  const queued=Math.max(0,curT-done-running);
-  el('st-r').textContent=running.toLocaleString();
-  el('st-q').textContent=queued.toLocaleString();
-  el('st-d').textContent=done.toLocaleString();
-  el('pool-title').textContent=running>0||done>0
-    ?`session pool — ${running.toLocaleString()} running (mc=${mc}), ${queued.toLocaleString()} queued, ${done.toLocaleString()} done`
-    :'session pool — each cell = one Claude Agent SDK session';
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TREE RENDERER (shared)
-// ═══════════════════════════════════════════════════════════════════════════
-function drawTree(b,s,l){
-  const cv=document.getElementById('treeCanvas');
-  const dpr=window.devicePixelRatio||1;
-  const W=cv.offsetWidth||1000,H=230;
-  cv.width=W*dpr;cv.height=H*dpr;
-  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
-  ctx.clearRect(0,0,W,H);
-  const pad=24,avail=W-pad*2;
-  const bw=Math.min(78,Math.floor((avail-(b-1)*8)/b));
-  const gap=b>1?(avail-b*bw)/(b-1):0;
-  const rx=W/2,ry=12;
-  rrect(ctx,rx-50,ry,100,26,5,'#18181c','#2dd4bf');
-  tctx(ctx,'my-app',rx,ry+13,9,'#2dd4bf');
-  const by=75,bh=26,fy=H-6;
-  for(let i=0;i<b;i++){
-    const bx=pad+i*(bw+gap),cx=bx+bw/2;
-    ctx.beginPath();ctx.moveTo(rx,ry+26);ctx.lineTo(cx,by);
-    ctx.strokeStyle='#27272d';ctx.lineWidth=.7;ctx.setLineDash([]);ctx.stroke();
-    rrect(ctx,bx,by,bw,bh,5,'#18181c','#0d9488');
-    tctx(ctx,b<=10?DNAMES[i]:String(i+1),cx,by+bh/2,9,'#2dd4bf');
-    const fw=Math.min(bw*.88,60),fn=Math.min(s*l,50);
-    for(let j=0;j<fn;j++){
-      const t=fn<=1?.5:j/(fn-1);
-      const lx=bx+(bw-fw)*.5+t*fw;
-      const a=.05+.3*(1-Math.abs(t-.5)*2);
-      const col=done>0?`rgba(34,197,94,${a})`:`rgba(45,212,191,${a*.65})`;
-      ctx.beginPath();ctx.moveTo(cx,by+bh);
-      ctx.bezierCurveTo(cx,by+bh+30,lx,fy-28,lx,fy);
-      ctx.strokeStyle=col;ctx.lineWidth=.7;ctx.setLineDash([]);ctx.stroke();
+// ── timer ────────────────────────────────────────────────────────────────────
+function startTimer() {
+  if (rafId) return;
+  el('timer-disp').className = 'timer-big running';
+  function tick() {
+    if (!startMs) { rafId = requestAnimationFrame(tick); return; }
+    const ms = Date.now() - startMs;
+    el('timer-disp').textContent = fmtClock(ms);
+    el('tc-par').textContent = fmtMs(ms);
+    const total = state?.total || 0;
+    const done = state?.leaves?.filter(l=>l.status==='done').length || 0;
+    if (ms > 500 && total > 0) {
+      const su = Math.round(done * 45000 / ms);
+      el('speedup-n').textContent = su > 1 ? su+'×' : '—';
     }
-    ctx.font=`700 8px 'Space Mono',monospace`;
-    ctx.fillStyle='#22c55e';ctx.textAlign='center';
-    ctx.fillText('×'+(s*l).toLocaleString(),cx,H-1);
+    el('tc-seq').textContent = fmtMs(total * 45000);
+    rafId = requestAnimationFrame(tick);
+  }
+  rafId = requestAnimationFrame(tick);
+}
+
+// ── phase display ─────────────────────────────────────────────────────────────
+function setPhase(p) {
+  phase = p;
+  ['ph1','ph2','ph3'].forEach(id => el(id).className='ph');
+  const labels = {1:'cultivating — sessions in flight',2:'harvest passed — triggering Digital Dash',3:'digital dash CI/CD running',4:'deployed to production'};
+  el('timer-label').textContent = labels[p] || 'awaiting cultivate';
+  if(p>=1) el('ph1').classList.add(p>1?'done':'active');
+  if(p>=2) el('ph2').classList.add(p>2?'done':'active');
+  if(p>=3) el('ph3').classList.add(p===4?'done':'dd-on');
+}
+
+// ── biome grid render ─────────────────────────────────────────────────────────
+function renderBiomes(leaves) {
+  const container = el('biomes-container');
+
+  // Group by agent
+  const groups = {};
+  for (const leaf of leaves) {
+    const a = leaf.agent || 'unknown';
+    if (!groups[a]) groups[a] = [];
+    groups[a].push(leaf);
+  }
+
+  // Preserve order or establish it
+  const agents = Object.keys(groups);
+  for (const a of agents) {
+    if (!biomeOrder.includes(a)) biomeOrder.push(a);
+  }
+
+  for (const agentId of biomeOrder) {
+    if (!groups[agentId]) continue;
+    const color = biomeColor(agentId);
+    const groupLeaves = groups[agentId];
+    const done = groupLeaves.filter(l=>l.status==='done').length;
+    const pct = groupLeaves.length > 0 ? (done/groupLeaves.length*100).toFixed(0) : 0;
+
+    let biomeEl = document.getElementById('biome-'+agentId);
+    if (!biomeEl) {
+      biomeEl = document.createElement('div');
+      biomeEl.id = 'biome-'+agentId;
+      biomeEl.className = 'biome';
+      biomeEl.style.setProperty('--biome-color', color);
+      biomeEl.innerHTML = `
+        <div class="biome-head">
+          <span class="biome-name">${esc(agentId)}</span>
+          <span class="biome-count" id="bcount-${agentId}">${done}/${groupLeaves.length}</span>
+        </div>
+        <div class="biome-bar"><div class="biome-fill" id="bfill-${agentId}" style="width:${pct}%"></div></div>
+        <div class="leaves-grid" id="bleaves-${agentId}"></div>
+      `;
+      container.appendChild(biomeEl);
+    } else {
+      const countEl = el('bcount-'+agentId);
+      const fillEl = el('bfill-'+agentId);
+      if (countEl) countEl.textContent = done+'/'+groupLeaves.length;
+      if (fillEl) fillEl.style.width = pct+'%';
+    }
+
+    const leavesGrid = el('bleaves-'+agentId);
+    if (!leavesGrid) continue;
+
+    for (const leaf of groupLeaves) {
+      let leafEl = leafMap[leaf.id];
+      if (!leafEl) {
+        leafEl = document.createElement('div');
+        leafEl.id = 'leaf-'+leaf.id;
+        leafEl.className = 'leaf pending';
+        leafEl.title = leaf.scope || leaf.id;
+        leafEl.innerHTML = `<div class="leaf-dot"></div><span>${esc(leaf.id.split('.').slice(-1)[0])}</span>`;
+        leavesGrid.appendChild(leafEl);
+        leafMap[leaf.id] = leafEl;
+      }
+      // Update status
+      const cls = 'leaf ' + (leaf.status || 'pending');
+      if (leafEl.className !== cls) leafEl.className = cls;
+    }
   }
 }
+
+// ── tree canvas ───────────────────────────────────────────────────────────────
+function drawTree() {
+  const cv = el('treeCanvas');
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.offsetWidth || 280, H = 180;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const names = biomeOrder.length ? biomeOrder : ['loading'];
+  const b = names.length;
+  const pad = 16, avail = W - pad * 2;
+  const bw = Math.min(56, Math.floor((avail - (b-1)*6) / b));
+  const gap = b > 1 ? (avail - b * bw) / (b-1) : 0;
+  const rx = W/2, ry = 8;
+
+  // Root node
+  rrect(ctx, rx-36, ry, 72, 20, 4, '#18181c', '#2dd4bf');
+  tctx(ctx, 'my-app', rx, ry+10, 8, '#2dd4bf');
+
+  const by = 52, bh = 20, fy = H - 8;
+  for (let i = 0; i < b; i++) {
+    const bx = pad + i*(bw+gap), cx = bx + bw/2;
+    const color = biomeColor(names[i]) || '#2dd4bf';
+    const agentLeaves = state?.leaves?.filter(l=>l.agent===names[i]) || [];
+    const doneCount = agentLeaves.filter(l=>l.status==='done').length;
+    const total = agentLeaves.length || 1;
+    const alpha = 0.5 + (doneCount/total) * 0.5;
+
+    // Branch line
+    ctx.beginPath(); ctx.moveTo(rx, ry+20); ctx.lineTo(cx, by);
+    ctx.strokeStyle = '#27272d'; ctx.lineWidth = .7; ctx.stroke();
+
+    // Biome box
+    rrect(ctx, bx, by, bw, bh, 4, '#18181c', color);
+    tctx(ctx, names[i].replace(/-agent$/,'').slice(0,6), cx, by+bh/2, 7, color);
+
+    // Leaf lines
+    const fn = Math.min(total, 20);
+    for (let j = 0; j < fn; j++) {
+      const t = fn <= 1 ? .5 : j/(fn-1);
+      const lx = bx + (bw*.1) + t*(bw*.8);
+      const isDone = j < doneCount;
+      const c = isDone ? `rgba(34,197,94,0.6)` : `rgba(45,212,191,0.2)`;
+      ctx.beginPath(); ctx.moveTo(cx, by+bh);
+      ctx.bezierCurveTo(cx, by+bh+20, lx, fy-16, lx, fy);
+      ctx.strokeStyle = c; ctx.lineWidth = .8; ctx.stroke();
+    }
+  }
+}
+
 function rrect(ctx,x,y,w,h,r,fill,stroke){
   ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
   ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);
   ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
-  ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=.7;ctx.stroke();
+  ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=.8;ctx.stroke();
 }
 function tctx(ctx,t,x,y,fs,c){
   ctx.font=`700 ${fs}px 'Space Mono',monospace`;ctx.fillStyle=c;ctx.textAlign='center';
   ctx.fillText(t,x,y+fs*.35);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// POOL RENDERER (shared)
-// ═══════════════════════════════════════════════════════════════════════════
-function drawPool(mc){
-  const cv=document.getElementById('poolCanvas');
-  const dpr=window.devicePixelRatio||1;
-  const W=(cv.parentElement.clientWidth-32)||800;
-  const MAX=2500,display=Math.min(curT,MAX);
-  const cols=Math.min(display,100);
-  const rows=Math.ceil(display/cols);
-  const cell=Math.max(4,Math.floor((W-1)/cols)-1);
-  const H=rows*(cell+1)+1;
-  cv.width=W*dpr;cv.height=H*dpr;cv.style.height=H+'px';
-  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,W,H);
-  const running=Math.min(mc,curT-done);
-  const dC=curT>0?Math.min(display,Math.round(done/curT*display)):0;
-  const rC=curT>0?Math.min(display-dC,Math.round(running/curT*display)):0;
-  poolFrame++;
-  for(let i=0;i<display;i++){
-    const col=i%cols,row=Math.floor(i/cols);
-    const x=col*(cell+1),y=row*(cell+1);
-    let color;
-    if(i<dC) color='#16a34a';
-    else if(i<dC+rC){
-      const osc=Math.sin(poolFrame*.18+i*.5)*.12+.88;
-      color=`rgba(45,212,191,${osc})`;
-    } else color='#27272d';
-    ctx.fillStyle=color;
-    if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,cell,cell,1);ctx.fill();}
-    else ctx.fillRect(x,y,cell,cell);
+// ── event feed ─────────────────────────────────────────────────────────────────
+function addFeedItem(ev) {
+  if (!feedCleared) {
+    el('feed-list').innerHTML = '';
+    feedCleared = true;
   }
+  const feed = el('feed-list');
+  const time = ev.ts ? new Date(ev.ts).toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '--:--:--';
+  let kindCls = 'started', kindLabel = ev.kind;
+  if (ev.kind === 'leaf_fruited') { kindCls = 'done'; kindLabel = '✓ fruited'; }
+  else if (ev.kind === 'leaf_failed') { kindCls = 'failed'; kindLabel = '✗ failed'; }
+  else if (ev.kind === 'run_started') { kindCls = 'started'; kindLabel = '▶ run started'; }
+  else if (ev.kind === 'run_ended') { kindCls = 'done'; kindLabel = '■ run ended'; }
+  else if (ev.kind?.startsWith('ddp_')) { kindCls = 'ddp'; }
+  const detail = ev.data?.leaf_id || ev.data?.stage_id || ev.data?.error || '';
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.innerHTML = `<span class="feed-time">${time}</span><div class="feed-body"><div class="feed-kind ${kindCls}">${esc(kindLabel)}</div>${detail?`<div class="feed-detail">${esc(detail)}</div>`:''}</div>`;
+  feed.insertBefore(item, feed.firstChild);
+  // Keep last 50 items
+  while (feed.children.length > 50) feed.removeChild(feed.lastChild);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DDP PIPELINE BUILDER (shared)
-// ═══════════════════════════════════════════════════════════════════════════
-function buildPipeline(){
-  const pipe=el('pipeline');pipe.innerHTML='';
-  DDP.forEach((st,i)=>{
-    const s=document.createElement('div');
-    s.className='pipe-stage';s.id='pst-'+st.id;
+// ── state application ─────────────────────────────────────────────────────────
+function applyState(s) {
+  state = s;
+  if (!s) { el('idle-state').style.display=''; el('live-state').style.display='none'; return; }
+
+  el('idle-state').style.display = 'none';
+  el('live-state').style.display = '';
+  el('badge-live').style.display = 'flex';
+
+  const leaves = s.leaves || [];
+  const done = leaves.filter(l=>l.status==='done').length;
+  const failed = leaves.filter(l=>l.status==='failed').length;
+  const total = s.total || leaves.length;
+  const health = total > 0 ? Math.round(done/total*100) : 0;
+  const pct = health;
+
+  el('h1-organism').textContent = s.organism || 'Mycelium';
+  el('h1-status').textContent = done < total ? `— cultivating` : health >= 80 ? '— harvest ready' : '— cultivation';
+  el('eyebrow').textContent = (s.organism || 'organism') + ' — live cultivation';
+  el('stat-done').textContent = done;
+  el('stat-total').textContent = total;
+  el('stat-health').textContent = health + '%';
+  el('stat-failed').textContent = failed;
+  el('stat-health').style.color = health >= 80 ? 'var(--green)' : health >= 50 ? 'var(--amber)' : 'var(--red)';
+
+  const fill = el('prog-fill');
+  fill.style.width = pct + '%';
+  fill.className = 'prog-fill' + (pct >= 80 ? ' green' : '');
+  el('prog-pct').textContent = pct + '%';
+
+  // Phase inference
+  const hasStarted = done > 0 || leaves.some(l=>l.status==='active');
+  let p = 0;
+  if (hasStarted) p = 1;
+  if (pct >= 80) p = 2;
+  if (ddpLaunched) p = 3;
+  if (p > phase) setPhase(p);
+
+  // Start timer from state.started_at
+  if (!startMs && s.started_at) {
+    startMs = new Date(s.started_at).getTime();
+    startTimer();
+  }
+
+  renderBiomes(leaves);
+  drawTree();
+}
+
+// ── DDP handlers ──────────────────────────────────────────────────────────────
+function initDDP() {
+  if (ddpLaunched) return;
+  ddpLaunched = true;
+  ddpStartMs = Date.now();
+  el('ddp-panel').classList.add('visible');
+  setPhase(3);
+  const pipe = el('pipeline');
+  pipe.innerHTML = '';
+  DDP_STAGES.forEach((st,i) => {
+    const s = document.createElement('div');
+    s.className='pipe-stage';
     s.innerHTML=`<div class="stage-box" id="sbox-${st.id}">${st.icon}</div><div class="stage-lbl" id="slbl-${st.id}">${st.lbl}</div><div class="stage-dur" id="sdur-${st.id}"></div>`;
     pipe.appendChild(s);
-    if(i<DDP.length-1){
-      const c=document.createElement('div');c.className='pipe-conn';c.id='conn-'+st.id;pipe.appendChild(c);
-    }
+    if(i<DDP_STAGES.length-1){const c=document.createElement('div');c.className='pipe-conn';c.id='conn-'+st.id;pipe.appendChild(c);}
   });
+  (function ddpClock(){
+    if(!ddpStartMs)return;
+    el('ddp-elapsed').textContent='+'+fmtClock(Date.now()-ddpStartMs);
+    ddpRafId=requestAnimationFrame(ddpClock);
+  })();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TIMER RENDERER (shared)
-// ═══════════════════════════════════════════════════════════════════════════
-function renderTimer(){
-  const e=elapsedMs;
-  const td=el('timer-disp');
-  td.textContent=fmtClock(e);
-  el('tc-par').textContent=fmtMs(e);
-  const su=e>200?Math.round(curT*45000/e):0;
-  el('speedup-n').textContent=su>0?su+'×':'—';
-}
+// ── SSE event handling ────────────────────────────────────────────────────────
+function handleEvent(ev) {
+  if (!ev?.kind) return;
+  addFeedItem(ev);
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DEMO MODE: Full simulation (only active when ?demo=1)
-// ═══════════════════════════════════════════════════════════════════════════
-if (DEMO_MODE) {
-  let simOn=false,simTimer=null,startMs=0;
-  let rafId=null;
-  let ddpOn=false,ddpIdx=-1,ddpTimer=null,ddpStart=0,ddpRaf=null;
-
-  function V(){return{b:+sl('sl-b'),s:+sl('sl-s'),l:+sl('sl-l'),mc:+sl('sl-mc')};}
-
-  function upd(){
-    const {b,s,l,mc}=V();const tot=b*s*l;
-    if(tot!==curT){done=0;hardReset();}
-    curT=tot;
-    el('lb-b').textContent=b;el('lb-s').textContent=s;el('lb-l').textContent=l;
-    el('lb-mc').textContent=mc;
-    el('eq-b').textContent=b;el('eq-s').textContent=s;el('eq-l').textContent=l;
-    el('eq-t').textContent=tot.toLocaleString();
-    el('st-t').textContent=tot.toLocaleString();
-    el('tc-seq').textContent=fmtMs(tot*45000);
-    drawTree(b,s,l);updateStats(mc);drawPool(mc);
-  }
-
-  // ── TIMER RAF ─────────────────────────────────────────────────────
-  function startRAF(){
-    if(rafId)return;
-    function step(){
-      if(!simOn&&phase<3){rafId=null;return;}
-      elapsedMs=Date.now()-startMs;
-      renderTimer();
-      rafId=requestAnimationFrame(step);
-    }
-    rafId=requestAnimationFrame(step);
-  }
-  function stopRAF(){if(rafId){cancelAnimationFrame(rafId);rafId=null;}}
-
-  // ── SIM ───────────────────────────────────────────────────────
-  window.handleBtn=function handleBtn(){
-    if(phase===0||phase===4||(phase>=1&&!simOn)){
-      hardReset();done=0;startSim();
-    } else {
-      hardReset();done=0;upd();
-    }
-  };
-
-  function startSim(){
-    simOn=true;phase=1;startMs=Date.now();
+  if (ev.kind === 'run_started') {
+    startMs = new Date(ev.ts).getTime();
+    startTimer();
     setPhase(1);
-    el('timer-disp').className='timer-big running';
-    el('simbtn').textContent='■ reset';el('simbtn').className='sim-btn run';
-    startRAF();
-    simTimer=setInterval(tick,75);
+    // Refresh state
+    fetchState();
   }
-
-  function tick(){
-    const {mc}=V();
-    if(done>=curT){endCultivation();return;}
-    const perTick=Math.max(1,Math.round(mc*0.055));
-    done=Math.min(curT,done+perTick);
-    const pct=Math.round(done/curT*100);
-    el('hbar').style.width=pct+'%';
-    el('pct-lbl').textContent=pct+'%';
-    el('st-p').textContent=pct+'%';
-    el('st-p').style.color=pct>=80?'var(--green)':pct>30?'var(--amber)':'';
-    updateStats(mc);drawPool(mc);
-    if(pct>=80&&phase===1){setPhase(2);el('hbar').style.background='var(--green)';}
+  else if (ev.kind === 'leaf_fruited' || ev.kind === 'leaf_failed') {
+    // Update leaf in state and re-render
+    if (state) {
+      const leaf = state.leaves?.find(l=>l.id === ev.data?.leaf_id);
+      if (leaf) {
+        leaf.status = ev.kind === 'leaf_fruited' ? 'done' : 'failed';
+        applyState(state);
+      } else {
+        fetchState();
+      }
+    }
   }
-
-  function endCultivation(){
-    clearInterval(simTimer);simTimer=null;simOn=false;
-    done=curT;
-    elapsedMs=Date.now()-startMs;
-    stopRAF();renderTimer();
-    el('timer-disp').className='timer-big done';
-    el('hbar').style.width='100%';el('hbar').style.background='var(--green)';
-    el('pct-lbl').textContent='100%';el('st-p').textContent='100%';
-    el('st-p').style.color='var(--green)';
-    updateStats(V().mc);drawPool(V().mc);
-    el('st-r').textContent='0';el('st-q').textContent='0';
-    setTimeout(startDDP,700);
+  else if (ev.kind === 'leaf_started') {
+    if (state) {
+      const leaf = state.leaves?.find(l=>l.id === ev.data?.leaf_id);
+      if (leaf) { leaf.status = 'active'; applyState(state); }
+    }
   }
-
-  function hardReset(){
-    if(simTimer){clearInterval(simTimer);simTimer=null;}
-    if(ddpTimer){clearTimeout(ddpTimer);ddpTimer=null;}
-    if(ddpRaf){cancelAnimationFrame(ddpRaf);ddpRaf=null;}
-    stopRAF();
-    simOn=false;ddpOn=false;ddpIdx=-1;phase=0;
-    el('simbtn').textContent='▶ run cultivate';el('simbtn').className='sim-btn';
-    resetPhases();
+  else if (ev.kind === 'ddp_stage_started') {
+    initDDP();
+    const stageId = ev.data?.stage_id;
+    const ddp = DDP_STAGES.find(d=>d.lbl===stageId);
+    if (ddp) {
+      const sbox=el('sbox-'+ddp.id), slbl=el('slbl-'+ddp.id), sdur=el('sdur-'+ddp.id);
+      if(sbox)sbox.className='stage-box active';
+      if(slbl)slbl.className='stage-lbl active';
+      if(sdur){sdur.className='stage-dur live';const t0=Date.now();const intv=setInterval(()=>{if(!el('sbox-'+ddp.id)||el('sbox-'+ddp.id).className.includes('done')){clearInterval(intv);return;}sdur.textContent=((Date.now()-t0)/1000).toFixed(1)+'s';},100);}
+    }
   }
-
-  // ── DIGITAL DASH ──────────────────────────────────────────────
-  function startDDP(){
-    ddpOn=true;ddpIdx=0;ddpStart=Date.now();
-    setPhase(3);
-    el('ddp-wrap').classList.add('visible');
-    buildPipeline();
-    const ddpClockStep=()=>{
-      if(!ddpOn)return;
-      const e=Date.now()-ddpStart;
-      el('ddp-elapsed').textContent='+'+fmtClock(e);
-      ddpRaf=requestAnimationFrame(ddpClockStep);
-    };
-    ddpRaf=requestAnimationFrame(ddpClockStep);
-    runDDPStage(0);
+  else if (ev.kind === 'ddp_stage_ended') {
+    const stageId = ev.data?.stage_id;
+    const ddp = DDP_STAGES.find(d=>d.lbl===stageId);
+    if (ddp) {
+      const sbox=el('sbox-'+ddp.id), slbl=el('slbl-'+ddp.id), sdur=el('sdur-'+ddp.id), conn=el('conn-'+ddp.id);
+      if(sbox)sbox.className='stage-box done';
+      if(slbl)slbl.className='stage-lbl done';
+      if(sdur){sdur.className='stage-dur fin';if(ev.data?.wall_ms)sdur.textContent=fmtMs(ev.data.wall_ms);}
+      if(conn)conn.className='pipe-conn done';
+    }
   }
-
-  function runDDPStage(idx){
-    if(idx>=DDP.length){endDDP();return;}
-    const st=DDP[idx];
-    el('sbox-'+st.id).className='stage-box active';
-    el('slbl-'+st.id).className='stage-lbl active';
-    const sdur=el('sdur-'+st.id);
-    sdur.className='stage-dur live';
-    const t0=Date.now();
-    let durInt=setInterval(()=>{sdur.textContent=((Date.now()-t0)/1000).toFixed(1)+'s';},60);
-    ddpTimer=setTimeout(()=>{
-      clearInterval(durInt);
-      const took=((Date.now()-t0)/1000).toFixed(2)+'s';
-      sdur.textContent=took;sdur.className='stage-dur fin';
-      el('sbox-'+st.id).className='stage-box done';
-      el('slbl-'+st.id).className='stage-lbl done';
-      if(idx<DDP.length-1)el('conn-'+st.id).className='pipe-conn done';
-      runDDPStage(idx+1);
-    },st.dur);
-  }
-
-  function endDDP(){
-    ddpOn=false;
-    if(ddpRaf){cancelAnimationFrame(ddpRaf);ddpRaf=null;}
-    const ddpTotal=DDP.reduce((a,s)=>a+s.dur,0);
+  else if (ev.kind === 'run_ended') {
+    el('timer-disp').className = 'timer-big done';
+    el('timer-label').textContent = 'cultivation complete';
     setPhase(4);
-    el('timer-disp').className='timer-big deployed';
-    el('timer-disp').textContent='DEPLOYED';
-    el('timer-phase').textContent='production deploy complete — organism fulfilled';
-    el('simbtn').textContent='↺ run again';el('simbtn').className='sim-btn fin';
-    const total=elapsedMs+ddpTotal;
-    const su=Math.round(curT*45000/total);
-    el('ddp-footer').innerHTML=[
-      {n:fmtMs(elapsedMs),k:'cultivation time'},
-      {n:fmtMs(ddpTotal),k:'CI/CD pipeline'},
-      {n:fmtMs(total),k:'total end-to-end'},
-      {n:su+'×',k:'vs sequential'},
-    ].map(i=>`<div class="ddp-stat"><div class="ddp-stat-n">${i.n}</div><div class="ddp-stat-k">${i.k}</div></div>`).join('');
+    fetchState();
   }
-
-  // ── PRESETS ───────────────────────────────────────────────────
-  window.preset=function preset(b,s,l,e){
-    document.getElementById('sl-b').value=b;
-    document.getElementById('sl-s').value=s;
-    document.getElementById('sl-l').value=l;
-    done=0;hardReset();upd();
-    document.querySelectorAll('.pbtn').forEach(btn=>btn.classList.remove('on'));
-    if(e&&e.target)e.target.classList.add('on');
-  };
-
-  window.upd=upd;
-  window.addEventListener('resize',()=>upd());
-  window.addEventListener('load',()=>upd());
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// LIVE MODE — connects to /api/state + /api/events/stream (SSE)
-// ═══════════════════════════════════════════════════════════════════════════
-if (!DEMO_MODE) {
-  let liveState = null;          // latest SporeNetState from /api/state
-  let liveMc = 50;               // running count used for pool renderer
-  let liveStartMs = null;        // wall-clock start derived from state
-  let liveRafId = null;
-  let sseSource = null;
-  let sseRetryDelay = 1000;
-  let ddpStageActive = {};       // stageId → start timestamp
-  let ddpLaunched = false;
+// ── SSE connection ────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (sseSource) { try{sseSource.close();}catch(e){} }
+  sseSource = new EventSource('/api/events/stream');
+  sseSource.onopen = () => { sseRetry=1000; el('badge-sse').style.display='flex'; };
+  sseSource.onmessage = (e) => { try { handleEvent(JSON.parse(e.data)); } catch(err){} };
+  sseSource.onerror = () => {
+    el('badge-sse').style.display='none';
+    sseSource.close();
+    setTimeout(connectSSE, sseRetry);
+    sseRetry = Math.min(sseRetry*2, 30000);
+  };
+}
 
-  // ── helpers ──────────────────────────────────────────────────────────────
-  function esc(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-  function applyState(state) {
-    if (!state) return;
-    liveState = state;
-
-    const total = state.total || 0;
-    const leaves = state.leaves || [];
-    const doneLeaves  = leaves.filter(l => l.status === 'done').length;
-    const failed      = leaves.filter(l => l.status === 'failed').length;
-    const active      = leaves.filter(l => l.status === 'active').length;
-
-    curT = total;
-    done = doneLeaves;
-    liveMc = Math.max(active, 1);
-
-    // Biome breakdown for eq-bar
-    const biomes = [...new Set(leaves.map(l => l.agent).filter(Boolean))];
-    const numBiomes = biomes.length || 1;
-    const leavesPerBiome = Math.round(total / numBiomes) || 1;
-
-    el('eq-b').textContent = numBiomes;
-    el('eq-s').textContent = leavesPerBiome;
-    el('eq-l').textContent = '1';
-    el('eq-t').textContent = total.toLocaleString();
-    el('st-t').textContent = total.toLocaleString();
-    el('tc-seq').textContent = fmtMs(total * 45000);
-
-    // Header organism name
-    const eyebrow = document.querySelector('.eyebrow');
-    if (eyebrow && state.organism) eyebrow.textContent = state.organism + ' — live cultivation';
-
-    // Update biome labels on tree using real biome names
-    // (DNAMES gets overridden at draw time via biomeNames param)
-    window._liveNames = biomes.slice(0, 10).map(b => b.replace(/-agent$/,'').slice(0,8));
-
-    // Live badge
-    const badge = document.querySelector('.live-badge');
-    if (badge) badge.style.display = 'flex';
-
-    // Phase inference
-    const pct = total > 0 ? doneLeaves / total : 0;
-    let inferredPhase = 0;
-    if (doneLeaves > 0 || active > 0) inferredPhase = 1;
-    if (pct >= 0.8 && doneLeaves > 0) inferredPhase = 2;
-    if (ddpLaunched) inferredPhase = 3;
-    if (phase < inferredPhase) setPhase(inferredPhase);
-
-    // Update progress bar
-    const pctNum = total > 0 ? Math.round(pct * 100) : 0;
-    el('hbar').style.width = pctNum + '%';
-    el('pct-lbl').textContent = pctNum + '%';
-    el('st-p').textContent = pctNum + '%';
-    el('st-p').style.color = pctNum >= 80 ? 'var(--green)' : pctNum > 30 ? 'var(--amber)' : '';
-    if (pctNum >= 80) el('hbar').style.background = 'var(--green)';
-
-    // Wall clock start time
-    if (!liveStartMs && state.started_at) {
-      liveStartMs = new Date(state.started_at).getTime();
-      if (!liveRafId && inferredPhase >= 1) startLiveTimer();
-    }
-
-    updateStats(liveMc);
-    redraw();
+// ── initial state fetch ───────────────────────────────────────────────────────
+async function fetchState() {
+  try {
+    const r = await fetch('/api/state');
+    if (r.ok) applyState(await r.json());
+    else { el('idle-state').style.display=''; el('live-state').style.display='none'; }
+  } catch(e) {
+    el('idle-state').style.display=''; el('live-state').style.display='none';
   }
+}
 
-  function redraw() {
-    const names = window._liveNames || DNAMES;
-    const b = names.length || 5;
-    // Override DNAMES locally for this draw
-    const orig = DNAMES.slice();
-    for (let i = 0; i < 10; i++) DNAMES[i] = names[i] || orig[i];
-    drawTree(b, 1, Math.ceil(curT / b) || 1);
-    for (let i = 0; i < 10; i++) DNAMES[i] = orig[i];
-    drawPool(liveMc);
-  }
+// ── boot ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await fetchState();
+  connectSSE();
+  // Safety poll every 5s (catches missed events on reconnect)
+  setInterval(fetchState, 5000);
+  // Redraw tree on resize
+  window.addEventListener('resize', drawTree);
+}
 
-  // ── live timer ───────────────────────────────────────────────────────────
-  function startLiveTimer() {
-    if (liveRafId) return;
-    el('timer-disp').className = 'timer-big running';
-    function tick() {
-      if (liveStartMs) {
-        elapsedMs = Date.now() - liveStartMs;
-        renderTimer();
-      }
-      liveRafId = requestAnimationFrame(tick);
-    }
-    liveRafId = requestAnimationFrame(tick);
-  }
-
-  function stopLiveTimer() {
-    if (liveRafId) { cancelAnimationFrame(liveRafId); liveRafId = null; }
-  }
-
-  // ── SSE event handler ─────────────────────────────────────────────────────
-  function handleSSEEvent(ev) {
-    if (!ev || !ev.kind) return;
-    switch (ev.kind) {
-      case 'run_started':
-        liveStartMs = new Date(ev.ts).getTime();
-        if (!liveRafId) startLiveTimer();
-        setPhase(1);
-        el('timer-disp').className = 'timer-big running';
-        break;
-      case 'leaf_fruited':
-        done = Math.min(curT, done + 1);
-        liveMc = Math.max(liveMc - 1, 0);
-        break;
-      case 'leaf_started':
-        liveMc = Math.min(liveMc + 1, curT - done);
-        break;
-      case 'leaf_failed':
-        done = Math.min(curT, done + 1);
-        liveMc = Math.max(liveMc - 1, 0);
-        break;
-      case 'ddp_stage_started': {
-        if (!ddpLaunched) {
-          ddpLaunched = true;
-          el('ddp-wrap').classList.add('visible');
-          buildPipeline();
-          setPhase(3);
-          const ddpClockStart = Date.now();
-          (function ddpClock(){
-            el('ddp-elapsed').textContent = '+' + fmtClock(Date.now() - ddpClockStart);
-            if (phase === 3) requestAnimationFrame(ddpClock);
-          })();
-        }
-        const stageId = ev.data && ev.data.stage_id;
-        if (stageId) {
-          ddpStageActive[stageId] = Date.now();
-          const ddpEntry = DDP.find(d => d.lbl === stageId || d.id === stageId.replace('-',''));
-          if (ddpEntry) {
-            const sbox = document.getElementById('sbox-' + ddpEntry.id);
-            const slbl = document.getElementById('slbl-' + ddpEntry.id);
-            const sdur = document.getElementById('sdur-' + ddpEntry.id);
-            if (sbox) sbox.className = 'stage-box active';
-            if (slbl) slbl.className = 'stage-lbl active';
-            if (sdur) {
-              sdur.className = 'stage-dur live';
-              const t0 = Date.now();
-              const intv = setInterval(() => {
-                if (!ddpStageActive[stageId]) { clearInterval(intv); return; }
-                sdur.textContent = ((Date.now() - t0) / 1000).toFixed(1) + 's';
-              }, 100);
-            }
-          }
-        }
-        break;
-      }
-      case 'ddp_stage_ended': {
-        const stageId = ev.data && ev.data.stage_id;
-        if (stageId) {
-          const t0 = ddpStageActive[stageId] || Date.now();
-          delete ddpStageActive[stageId];
-          const ddpEntry = DDP.find(d => d.lbl === stageId || d.id === stageId.replace('-',''));
-          if (ddpEntry) {
-            const sbox = document.getElementById('sbox-' + ddpEntry.id);
-            const slbl = document.getElementById('slbl-' + ddpEntry.id);
-            const sdur = document.getElementById('sdur-' + ddpEntry.id);
-            if (sbox) sbox.className = 'stage-box done';
-            if (slbl) slbl.className = 'stage-lbl done';
-            if (sdur) { sdur.textContent = ((Date.now() - t0) / 1000).toFixed(2) + 's'; sdur.className = 'stage-dur fin'; }
-            const idx = DDP.indexOf(ddpEntry);
-            const conn = document.getElementById('conn-' + ddpEntry.id);
-            if (conn) conn.className = 'pipe-conn done';
-          }
-        }
-        break;
-      }
-      case 'run_ended':
-        stopLiveTimer();
-        setPhase(4);
-        el('timer-disp').className = 'timer-big done';
-        break;
-    }
-
-    const pct = curT > 0 ? Math.round(done / curT * 100) : 0;
-    el('hbar').style.width = pct + '%';
-    el('pct-lbl').textContent = pct + '%';
-    el('st-p').textContent = pct + '%';
-    el('st-p').style.color = pct >= 80 ? 'var(--green)' : pct > 30 ? 'var(--amber)' : '';
-    if (pct >= 80) { el('hbar').style.background = 'var(--green)'; if (phase < 2) setPhase(2); }
-    el('tc-par').textContent = fmtMs(elapsedMs);
-    if (elapsedMs > 200 && curT > 0) el('speedup-n').textContent = Math.round(curT * 45000 / elapsedMs) + '×';
-    updateStats(liveMc);
-    redraw();
-  }
-
-  // ── SSE connection with exponential backoff ───────────────────────────────
-  function connectSSE() {
-    if (sseSource) { try { sseSource.close(); } catch(e){} }
-    sseSource = new EventSource('/api/events/stream');
-    sseSource.onopen = () => { sseRetryDelay = 1000; };
-    sseSource.onmessage = (e) => {
-      try { handleSSEEvent(JSON.parse(e.data)); } catch(err) {}
-    };
-    sseSource.onerror = () => {
-      sseSource.close();
-      setTimeout(connectSSE, sseRetryDelay);
-      sseRetryDelay = Math.min(sseRetryDelay * 2, 30000);
-    };
-  }
-
-  // ── initial load ──────────────────────────────────────────────────────────
-  async function initLive() {
-    // Show idle defaults immediately
-    curT = 0; done = 0;
-    el('eq-b').textContent = '—'; el('eq-s').textContent = '—';
-    el('eq-l').textContent = '—'; el('eq-t').textContent = '—';
-    el('st-t').textContent = '0'; el('tc-seq').textContent = '—';
-    resetPhases();
-    drawTree(5, 8, 25);
-    updateStats(50);
-    drawPool(50);
-
-    // Fetch current state
-    try {
-      const resp = await fetch('/api/state');
-      if (resp.ok) {
-        const state = await resp.json();
-        applyState(state);
-      }
-    } catch(e) {
-      // No state yet — stay idle, SSE will wake us up
-    }
-
-    // Connect SSE for real-time updates
-    connectSSE();
-
-    // Poll state every 5s as a safety net (SSE can miss events on reconnect)
-    setInterval(async () => {
-      try {
-        const resp = await fetch('/api/state');
-        if (resp.ok) applyState(await resp.json());
-      } catch(e) {}
-    }, 5000);
-  }
-
-  window.addEventListener('resize', () => {
-    const b = (window._liveNames || DNAMES).length || 5;
-    redraw();
-  });
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initLive);
-  } else {
-    initLive();
-  }
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
 }
 </script>
 </body>
