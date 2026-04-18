@@ -236,6 +236,8 @@ The magic is in step 6: **no agent clocks out**. Resources flow to where they cr
 
 For a complete reference — schema, commands, execution model, HYPHA conventions, end-to-end workflow, authoring checklist, and known limits — see [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md).
 
+See DEVELOPER_GUIDE.md §13–14 for CI/CD and dashboard.
+
 ## Philosophy
 
 Read the full [Manifesto](./MANIFESTO.md).

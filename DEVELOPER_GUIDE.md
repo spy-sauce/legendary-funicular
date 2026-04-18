@@ -498,6 +498,135 @@ The composite action is just orchestration sugar — all CLI commands work stand
 
 ---
 
+## 14. Dashboard & Fleet View
+
+Visualize active cultivations in real time with the SporeNet dashboard. The server reads from `sporenet/state.json` (phase 1–2) and `.mycelium/events/<run_id>.jsonl` (phase 3) to render a live-updating canvas view of all leaves, biomes, and CI/CD stages.
+
+### 14.1 Starting the server
+
+```bash
+mycelium sporenet init              # scaffold sporenet/ with state.json
+mycelium sporenet serve --port 4444 # launch dashboard at localhost:4444
+```
+
+The `serve` command starts an HTTP server rooted in your organism directory. Open `http://localhost:4444` to see the live dashboard, or `http://localhost:4444/fleet` for the cross-organism fleet view.
+
+### 14.2 Route table
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/` | GET | Dashboard shell (`scale.html`) — canvas tree + session pool + DDP pipeline |
+| `/api/state` | GET | Current `sporenet/state.json` as JSON |
+| `/api/events` | GET | JSONL events from `.mycelium/events/<run_id>.jsonl`. Supports `?since=<ISO-ts>&limit=<n>` |
+| `/api/events/stream` | GET | SSE stream tailing the current JSONL run file. Real-time event push |
+| `/fleet` | GET | Fleet overview page — mini cards per organism |
+| `/api/fleet/organisms` | GET | List organisms with `name`, `last_run_at`, `run_count` |
+| `/api/fleet/organism/:name` | GET | Detail rollup: `avg_health`, `total_runs`, `total_cost_usd`, `stage_durations[]` |
+| `/diff/:leafId` | GET | Git diff for a completed leaf's commit (used by modal popup) |
+
+All routes are read-only. No authentication in v1 — assume localhost only.
+
+### 14.3 Dashboard phases
+
+The dashboard infers the current pipeline phase from event data:
+
+| Phase | Trigger | Visual indicator |
+|-------|---------|------------------|
+| **1 — cultivate** | `run_started` event or any `leaf_started` | Phase 1 pill active (teal), timer running, pool cells animate |
+| **2 — harvest** | Health ≥ 80% (FRUIT_READY leaves / total) | Phase 1 done (green), phase 2 active, progress bar turns green |
+| **3 — digital-dash** | First `ddp_stage_started` event | Phase 2 done, phase 3 active (purple), DDP pipeline block reveals |
+| **4 — done** | `run_ended` event or all DDP stages complete | All phases green, timer shows "DEPLOYED" |
+
+Phase inference happens client-side using both `/api/state` polling and `/api/events/stream` SSE. The server doesn't store phase — it's derived from event history.
+
+### 14.4 Simulator mode (`?demo=1`)
+
+The dashboard ships with a built-in simulator for demos and testing. Append `?demo=1` to the URL:
+
+```
+http://localhost:4444/?demo=1
+```
+
+Simulator mode enables:
+
+- **Configuration panel**: Sliders for biomes × specialists × leaves (2×2×2 up to 10×20×50)
+- **Max-concurrency slider**: Adjust `--max-concurrency` and watch pool behavior change
+- **Presets**: Quick buttons for 8 / 1k / 10k session counts
+- **Simulated run**: Click "▶ run cultivate" to animate a complete cultivation → harvest → DDP cycle
+
+Simulator mode is purely client-side — no API calls. Use it to show stakeholders what a cultivation looks like before spending tokens.
+
+### 14.5 scale.html data-binding slot
+
+The dashboard template (`cli/src/commands/sporenet/templates/scale.html`) expects a JSON blob in a script tag for server-side injection:
+
+```html
+<script id="mycelium-data" type="application/json">
+{
+  "organism": "my-app",
+  "run_id": "my-app-20260417T1830Z-a7f3",
+  "phase": 1,
+  "biomes": [
+    { "id": "auth-agent", "label": "auth", "leafCount": 4 },
+    { "id": "data-agent", "label": "data", "leafCount": 6 }
+  ],
+  "leaves": [
+    { "id": "auth.signup", "biome": "auth-agent", "status": "done", "wall_ms": 12340 },
+    { "id": "auth.login",  "biome": "auth-agent", "status": "active" }
+  ],
+  "stats": { "total": 10, "running": 2, "queued": 3, "done": 5, "health_pct": 50 },
+  "ddp": [
+    { "id": "merge-order", "status": "done", "wall_ms": 2100 },
+    { "id": "lint",        "status": "active" }
+  ],
+  "elapsed_ms": 45000
+}
+</script>
+```
+
+This slot follows the frozen schema in NUTRIENTS.md §9. In live mode, the dashboard ignores this slot and fetches data via `/api/state` + SSE. The slot exists for static HTML snapshots and pre-rendered reports.
+
+### 14.6 Fleet view
+
+The fleet view (`/fleet`) aggregates metrics across all organisms in `.mycelium/events/`. It uses DuckDB (WASM) to query JSONL files directly — no ETL step required.
+
+**What it shows:**
+
+- **Organism cards**: One card per distinct organism with run count and last-run timestamp
+- **Detail drill-down**: Click a card to see `avg_health`, `total_cost_usd`, and per-stage duration stats
+
+**How it works:**
+
+```
+┌─────────────────────┐      ┌──────────────────┐      ┌─────────────────┐
+│ .mycelium/events/   │ ──▶  │ DuckDB WASM      │ ──▶  │ /api/fleet/*    │
+│   *.jsonl           │      │ (read_json_auto) │      │ JSON responses  │
+└─────────────────────┘      └──────────────────┘      └─────────────────┘
+```
+
+Query functions live in `cli/src/lib/fleet/queries.ts`:
+
+| Function | Purpose |
+|----------|---------|
+| `listOrganisms()` | All organisms with `name`, `last_run_at`, `run_count` |
+| `organismRollup(name)` | `avg_health`, `total_runs`, `total_cost_usd`, `last_health`, `last_run_wall_ms` |
+| `stageDurations(name, lastN?)` | Average and p95 duration per DDP stage |
+| `leafFailureRate(name)` | Failure rate by biome (for alerting thresholds) |
+
+DuckDB is the one approved new dependency (per NUTRIENTS.md §10). If the `duckdb` npm package isn't installed, fleet routes return stub data and log no errors — the dashboard remains functional for single-organism use.
+
+### 14.7 Customizing the dashboard
+
+To extend or theme the dashboard:
+
+1. **Copy the template**: `cp cli/src/commands/sporenet/templates/scale.html my-dashboard.html`
+2. **Edit CSS variables**: Override `:root` vars (`--bg`, `--green`, `--dd`, etc.)
+3. **Serve your version**: Point `sporenet serve` at a directory containing your `index.html`, or mount your own static server
+
+The canvas renderers (`drawTree`, `drawPool`) and phase state machine are vanilla JS — no framework lock-in. All DOM updates use `document.getElementById`, making it easy to reskin.
+
+---
+
 That's the full surface area. A new dev should be able to read `cli/src/commands/cultivate.ts` + this guide and ship their own organism.
 
 *The network provides.* 🍄
