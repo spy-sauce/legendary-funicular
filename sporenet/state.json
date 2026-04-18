@@ -164,9 +164,10 @@
       "agent": "dashboard-agent",
       "tag": "DASHBOARD",
       "scope": "Copy templates/scale.html to cli/src/commands/sporenet/templates/scale.html with the simulation stripped",
-      "status": "failed",
+      "status": "done",
       "error": "Claude Code process exited with code 1",
-      "completed_at": "2026-04-17T22:42:45.927Z"
+      "completed_at": "2026-04-18T00:38:16.352Z",
+      "commit": "28de341a6b5ed62f4962f75b284789d35cd05aed"
     },
     {
       "id": "dashboard.template.databind",
