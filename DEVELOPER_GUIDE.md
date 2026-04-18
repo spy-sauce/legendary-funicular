@@ -388,25 +388,35 @@ Deploy stages are placeholders by default. To customize, create hook scripts in 
 └── deploy-prod.sh      # Production deployment
 ```
 
-The composite action sources these if present:
+The composite action sources these if present. Your hook scripts receive these environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `MYCELIUM_RUN_ID` | Unique run identifier for telemetry correlation |
+| `MYCELIUM_ORGANISM` | Organism name from `mycelium.yaml` |
+| `GITHUB_SHA` | Git commit SHA being deployed |
+| `GITHUB_REF` | Git ref (branch/tag) being deployed |
+
+Example hook:
 
 ```bash
 # .github/hooks/deploy-stg.sh
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Deploying to staging..."
-fly deploy --app my-app-staging
+echo "Deploying ${GITHUB_SHA:0:7} to staging..."
+kubectl apply -k overlays/staging/
+echo "Staging deployment complete for $MYCELIUM_ORGANISM"
 ```
 
-**Production gating:** `deploy-prod` only runs if the `MYCELIUM_PROD_APPROVED` environment variable is set to `true`. Use GitHub's environment protection rules to require manual approval:
+**Production gating:** `deploy-prod` only runs if `MYCELIUM_ALLOW_PROD=true`. Use GitHub's environment protection rules to require manual approval:
 
 ```yaml
 jobs:
   deploy-prod:
     environment: production   # requires approval in repo settings
     env:
-      MYCELIUM_PROD_APPROVED: "true"
+      MYCELIUM_ALLOW_PROD: "true"
 ```
 
 ### 13.6 Secrets and environment variables
@@ -416,7 +426,7 @@ jobs:
 | `ANTHROPIC_API_KEY` | **yes** | Claude API access for leaf sessions |
 | `MYCELIUM_SLACK_WEBHOOK` | no | Slack webhook URL for alerts (see NUTRIENTS.md §7) |
 | `MYCELIUM_S3_BUCKET` | no | S3 bucket for event log replication |
-| `MYCELIUM_PROD_APPROVED` | no | Gate for production deploy stage |
+| `MYCELIUM_ALLOW_PROD` | no | Gate for production deploy stage (`true` to enable) |
 
 **Never** commit secrets. Use GitHub repository secrets or environment secrets.
 
@@ -426,13 +436,15 @@ Each DDP stage is wrapped by `.github/scripts/ddp-emit.sh`, which writes events 
 
 ```bash
 # Emits ddp_stage_started event
-./ddp-emit.sh start <stage-id>
+./.github/scripts/ddp-emit.sh <stage-id> start
 
 # Run the stage...
 
 # Emits ddp_stage_ended event with status
-./ddp-emit.sh end <stage-id> <success|failure|skipped> <wall_ms>
+./.github/scripts/ddp-emit.sh <stage-id> end <success|failure|skipped>
 ```
+
+The script automatically calculates `wall_ms` from the start/end timestamps.
 
 Event payloads follow the frozen schema in NUTRIENTS.md §1:
 
@@ -453,15 +465,19 @@ Event payloads follow the frozen schema in NUTRIENTS.md §1:
 
 ### 13.8 Artifacts
 
-The action uploads three artifacts on completion:
+The action uploads a single artifact on completion:
 
-| Artifact | Contents |
-|----------|----------|
-| `mycelium-events-<run_id>` | `.mycelium/events/<run_id>.jsonl` — full event log |
-| `mycelium-state-<run_id>` | `sporenet/state.json` — final leaf states |
-| `mycelium-cellular-map` | `CELLULAR-MAP.md` — tree visualization |
+**Artifact name:** `mycelium-run-<run_id>`
 
-Download artifacts via the GitHub Actions UI or API for post-hoc analysis, dashboard replay, or fleet aggregation.
+**Contents:**
+
+| File | Description |
+|------|-------------|
+| `.mycelium/events/<run_id>.jsonl` | Full event log (all lifecycle + DDP stage events) |
+| `sporenet/state.json` | Final leaf states for dashboard replay |
+| `CELLULAR-MAP.md` | Tree visualization of the organism |
+
+Artifacts are retained for 30 days. Download via the GitHub Actions UI or API for post-hoc analysis, dashboard replay, or fleet aggregation.
 
 ### 13.9 Local simulation
 

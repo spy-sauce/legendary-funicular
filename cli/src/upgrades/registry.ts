@@ -14,6 +14,9 @@ import crashRecovery from "./crash-recovery.js";
 import depth3Enforcement from "./depth-3-enforcement.js";
 import cacheHeaders from "./cache-headers.js";
 import routingMap from "./routing-map.js";
+import telemetryEmitter from "./telemetry-emitter.js";
+import costTracker from "./cost-tracker.js";
+import alerting from "./alerting.js";
 
 const BUNDLED: Upgrade[] = [
   hyphaValidator,
@@ -21,6 +24,9 @@ const BUNDLED: Upgrade[] = [
   depth3Enforcement,
   cacheHeaders,
   routingMap,
+  telemetryEmitter,
+  costTracker,
+  alerting,
 ];
 
 export const REGISTRY: Map<string, Upgrade> = new Map(
