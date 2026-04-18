@@ -31,7 +31,8 @@ export interface DuckDBConnection {
 // Module-level singleton state for lazy initialization
 let dbInstance: unknown | null = null;
 let connInstance: unknown | null = null;
-let duckdbModule: typeof import("duckdb") | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let duckdbModule: any | null = null;
 let initPromise: Promise<void> | null = null;
 let isClosed = false;
 
@@ -58,6 +59,8 @@ async function ensureInitialized(): Promise<void> {
   initPromise = (async () => {
     try {
       // Dynamic import for optional runtime dependency
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore — duckdb is an optional peer dep; absence is handled in catch
       duckdbModule = await import("duckdb");
 
       // DuckDB's default export is the Database constructor

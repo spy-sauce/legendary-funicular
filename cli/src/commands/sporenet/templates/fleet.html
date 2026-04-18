@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fleet Overview - Mycelium</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#08080a;--bg2:#111114;--bg3:#18181c;--bg4:#1f1f24;
+  --border:#27272d;--border2:#3f3f48;
+  --text:#f4f4f5;--muted:#71717a;--muted2:#52525b;
+  --green:#22c55e;--green2:#16a34a;--green3:#052e16;
+  --teal:#2dd4bf;--teal2:#0d9488;
+  --amber:#fbbf24;--red:#f87171;
+  --dd:#7c3aed;--dd2:#a78bfa;--dd3:#2e1065;
+}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:52px 52px;opacity:.22;pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:36px 28px 80px}
+
+/* HEADER */
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;gap:20px;flex-wrap:wrap}
+.eyebrow{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.18em;color:var(--teal);text-transform:uppercase;margin-bottom:8px}
+h1{font-size:clamp(1.9rem,4vw,2.9rem);font-weight:800;line-height:1.05;letter-spacing:-.02em}
+h1 .g{color:var(--green)}h1 .d{color:var(--dd2)}
+.sub{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.65;max-width:440px}
+.badges{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--border2);border-radius:100px;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);background:var(--bg2)}
+.bdot{width:6px;height:6px;border-radius:50%}
+.bdot.g{background:var(--green);animation:bpulse 2s ease-in-out infinite}
+.bdot.p{background:var(--dd2)}
+@keyframes bpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
+
+/* SUMMARY BAR */
+.summary-bar{display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:24px;background:var(--bg2)}
+.summary-seg{flex:1;padding:14px 16px;border-right:1px solid var(--border);text-align:center}
+.summary-seg:last-child{border-right:none}
+.summary-n{font-family:'Space Mono',monospace;font-size:22px;font-weight:700;line-height:1}
+.summary-n.green{color:var(--green)}
+.summary-n.teal{color:var(--teal)}
+.summary-n.amber{color:var(--amber)}
+.summary-k{font-size:9px;color:var(--muted);margin-top:3px;letter-spacing:.04em}
+
+/* ORGANISM CARDS GRID */
+.fleet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;margin-top:16px}
+@media(max-width:480px){.fleet-grid{grid-template-columns:1fr}}
+
+/* ORGANISM CARD */
+.org-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:border-color .2s,transform .15s,box-shadow .2s}
+.org-card:hover{border-color:var(--teal);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.org-card:focus{outline:2px solid var(--teal);outline-offset:2px}
+
+.org-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.org-name{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--text)}
+.org-health{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:3px 10px;border-radius:100px;background:var(--bg3);border:1px solid var(--border2)}
+.org-health.good{color:var(--green);border-color:var(--green2);background:var(--green3)}
+.org-health.warn{color:var(--amber);border-color:var(--amber);background:rgba(251,191,36,.08)}
+.org-health.bad{color:var(--red);border-color:var(--red);background:rgba(248,113,113,.08)}
+
+.org-meta{display:flex;gap:16px;margin-bottom:14px;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+.org-meta span{display:flex;align-items:center;gap:4px}
+.org-meta .val{color:var(--text);font-weight:600}
+
+/* MINI TREE CANVAS */
+.mini-tree-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:12px}
+.mini-tree{width:100%;height:80px;display:block}
+
+/* STATS ROW IN CARD */
+.org-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.org-stat{background:var(--bg3);border-radius:6px;padding:8px 10px;text-align:center}
+.org-stat-n{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;margin-bottom:1px}
+.org-stat-n.green{color:var(--green)}
+.org-stat-n.teal{color:var(--teal)}
+.org-stat-n.amber{color:var(--amber)}
+.org-stat-n.muted{color:var(--muted)}
+.org-stat-k{font-size:8px;color:var(--muted);letter-spacing:.04em}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:80px 32px;background:var(--bg2);border:1px solid var(--border);border-radius:10px}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.4}
+.empty-title{font-family:'Space Mono',monospace;font-size:14px;color:var(--muted);margin-bottom:8px}
+.empty-sub{font-size:11px;color:var(--muted2);max-width:360px;margin:0 auto;line-height:1.6}
+
+/* LOADING STATE */
+.loading{text-align:center;padding:60px 32px}
+.loading-spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+
+/* FOOTER */
+footer{margin-top:48px;text-align:center;font-family:'Space Mono',monospace;font-size:10px;color:var(--muted2);padding:16px;border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hdr">
+    <div>
+      <div class="eyebrow">MYC Fleet Overview</div>
+      <h1><span class="g">Mycelium</span> <span class="d">Fleet</span></h1>
+      <p class="sub">Cross-organism dashboard. Every cultivation, every organism, unified health at a glance.</p>
+    </div>
+    <div class="badges">
+      <div class="badge"><span class="bdot g"></span>fleet active</div>
+      <div class="badge">read-only mode</div>
+    </div>
+  </header>
+
+  <!-- Summary bar -->
+  <div class="summary-bar" id="summary-bar">
+    <div class="summary-seg"><div class="summary-n teal" id="sum-organisms">-</div><div class="summary-k">organisms</div></div>
+    <div class="summary-seg"><div class="summary-n green" id="sum-runs">-</div><div class="summary-k">total runs</div></div>
+    <div class="summary-seg"><div class="summary-n" id="sum-health">-</div><div class="summary-k">avg health</div></div>
+    <div class="summary-seg"><div class="summary-n amber" id="sum-cost">-</div><div class="summary-k">total cost (USD)</div></div>
+  </div>
+
+  <!-- Fleet grid container -->
+  <div id="fleet-container">
+    <div class="loading">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading organisms...</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Mycelium Framework &middot; VibeSpace LLC &middot; the network provides</footer>
+
+<script>
+(function(){
+  'use strict';
+
+  const API_ORGANISMS = '/api/fleet/organisms';
+  const API_ORGANISM_DETAIL = '/api/fleet/organism/';
+
+  // ── Utility ──────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '-';
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const diff = now - d;
+      if (diff < 60000) return 'just now';
+      if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+      return d.toLocaleDateString();
+    } catch {
+      return iso;
+    }
+  }
+
+  function fmtMs(ms) {
+    if (ms == null || isNaN(ms)) return '-';
+    if (ms < 1000) return ms + 'ms';
+    if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+    return Math.floor(ms / 60000) + 'm ' + ((ms % 60000) / 1000).toFixed(0) + 's';
+  }
+
+  function fmtUsd(n) {
+    if (n == null || isNaN(n)) return '-';
+    if (n === 0) return '$0.00';
+    if (n < 0.01) return '<$0.01';
+    return '$' + n.toFixed(2);
+  }
+
+  function healthClass(h) {
+    if (h == null || isNaN(h)) return '';
+    if (h >= 0.8) return 'good';
+    if (h >= 0.5) return 'warn';
+    return 'bad';
+  }
+
+  function healthPct(h) {
+    if (h == null || isNaN(h)) return '-';
+    return Math.round(h * 100) + '%';
+  }
+
+  // ── Mini Tree Renderer ───────────────────────────────────────────
+  // Simplified version of scale.html tree — renders biome fan for organism
+  function drawMiniTree(canvas, biomes, health) {
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.offsetWidth || 300;
+    const H = canvas.offsetHeight || 80;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const numBiomes = biomes || 5;
+    const pad = 16;
+    const avail = W - pad * 2;
+    const bw = Math.min(50, Math.floor((avail - (numBiomes - 1) * 6) / numBiomes));
+    const gap = numBiomes > 1 ? (avail - numBiomes * bw) / (numBiomes - 1) : 0;
+
+    // Root node
+    const rx = W / 2, ry = 8;
+    rrect(ctx, rx - 30, ry, 60, 16, 3, '#18181c', '#2dd4bf');
+    tctx(ctx, 'root', rx, ry + 8, 7, '#2dd4bf');
+
+    // Biomes
+    const by = 36, bh = 16;
+    const fy = H - 4;
+
+    // Color based on health
+    const lineColor = health >= 0.8 ? '#22c55e' : (health >= 0.5 ? '#fbbf24' : '#f87171');
+    const lineColorFaded = health >= 0.8 ? 'rgba(34,197,94,0.25)' : (health >= 0.5 ? 'rgba(251,191,36,0.25)' : 'rgba(248,113,113,0.25)');
+
+    for (let i = 0; i < numBiomes; i++) {
+      const bx = pad + i * (bw + gap);
+      const cx = bx + bw / 2;
+
+      // Line from root to biome
+      ctx.beginPath();
+      ctx.moveTo(rx, ry + 16);
+      ctx.lineTo(cx, by);
+      ctx.strokeStyle = '#27272d';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+
+      // Biome box
+      rrect(ctx, bx, by, bw, bh, 3, '#18181c', '#0d9488');
+      tctx(ctx, 'b' + (i + 1), cx, by + bh / 2, 6, '#2dd4bf');
+
+      // Fan lines (leaves)
+      const fn = Math.min(8, 3 + Math.floor(Math.random() * 5));
+      const fw = bw * 0.8;
+      for (let j = 0; j < fn; j++) {
+        const t = fn <= 1 ? 0.5 : j / (fn - 1);
+        const lx = bx + (bw - fw) * 0.5 + t * fw;
+        const a = 0.15 + 0.5 * (1 - Math.abs(t - 0.5) * 2);
+        ctx.beginPath();
+        ctx.moveTo(cx, by + bh);
+        ctx.bezierCurveTo(cx, by + bh + 12, lx, fy - 10, lx, fy);
+        ctx.strokeStyle = `rgba(${health >= 0.8 ? '34,197,94' : (health >= 0.5 ? '251,191,36' : '248,113,113')},${a})`;
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+    }
+  }
+
+  function rrect(ctx, x, y, w, h, r, fill, stroke) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+
+  function tctx(ctx, t, x, y, fs, c) {
+    ctx.font = `700 ${fs}px 'Space Mono', monospace`;
+    ctx.fillStyle = c;
+    ctx.textAlign = 'center';
+    ctx.fillText(t, x, y + fs * 0.35);
+  }
+
+  // ── Render Card ──────────────────────────────────────────────────
+  function renderCard(org, detail) {
+    const health = detail?.last_health ?? detail?.avg_health ?? null;
+    const healthCls = healthClass(health);
+    const healthStr = healthPct(health);
+    const runs = org.run_count ?? detail?.total_runs ?? 0;
+    const cost = detail?.total_cost_usd ?? null;
+    const lastWall = detail?.last_run_wall_ms ?? null;
+    const biomeCount = 5 + Math.floor(Math.random() * 3); // Simulated — real would come from data
+
+    const cardId = 'card-' + esc(org.name).replace(/[^a-z0-9]/gi, '-');
+    const canvasId = 'tree-' + esc(org.name).replace(/[^a-z0-9]/gi, '-');
+
+    return `
+      <div class="org-card" id="${cardId}" data-organism="${esc(org.name)}" tabindex="0" role="button" aria-label="View ${esc(org.name)} dashboard">
+        <div class="org-header">
+          <span class="org-name">${esc(org.name)}</span>
+          <span class="org-health ${healthCls}">${healthStr}</span>
+        </div>
+        <div class="org-meta">
+          <span>last run: <span class="val">${fmtDate(org.last_run_at)}</span></span>
+          <span>duration: <span class="val">${fmtMs(lastWall)}</span></span>
+        </div>
+        <div class="mini-tree-wrap">
+          <canvas class="mini-tree" id="${canvasId}" data-biomes="${biomeCount}" data-health="${health ?? 0.8}"></canvas>
+        </div>
+        <div class="org-stats">
+          <div class="org-stat">
+            <div class="org-stat-n green">${runs}</div>
+            <div class="org-stat-k">runs</div>
+          </div>
+          <div class="org-stat">
+            <div class="org-stat-n ${healthCls || 'muted'}">${healthStr}</div>
+            <div class="org-stat-k">health</div>
+          </div>
+          <div class="org-stat">
+            <div class="org-stat-n amber">${fmtUsd(cost)}</div>
+            <div class="org-stat-k">cost</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Empty State ──────────────────────────────────────────────────
+  function renderEmptyState() {
+    return `
+      <div class="empty-state">
+        <div class="empty-icon">&#x1F344;</div>
+        <div class="empty-title">No organisms found</div>
+        <div class="empty-sub">Run a cultivation to see your organisms here. Event logs are read from <code>.mycelium/events/</code></div>
+      </div>
+    `;
+  }
+
+  // ── Update Summary Bar ───────────────────────────────────────────
+  function updateSummary(organisms, details) {
+    const sumOrganisms = document.getElementById('sum-organisms');
+    const sumRuns = document.getElementById('sum-runs');
+    const sumHealth = document.getElementById('sum-health');
+    const sumCost = document.getElementById('sum-cost');
+
+    const totalOrgs = organisms.length;
+    let totalRuns = 0;
+    let totalCost = 0;
+    let healthSum = 0;
+    let healthCount = 0;
+
+    for (const org of organisms) {
+      totalRuns += org.run_count ?? 0;
+      const d = details[org.name];
+      if (d) {
+        totalCost += d.total_cost_usd ?? 0;
+        if (d.avg_health != null) {
+          healthSum += d.avg_health;
+          healthCount++;
+        }
+      }
+    }
+
+    const avgHealth = healthCount > 0 ? healthSum / healthCount : null;
+
+    sumOrganisms.textContent = totalOrgs;
+    sumRuns.textContent = totalRuns;
+    sumHealth.textContent = healthPct(avgHealth);
+    sumHealth.className = 'summary-n ' + healthClass(avgHealth);
+    sumCost.textContent = fmtUsd(totalCost);
+  }
+
+  // ── Main Load ────────────────────────────────────────────────────
+  async function loadFleet() {
+    const container = document.getElementById('fleet-container');
+
+    try {
+      // Fetch organism list
+      const orgRes = await fetch(API_ORGANISMS);
+      if (!orgRes.ok) throw new Error('Failed to fetch organisms');
+      const organisms = await orgRes.json();
+
+      if (!organisms || organisms.length === 0) {
+        container.innerHTML = renderEmptyState();
+        return;
+      }
+
+      // Fetch details for each organism in parallel
+      const detailPromises = organisms.map(async (org) => {
+        try {
+          const detailRes = await fetch(API_ORGANISM_DETAIL + encodeURIComponent(org.name));
+          if (!detailRes.ok) return [org.name, null];
+          return [org.name, await detailRes.json()];
+        } catch {
+          return [org.name, null];
+        }
+      });
+
+      const detailResults = await Promise.all(detailPromises);
+      const details = Object.fromEntries(detailResults);
+
+      // Update summary bar
+      updateSummary(organisms, details);
+
+      // Render cards
+      const cards = organisms.map(org => renderCard(org, details[org.name])).join('');
+      container.innerHTML = `<div class="fleet-grid">${cards}</div>`;
+
+      // Draw mini trees
+      requestAnimationFrame(() => {
+        for (const org of organisms) {
+          const canvasId = 'tree-' + org.name.replace(/[^a-z0-9]/gi, '-');
+          const canvas = document.getElementById(canvasId);
+          if (canvas) {
+            const biomes = parseInt(canvas.dataset.biomes, 10) || 5;
+            const health = parseFloat(canvas.dataset.health) || 0.8;
+            drawMiniTree(canvas, biomes, health);
+          }
+        }
+      });
+
+      // Attach click handlers
+      for (const org of organisms) {
+        const cardId = 'card-' + org.name.replace(/[^a-z0-9]/gi, '-');
+        const card = document.getElementById(cardId);
+        if (card) {
+          card.addEventListener('click', () => {
+            window.location.href = '/?organism=' + encodeURIComponent(org.name);
+          });
+          card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              window.location.href = '/?organism=' + encodeURIComponent(org.name);
+            }
+          });
+        }
+      }
+
+    } catch (err) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">&#x26A0;</div>
+          <div class="empty-title">Error loading fleet</div>
+          <div class="empty-sub">${esc(String(err))}</div>
+        </div>
+      `;
+    }
+  }
+
+  // ── Resize handling ──────────────────────────────────────────────
+  function handleResize() {
+    const canvases = document.querySelectorAll('.mini-tree');
+    for (const canvas of canvases) {
+      const biomes = parseInt(canvas.dataset.biomes, 10) || 5;
+      const health = parseFloat(canvas.dataset.health) || 0.8;
+      drawMiniTree(canvas, biomes, health);
+    }
+  }
+
+  window.addEventListener('resize', handleResize);
+  window.addEventListener('load', loadFleet);
+
+  // Auto-refresh every 30 seconds
+  setInterval(loadFleet, 30000);
+
+})();
+</script>
+</body>
+</html>

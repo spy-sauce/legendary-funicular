@@ -50,6 +50,8 @@ async function tryLoadS3Client(): Promise<{
 } | null> {
   try {
     // Dynamic import — only succeeds if @aws-sdk/client-s3 is installed
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore — optional peer dep; absence is handled in catch
     const sdk = await import("@aws-sdk/client-s3");
     return {
       S3Client: sdk.S3Client,
@@ -88,8 +90,8 @@ export async function openS3Sink(runId: string): Promise<S3Sink> {
   }
 
   // Gate 2: Check for AWS SDK availability
-  const sdk = await tryLoadS3Client();
-  if (!sdk) {
+  const sdkOrNull = await tryLoadS3Client();
+  if (!sdkOrNull) {
     // SDK not installed — emit one warning, then no-op
     console.error(
       "[telemetry-s3] @aws-sdk/client-s3 not installed — S3 sink disabled. " +
@@ -97,6 +99,8 @@ export async function openS3Sink(runId: string): Promise<S3Sink> {
     );
     return createNoopSink();
   }
+
+  const sdk = sdkOrNull;
 
   // Resolve configuration
   const config: S3Config = {

@@ -19,7 +19,8 @@ import path from "node:path";
 import http from "node:http";
 import { execFileSync } from "node:child_process";
 import YAML from "yaml";
-import type { BaseEvent } from "../lib/telemetry/events.js";
+import type { BaseEvent, DDPStageId } from "../lib/telemetry/events.js";
+import { DDP_STAGES } from "../lib/telemetry/ddp-stages.js";
 
 interface Leaf {
   id: string;
@@ -720,6 +721,107 @@ function handleEventsRequest(
   }
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// /api/state — serve state.json as JSON
+// ────────────────────────────────────────────────────────────────────────────
+
+function handleStateRequest(res: http.ServerResponse, dir: string): void {
+  const statePath = path.join(dir, "sporenet", "state.json");
+  if (!fs.existsSync(statePath)) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "state.json not found" }));
+    return;
+  }
+  try {
+    const content = fs.readFileSync(statePath, "utf-8");
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "Access-Control-Allow-Origin": "*",
+    });
+    res.end(content);
+  } catch (err: unknown) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// /api/events/stream — SSE endpoint tailing the current JSONL run file
+// ────────────────────────────────────────────────────────────────────────────
+
+function handleSSEStream(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  dir: string
+): void {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+    "X-Accel-Buffering": "no",
+  });
+
+  // Send a heartbeat immediately so the browser knows the connection is open
+  res.write(": connected\n\n");
+
+  const jsonlPath = findCurrentRunFile(dir);
+
+  if (!jsonlPath) {
+    // No JSONL file yet — send an idle event and keep polling for the file
+    res.write('event: idle\ndata: {}\n\n');
+  } else {
+    // Send all existing events first (catch-up)
+    try {
+      const existing = parseJSONLFile(jsonlPath);
+      for (const ev of existing) {
+        res.write(`data: ${JSON.stringify(ev)}\n\n`);
+      }
+    } catch {}
+  }
+
+  // Track byte offset to only emit new lines
+  let offset = 0;
+  if (jsonlPath && fs.existsSync(jsonlPath)) {
+    try { offset = fs.statSync(jsonlPath).size; } catch {}
+  }
+
+  // Heartbeat every 15s to keep the connection alive through proxies
+  const heartbeat = setInterval(() => {
+    try { res.write(": heartbeat\n\n"); } catch {}
+  }, 15000);
+
+  // Poll for new content every 500ms (fs.watchFile-style but simpler)
+  const poll = setInterval(() => {
+    const current = findCurrentRunFile(dir);
+    if (!current) return;
+    try {
+      const stat = fs.statSync(current);
+      if (stat.size <= offset) return;
+      const fd = fs.openSync(current, "r");
+      const newBytes = stat.size - offset;
+      const buf = Buffer.alloc(newBytes);
+      fs.readSync(fd, buf, 0, newBytes, offset);
+      fs.closeSync(fd);
+      offset = stat.size;
+      const chunk = buf.toString("utf-8");
+      const lines = chunk.split("\n").filter((l) => l.trim());
+      for (const line of lines) {
+        try {
+          const ev = JSON.parse(line);
+          res.write(`data: ${JSON.stringify(ev)}\n\n`);
+        } catch {}
+      }
+    } catch {}
+  }, 500);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    clearInterval(poll);
+  });
+}
+
 function renderFleetPageFallback(): string {
   return `<!doctype html>
 <html lang="en"><head>
@@ -943,6 +1045,18 @@ export function registerSporenetCommand(program: Command): void {
           return;
         }
 
+        // State API — returns sporenet/state.json as JSON
+        if (pathOnly === "/api/state") {
+          handleStateRequest(res, dir);
+          return;
+        }
+
+        // SSE stream — tail the current JSONL run file in real time
+        if (pathOnly === "/api/events/stream") {
+          handleSSEStream(req, res, dir);
+          return;
+        }
+
         // Events API — JSONL event log (dashboard.live.events scope)
         if (pathOnly === "/api/events") {
           const query = raw.includes("?") ? raw.split("?")[1] : "";
@@ -957,7 +1071,23 @@ export function registerSporenetCommand(program: Command): void {
           return;
         }
 
-        const url = pathOnly === "/" ? "/index.html" : pathOnly;
+        // Serve state.json from sporenet/ directory
+        if (pathOnly === "/state.json") {
+          handleStateRequest(res, dir);
+          return;
+        }
+
+        // Try live template first, fall back to rendered index.html
+        let url = pathOnly === "/" ? "/index.html" : pathOnly;
+        const liveTemplatePath = path.join(
+          dir, "cli/src/commands/sporenet/templates/scale.html"
+        );
+        if (pathOnly === "/" && fs.existsSync(liveTemplatePath)) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+          res.end(fs.readFileSync(liveTemplatePath, "utf-8"));
+          return;
+        }
+
         const filePath = path.normalize(path.join(snDir, url));
         if (!filePath.startsWith(snDir) || !fs.existsSync(filePath)) {
           res.writeHead(404, { "Content-Type": "text/plain" });
