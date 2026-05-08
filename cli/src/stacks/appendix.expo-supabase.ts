@@ -392,6 +392,240 @@ const SCREEN_OWNERSHIP_MATRIX = `Every route in §E's \`RootStackParamList\` map
 
 **App-shell wiring rule:** \`RootNavigator.tsx\` MUST contain exactly one \`<Stack.Screen ... component={...} />\` per route in §E, and the \`component\` value MUST be the imported real screen (not an inline stub). If the owning biome's HYPHA includes a screen as a deliverable but the file doesn't exist, the audit blocks freeze.`;
 
+const SECURITY_RULES = `Section H is the security contract surface for the expo-supabase stack. Rules are tagged with tiers: \`[demo]\` applies starting at demo (everywhere), \`[startup]\` applies at startup and regulated, \`[regulated]\` applies only at regulated, \`[always-block]\` is the catastrophic floor that blocks at every tier and cannot be allowlisted.
+
+Tier ordering: \`demo < startup < regulated\`. The \`organism.security_tier\` field in mycelium.yaml selects the active tier. \`mycelium contracts audit\` enforces rules at-tier-or-below plus all \`[always-block]\` rules. Per-rule allowlists with \`reason + expires\` live in mycelium.yaml under \`organism.security_allowlist\`.
+
+#### H.1 Secret Management
+
+##### H.1.1 No hardcoded secrets in committed code [always-block]
+Rule: No real API keys, tokens, or credentials in committed source. Exempt:
+  literals containing the substring \`placeholder\` (case-sensitive) matching
+  the §F.7 demo-stub fallback pattern.
+Audit: \`grep -rEn 'sk_live_|sk_test_|eyJ[A-Za-z0-9]{30,}|service_role|AKIA[0-9A-Z]{16}' src/ supabase/\` excluding lines containing \`placeholder\` returns zero matches.
+Violation: freeze-block at all tiers. Cannot be allowlisted.
+
+##### H.1.2 .env gitignored, .env.example committed [demo]
+Rule: \`.env\` is listed in \`.gitignore\`. \`.env.example\` (with no real values, only key names) IS committed. No \`.env*\` files are tracked by git except \`.env.example\`.
+Audit: parse \`.gitignore\`; require \`.env\` listed. \`git ls-files\` returns no matches for \`.env\` or \`.env.local\` etc.; may return \`.env.example\`.
+Violation: demo=advisory, startup+=freeze-block.
+
+##### H.1.3 Service-role keys never reach client code [always-block]
+Rule: The literal \`service_role\` MUST NOT appear in any file under \`src/\`. Allowed in \`supabase/functions/\` (server functions) and \`supabase/migrations/\` (server-side SQL) only.
+Audit: \`grep -rn 'service_role' src/\` returns zero matches.
+Violation: freeze-block at all tiers. Cannot be allowlisted.
+
+##### H.1.4 Secrets sourced from a secret manager [startup]
+Rule: At startup tier, runtime secrets are sourced from a secret manager (Doppler, 1Password CLI, AWS Secrets Manager, Vault, or equivalent), not raw env vars in CI. Documented in CLAUDE.md or README.
+Audit: README or CLAUDE.md contains a "Secrets" or "Secret Management" section that names a secret manager; OR a \`.doppler.yaml\` / \`.1password\` / equivalent config file exists at the cultivation root.
+Violation: startup+=freeze-block. Allowlistable with documented Q-X rollout date.
+
+##### H.1.5 Secret rotation runbook documented [regulated]
+Rule: At regulated tier, a \`docs/runbooks/secret-rotation.md\` (or equivalent) exists, lists every secret in the manifest, and specifies max age per secret (90 days default).
+Audit: file exists; contains a table or list mapping secret name → max age.
+Violation: regulated=freeze-block.
+
+#### H.2 Auth Flows
+
+##### H.2.1 OAuth PKCE only — no implicit grant [demo]
+Rule: All OAuth flows use the PKCE extension. No implicit-grant flows.
+  expo-auth-session's \`useAuthRequest\` accepts a \`responseType: 'code'\`
+  config — that is the required path. Implicit grant (\`responseType: 'token'\`)
+  is forbidden.
+Audit: grep \`responseType:\\s*['"]token['"]\` in src/; must return zero matches.
+  Optionally, grep \`code_challenge\` to verify PKCE is wired (advisory).
+Violation: demo=advisory, startup+=freeze-block.
+
+##### H.2.2 Tokens in expo-secure-store via adapter; never raw AsyncStorage [demo, expo-supabase]
+Rule: Supabase session tokens MUST be persisted via the secureStorageAdapter
+  (which wraps expo-secure-store with the AsyncStorage interface, chunking
+  values across keys to bypass the 2KB-per-value limit). Raw AsyncStorage
+  is forbidden for any auth/session/token persistence.
+Audit: in any \`createClient(...)\` call's \`auth.storage\` argument, the
+  identifier MUST resolve to an expo-secure-store-backed adapter — NOT raw
+  AsyncStorage. Regex approximation: grep \`storage:\\s*AsyncStorage\` in src/
+  must return zero matches.
+
+The canonical adapter is shipped by the app-shell biome at
+\`src/lib/secureStorage.ts\`:
+
+\`\`\`ts
+import * as SecureStore from 'expo-secure-store';
+
+const CHUNK_SIZE = 1800; // bytes; under expo-secure-store's 2KB limit
+
+export const secureStorageAdapter = {
+  async getItem(key: string): Promise<string | null> {
+    const meta = await SecureStore.getItemAsync(\`\${key}__meta\`);
+    if (!meta) return null;
+    const { chunks } = JSON.parse(meta);
+    const parts = await Promise.all(
+      Array.from({ length: chunks }, (_, i) =>
+        SecureStore.getItemAsync(\`\${key}__\${i}\`)
+      )
+    );
+    return parts.join('');
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    const chunks = Math.ceil(value.length / CHUNK_SIZE);
+    await SecureStore.setItemAsync(\`\${key}__meta\`, JSON.stringify({ chunks }));
+    await Promise.all(
+      Array.from({ length: chunks }, (_, i) =>
+        SecureStore.setItemAsync(
+          \`\${key}__\${i}\`,
+          value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+        )
+      )
+    );
+  },
+  async removeItem(key: string): Promise<void> {
+    const meta = await SecureStore.getItemAsync(\`\${key}__meta\`);
+    if (!meta) return;
+    const { chunks } = JSON.parse(meta);
+    await Promise.all([
+      SecureStore.deleteItemAsync(\`\${key}__meta\`),
+      ...Array.from({ length: chunks }, (_, i) =>
+        SecureStore.deleteItemAsync(\`\${key}__\${i}\`)
+      ),
+    ]);
+  },
+};
+\`\`\`
+
+Supabase client wiring (replaces §F.7's AsyncStorage example):
+
+\`\`\`ts
+import { createClient } from '@supabase/supabase-js';
+import { secureStorageAdapter } from '@/lib/secureStorage';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: secureStorageAdapter,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
+\`\`\`
+Violation: demo=advisory, startup+=freeze-block.
+
+##### H.2.3 Session refresh with rotating tokens [startup]
+Rule: \`autoRefreshToken: true\` is set on createClient. The app handles
+  refresh failures by signing out cleanly (no silent stale-token reuse).
+Audit: grep \`autoRefreshToken: true\` in src/lib/supabase.ts (or equivalent);
+  must match.
+Violation: startup+=freeze-block.
+
+##### H.2.4 Short-lived access tokens (<1hr) [regulated]
+Rule: Supabase JWT expiry configured to ≤3600 seconds. Documented in the
+  cultivation's Supabase project settings checklist.
+Audit: README or CLAUDE.md contains a Supabase config section noting JWT
+  expiry ≤3600s.
+Violation: regulated=freeze-block.
+
+#### H.3 Database (RLS)
+
+##### H.3.1 Every Supabase table has RLS enabled [always-block]
+Rule: Every \`CREATE TABLE\` in supabase/migrations/*.sql is followed within
+  the same migration file by an \`ALTER TABLE <name> ENABLE ROW LEVEL SECURITY\`.
+Audit: parse migration SQL; for each \`CREATE TABLE <name>\`, verify a
+  corresponding \`ALTER TABLE <name> ENABLE ROW LEVEL SECURITY\` exists in
+  the same file. v1: regex-based. v2: ts-pg-parse for stricter coverage.
+Violation: freeze-block at all tiers. Cannot be allowlisted.
+
+##### H.3.2 No table grants SELECT * to anon role [demo]
+Rule: No RLS policy grants unrestricted SELECT to the \`anon\` role. Policies
+  TO anon must specify column-level grants OR have a USING clause that
+  restricts rows.
+Audit: parse migration SQL; flag any \`CREATE POLICY ... TO anon\` that
+  lacks a column list AND lacks a USING clause; OR any \`GRANT SELECT ON ...
+  TO anon\` without column restrictions.
+Violation: demo=advisory, startup+=freeze-block.
+
+##### H.3.3 Explicit policies per role on every table [startup]
+Rule: Every table has at least one \`CREATE POLICY\` for each role in the
+  organism's role set (e.g., authenticated, plus any custom roles defined
+  in §C). Tables without policies (RLS enabled but no policies) are locked
+  except for service_role — which violates H.1.3 if accessed from client.
+Audit: parse migration SQL; for each table, count policies per role; flag
+  tables with zero policies for non-service roles.
+Violation: startup+=freeze-block.
+
+##### H.3.4 service_role only in server functions [demo]
+Rule: \`service_role\` key (literal or env var \`SUPABASE_SERVICE_ROLE_KEY\`)
+  used only in \`supabase/functions/*\` or server-side code. Never in \`src/\`.
+  This is paired with H.1.3 (which is the always-block version).
+Audit: grep \`SUPABASE_SERVICE_ROLE_KEY\` in src/; must return zero.
+Violation: demo=advisory (paired with H.1.3 always-block), startup+=freeze-block.
+
+##### H.3.5 Row-level audit trail on PII tables [regulated]
+Rule: Tables containing PII columns (per H.4.4 annotations) MUST have a
+  trigger that logs every INSERT/UPDATE/DELETE to an audit_log table with
+  user_id, timestamp, and operation type.
+Audit: parse migration SQL; for each table with a PII annotation comment,
+  verify a CREATE TRIGGER exists for INSERT/UPDATE/DELETE pointing at
+  audit_log.
+Violation: regulated=freeze-block.
+
+#### H.4 PII Handling
+
+##### H.4.1 PII categories defined [demo]
+Rule: NUTRIENTS.md §H.4 (this section) explicitly defines what counts as
+  PII for this organism. Default vocabulary (override in NUTRIENTS to add
+  domain-specific items): email, phone, postal/street address, payment
+  info (card number, bank account), real legal name, geolocation
+  coordinates (lat/lng), national identifiers (SSN, government ID),
+  date of birth, health/medical data.
+Audit: this rule is contract-vs-contract — verifies the PII vocabulary is
+  present in NUTRIENTS, not in source. The audit prompt checks for it.
+Violation: demo=advisory, startup+=freeze-block.
+
+##### H.4.2 No PII in console.log or analytics events [demo]
+Rule: Source code MUST NOT pass PII-tagged identifiers (per H.4.1
+  vocabulary) into \`console.log\`, \`console.warn\`, \`console.error\`,
+  \`console.info\`, \`analytics.track()\`, \`Sentry.captureException()\`, or
+  any equivalent telemetry sink. Use sanitized references instead
+  (user_id, not email; "card ending in X", not full PAN).
+Audit: regex grep on src/: \`console\\.(log|warn|error|info)\\([^)]*\\b(email|phone|address|ssn|password|token|api[_-]?key)\\b\` — flag matches. v1: identifier-name match (approximate). v2: TS AST tracking variable types tagged @pii.
+Violation: demo=advisory, startup+=freeze-block.
+
+##### H.4.3 Error messages sanitize PII; user IDs only [startup]
+Rule: User-facing error messages display user_id, never email or phone.
+  Backend error responses returned to clients are sanitized (no stack
+  traces, no DB error text containing PII fields).
+Audit: regex grep for error-handling patterns that include PII identifiers
+  in toast/alert/error-throw arguments. v1: heuristic. v2: TS AST.
+Violation: startup+=freeze-block.
+
+##### H.4.4 PII columns annotated for audit detection [startup]
+Rule: Every column in supabase/migrations/*.sql holding a PII value carries
+  a SQL comment with the literal token \`@pii\`, optionally followed by the
+  category. Example:
+  \`\`\`sql
+  CREATE TABLE profiles (
+    id uuid PRIMARY KEY,
+    email text NOT NULL,  -- @pii email
+    phone text,           -- @pii phone
+    legal_name text       -- @pii name
+  );
+  \`\`\`
+  This makes PII columns programmatically detectable for H.3.5 (audit
+  trail), H.4.5 (access logging), and downstream tooling.
+Audit: parse migration SQL; for known-PII column name patterns (email,
+  phone, address, ssn, name, dob, etc.), verify an adjacent \`-- @pii\`
+  comment exists. v1: regex. v2: SQL parser.
+Violation: startup+=freeze-block.
+
+##### H.4.5 PII access logged with role + reason [regulated]
+Rule: Backend code reading PII columns from PII-annotated tables (per
+  H.4.4) emits an access-log entry with: requesting user_id, role, target
+  user_id, columns accessed, reason code. Documented logging
+  infrastructure required.
+Audit: README or CLAUDE.md contains a "PII Access Logging" section
+  describing the audit-log schema and write path.
+Violation: regulated=freeze-block.
+`;
+
 export const EXPO_SUPABASE_APPENDIX: ContractAppendix = {
   preamble: PREAMBLE,
   dependencyManifest: DEPENDENCY_MANIFEST,
@@ -401,4 +635,5 @@ export const EXPO_SUPABASE_APPENDIX: ContractAppendix = {
   allowlistedIdentifiers: ALLOWLISTED_IDENTIFIERS,
   styleSystemRules: STYLE_SYSTEM_RULES,
   screenOwnershipMatrix: SCREEN_OWNERSHIP_MATRIX,
+  securityRules: SECURITY_RULES,
 };
