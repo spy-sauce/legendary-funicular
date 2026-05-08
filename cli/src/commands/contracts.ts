@@ -9,6 +9,15 @@ import YAML from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { readMaxBudgetUsd } from "../lib/budget.js";
 import { getStack, STACKS, renderContractAppendix } from "../stacks/index.js";
+import "../security/scanners.js"; // side-effect: registers all scanners
+import { SCANNER_REGISTRY } from "../security/registry.js";
+import {
+  type Finding,
+  type SecurityTier,
+  type SecurityAllowlistEntry,
+  isSecurityTier,
+  TIER_RANK,
+} from "../security/types.js";
 
 interface ContractEntry {
   path?: string;
@@ -242,6 +251,80 @@ export function registerContractsCommand(program: Command): void {
     });
 }
 
+async function runAllScanners(cwd: string): Promise<Finding[]> {
+  const all: Finding[] = [];
+  for (const [ruleId, scanner] of Object.entries(SCANNER_REGISTRY)) {
+    try {
+      const findings = await scanner(cwd);
+      all.push(...findings);
+    } catch (err: any) {
+      console.error(
+        chalk.yellow(`  ⚠️  scanner ${ruleId} crashed: ${err?.message ?? err}`)
+      );
+    }
+  }
+  return all;
+}
+
+/** True when current date is on or before expires (YYYY-MM-DD). */
+function allowlistActive(entry: SecurityAllowlistEntry): boolean {
+  return new Date().toISOString().slice(0, 10) <= entry.expires;
+}
+
+function micromatchSafe(file: string, pattern: string): boolean {
+  // Lightweight glob: ** matches any segments; * matches one segment.
+  // Sufficient for v1; replace with `micromatch` if needed.
+  const re = new RegExp(
+    "^" +
+      pattern
+        .replace(/\./g, "\\.")
+        .replace(/\*\*/g, ".*")
+        .replace(/\*/g, "[^/]*") +
+      "$"
+  );
+  return re.test(file);
+}
+
+function applyAllowlistAndTier(
+  findings: Finding[],
+  tier: SecurityTier,
+  allowlist: SecurityAllowlistEntry[]
+): Finding[] {
+  return findings.map((f): Finding => {
+    // Allowlist match (always-block rules cannot be allowlisted).
+    if (f.ruleTier !== "always-block") {
+      const match = allowlist.find((entry) => {
+        if (!allowlistActive(entry)) return false;
+        if (entry.rule !== f.ruleId) return false;
+        if (entry.pattern) {
+          // Pattern allowlists work on advisory rules only.
+          if (f.ruleTier === "startup" || f.ruleTier === "regulated") return false;
+          return micromatchSafe(f.file, entry.pattern);
+        }
+        return true;
+      });
+      if (match) {
+        return { ...f, severity: "allowlisted", allowlistedBy: match };
+      }
+    }
+
+    // Tier modulation. always-block stays "block" everywhere.
+    if (f.ruleTier === "always-block") return { ...f, severity: "block" };
+
+    const ruleRank = TIER_RANK[f.ruleTier];
+    const activeRank = TIER_RANK[tier];
+    if (ruleRank > activeRank) {
+      // Rule's tier exceeds active tier; scanner shouldn't have fired but
+      // defend anyway by suppressing.
+      return { ...f, severity: "allowlisted" };
+    }
+    if (f.ruleTier === "demo" && tier === "demo") {
+      return { ...f, severity: "advisory" };
+    }
+    return { ...f, severity: "block" };
+  });
+}
+
 async function runAudit(args: {
   cwd: string;
   fix: boolean;
@@ -309,14 +392,35 @@ async function runAudit(args: {
 
   const renderedAppendix = renderContractAppendix(stack.contractAppendix);
 
+  // Read security tier and allowlist from yaml.
+  let yamlConfig: any = {};
+  try {
+    yamlConfig = YAML.parse(fs.readFileSync(myceliumYamlPath, "utf-8"));
+  } catch {}
+  const tierRaw = yamlConfig?.organism?.security_tier;
+  const securityTier: SecurityTier = isSecurityTier(tierRaw) ? tierRaw : "demo";
+  const allowlist: SecurityAllowlistEntry[] = Array.isArray(
+    yamlConfig?.organism?.security_allowlist
+  )
+    ? yamlConfig.organism.security_allowlist
+    : [];
+
   const spinner = ora({
     text: chalk.cyan(
       fix
-        ? `Auditing & patching against ${stack.name}...`
-        : `Auditing against ${stack.name} (read-only)...`
+        ? `Auditing & patching against ${stack.name} (tier: ${securityTier})...`
+        : `Auditing against ${stack.name} (tier: ${securityTier}, read-only)...`
     ),
     spinner: "dots",
   }).start();
+
+  // Run scanners and apply tier modulation + allowlist filter.
+  spinner.text = chalk.cyan(`Running security scanners (tier: ${securityTier})...`);
+  const rawFindings = await runAllScanners(cwd);
+  const findings = applyAllowlistAndTier(rawFindings, securityTier, allowlist);
+  const blockingFindings = findings.filter((f) => f.severity === "block");
+  const advisoryFindings = findings.filter((f) => f.severity === "advisory");
+  const allowlistedFindings = findings.filter((f) => f.severity === "allowlisted");
 
   const prompt = buildAuditPrompt({
     fix,
@@ -324,6 +428,10 @@ async function runAudit(args: {
     cwd,
     stackName: stack.name,
     renderedAppendix,
+    securityTier,
+    blockingFindings,
+    advisoryFindings,
+    allowlistedFindings,
   });
   const allowedTools = fix
     ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
@@ -363,8 +471,11 @@ async function runAudit(args: {
   }
 
   // Marker is a discrete, last-line directive the auditor must emit.
-  const passed = /AUDIT PASS\b/.test(lastText);
-  const failed = /AUDIT FAIL\b/.test(lastText);
+  // Deterministic floor: any blocking security finding fails the audit
+  // regardless of agent verdict.
+  const blockedBySecurityScanners = blockingFindings.length > 0;
+  const passed = !blockedBySecurityScanners && /AUDIT PASS\b/.test(lastText);
+  const failed = blockedBySecurityScanners || /AUDIT FAIL\b/.test(lastText);
 
   if (passed && !failed) {
     spinner.succeed(chalk.greenBright("Audit passed"));
@@ -402,8 +513,21 @@ function buildAuditPrompt(args: {
   cwd: string;
   stackName: string;
   renderedAppendix: string;
+  securityTier: SecurityTier;
+  blockingFindings: Finding[];
+  advisoryFindings: Finding[];
+  allowlistedFindings: Finding[];
 }): string {
-  const { fix, nutrientsPath, stackName, renderedAppendix } = args;
+  const {
+    fix,
+    nutrientsPath,
+    stackName,
+    renderedAppendix,
+    securityTier,
+    blockingFindings,
+    advisoryFindings,
+    allowlistedFindings,
+  } = args;
 
   const modeBlock = fix
     ? `MODE: AUTO-FIX. You may patch NUTRIENTS.md by copying missing subsections
@@ -588,5 +712,50 @@ START SOURCE-OF-TRUTH APPENDIX (stack: ${stackName})
 ${renderedAppendix}
 
 END SOURCE-OF-TRUTH APPENDIX
+─────────────────────────────────────────────────────────────────────────
+
+─────────────────────────────────────────────────────────────────────────
+PRE-COMPUTED SECURITY FINDINGS (tier: ${securityTier})
+
+The following findings were produced by deterministic scanners running
+over the cultivation source. Include them VERBATIM in your audit report
+under "## 8. Security findings". Do not run grep yourself — the findings
+below are authoritative.
+
+### Blocking violations (${blockingFindings.length}):
+${
+  blockingFindings.length === 0
+    ? "(none)"
+    : blockingFindings
+        .map(
+          (f) =>
+            `- ${f.ruleId} [${f.ruleTier}${f.stackTag ? `, ${f.stackTag}` : ""}]: ${f.file}${f.match ? ` — ${f.match}` : ""}`
+        )
+        .join("\n")
+}
+
+### Advisories (${advisoryFindings.length}):
+${
+  advisoryFindings.length === 0
+    ? "(none)"
+    : advisoryFindings
+        .map(
+          (f) =>
+            `- ${f.ruleId} [${f.ruleTier}${f.stackTag ? `, ${f.stackTag}` : ""}]: ${f.file}${f.match ? ` — ${f.match}` : ""}`
+        )
+        .join("\n")
+}
+
+### Allowlisted (${allowlistedFindings.length}):
+${
+  allowlistedFindings.length === 0
+    ? "(none)"
+    : allowlistedFindings
+        .map(
+          (f) =>
+            `- ${f.ruleId}: ${f.file} (allowlist: ${f.allowlistedBy?.reason ?? "n/a"}, expires ${f.allowlistedBy?.expires ?? "n/a"})`
+        )
+        .join("\n")
+}
 ─────────────────────────────────────────────────────────────────────────`;
 }
