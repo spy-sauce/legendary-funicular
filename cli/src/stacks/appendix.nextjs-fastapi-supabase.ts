@@ -201,6 +201,55 @@ const SCREEN_OWNERSHIP_MATRIX = `Next.js App Router uses file-based routing — 
 
 **Anti-pattern (FORBIDDEN):** empty pages returning \`null\`. If a page's logic isn't yet shipped, render a visible placeholder with the route path and a "Page pending" message on the theme background.`;
 
+const SECURITY_RULES = `Section H is the security contract surface for the nextjs-fastapi-supabase stack. Initial baseline — will tighten on first cultivation. Rules tagged with tiers: \`[demo]\` everywhere, \`[startup]\` startup+regulated, \`[regulated]\` regulated only, \`[always-block]\` blocks at every tier.
+
+#### H.1 Secret Management
+
+##### H.1.1 No hardcoded secrets in committed code [always-block]
+Rule: No real API keys, tokens, or credentials in committed source. Exempt:
+  literals containing \`placeholder\` matching demo-stub patterns.
+Audit: \`grep -rEn 'sk_live_|sk_test_|eyJ[A-Za-z0-9]{30,}|service_role|AKIA[0-9A-Z]{16}' src/ api/\` excluding lines containing \`placeholder\` returns zero.
+Violation: freeze-block at all tiers.
+
+##### H.1.2 .env gitignored [demo]
+Rule: \`.env\`, \`.env.local\`, \`.env.production\` listed in \`.gitignore\`. Only \`.env.example\` (no real values) committed.
+Audit: parse \`.gitignore\`; \`git ls-files\` for .env* returns at most \`.env.example\`.
+Violation: demo=advisory, startup+=freeze-block.
+
+##### H.1.3 Server secrets never in client bundle [always-block]
+Rule: Next.js client code (under \`app/\` or \`components/\` consumed by client components) MUST NOT reference secrets without \`NEXT_PUBLIC_\` prefix. Server-only secrets (no prefix) used only in Server Components, Server Actions, Route Handlers, or under \`api/\` (FastAPI).
+Audit: in \`'use client'\`-annotated files, grep for env var references not starting with \`NEXT_PUBLIC_\`; must return zero.
+Violation: freeze-block at all tiers.
+
+#### H.2 Auth Flows
+
+##### H.2.1 Sessions in httpOnly cookies, never localStorage [demo]
+Rule: Auth tokens persisted as httpOnly + Secure + SameSite=Strict cookies. \`localStorage\`, \`sessionStorage\` for sessions are forbidden.
+Audit: grep \`localStorage.setItem\` and \`sessionStorage.setItem\` in src/ near auth/session/token identifiers.
+Violation: demo=advisory, startup+=freeze-block.
+
+#### H.3 Database (RLS)
+
+##### H.3.1 Every Supabase table has RLS enabled [always-block]
+Rule: Every \`CREATE TABLE\` in migrations is followed by \`ENABLE ROW LEVEL SECURITY\` in the same file.
+Audit: regex parse SQL migrations.
+Violation: freeze-block at all tiers.
+
+#### H.4 PII Handling
+
+##### H.4.1 PII categories defined [demo]
+Rule: NUTRIENTS.md §H.4 defines PII vocabulary (default: email, phone, address, payment, legal name, location, national IDs).
+Audit: contract-vs-contract via audit prompt.
+Violation: demo=advisory, startup+=freeze-block.
+
+##### H.4.2 No PII in logs [demo]
+Rule: \`console.log\`, \`console.error\`, server logger calls, and \`Sentry.captureException\` MUST NOT include PII identifiers.
+Audit: regex grep for log calls containing PII identifier names.
+Violation: demo=advisory, startup+=freeze-block.
+
+(Other rules — H.2.2/H.2.3, H.3.2-5, H.4.3-5 — refine on first cultivation.)
+`;
+
 export const NEXTJS_FASTAPI_SUPABASE_APPENDIX: ContractAppendix = {
   preamble: PREAMBLE,
   dependencyManifest: DEPENDENCY_MANIFEST,
@@ -210,4 +259,5 @@ export const NEXTJS_FASTAPI_SUPABASE_APPENDIX: ContractAppendix = {
   allowlistedIdentifiers: ALLOWLISTED_IDENTIFIERS,
   styleSystemRules: STYLE_SYSTEM_RULES,
   screenOwnershipMatrix: SCREEN_OWNERSHIP_MATRIX,
+  securityRules: SECURITY_RULES,
 };
