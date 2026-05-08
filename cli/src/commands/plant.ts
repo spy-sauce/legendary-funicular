@@ -228,6 +228,51 @@ export function registerPlantCommand(program: Command): void {
           process.exit(1);
         }
 
+        // Verify the planner actually wrote the expected files. The agent
+        // occasionally returns a text summary describing files it claims to
+        // have created without invoking the Write tool — running the SDK to
+        // exit-zero is not proof the scaffold landed on disk. Catch this
+        // class of flake here rather than letting downstream commands fail
+        // mysteriously with "mycelium.yaml not found" several stages later.
+        const requiredFiles = [
+          "mycelium.yaml",
+          "NUTRIENTS.md",
+          "CLAUDE.md",
+        ];
+        const missing = requiredFiles.filter(
+          (f) => !fs.existsSync(path.join(targetDir, f))
+        );
+        if (missing.length > 0) {
+          spinner.fail(
+            chalk.red(
+              `PLANNER FLAKE — SDK returned success but expected files missing: ${missing.join(", ")}`
+            )
+          );
+          console.log();
+          console.log(
+            chalk.gray(
+              "     The planner agent likely produced a text summary without invoking Write."
+            )
+          );
+          console.log(
+            chalk.gray(
+              "     This is non-deterministic at large prompt scale. Re-run the same command."
+            )
+          );
+          if (lastText) {
+            console.log();
+            console.log(chalk.gray("  ── Planner output (for diagnosis) ──"));
+            console.log(
+              lastText
+                .split("\n")
+                .slice(-30)
+                .map((l) => chalk.gray("  ") + l)
+                .join("\n")
+            );
+          }
+          process.exit(1);
+        }
+
         spinner.succeed(chalk.greenBright("Organism planted!"));
 
         if (lastText) {
