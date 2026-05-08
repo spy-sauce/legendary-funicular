@@ -5,6 +5,7 @@ import chalk from "chalk";
 import ora from "ora";
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import YAML from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { readMaxBudgetUsd } from "../lib/budget.js";
@@ -260,6 +261,48 @@ export function registerContractsCommand(program: Command): void {
     });
 }
 
+/**
+ * Walk git log for mycelium.yaml; find the highest organism.security_tier
+ * ever recorded in committed history. Returns null if not in a git repo or
+ * if no prior tier values are found.
+ */
+function findPriorSecurityTier(cwd: string): SecurityTier | null {
+  try {
+    const log = execFileSync(
+      "git",
+      ["log", "--pretty=format:%H", "--", "mycelium.yaml"],
+      {
+        cwd,
+        encoding: "utf-8",
+        maxBuffer: 50 * 1024 * 1024,
+      }
+    );
+    const shas = log.split("\n").filter((l) => l.length > 0);
+    let highest: SecurityTier | null = null;
+    for (const sha of shas) {
+      try {
+        const content = execFileSync(
+          "git",
+          ["show", `${sha}:mycelium.yaml`],
+          { cwd, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 }
+        );
+        const cfg = YAML.parse(content);
+        const tier = cfg?.organism?.security_tier;
+        if (isSecurityTier(tier)) {
+          if (!highest || TIER_RANK[tier] > TIER_RANK[highest]) {
+            highest = tier;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+    return highest;
+  } catch {
+    return null;
+  }
+}
+
 async function runAllScanners(cwd: string): Promise<Finding[]> {
   const all: Finding[] = [];
   for (const [ruleId, scanner] of Object.entries(SCANNER_REGISTRY)) {
@@ -413,6 +456,31 @@ async function runAudit(args: {
   )
     ? yamlConfig.organism.security_allowlist
     : [];
+
+  // Downgrade detection: compare current tier against the highest tier ever
+  // committed in git history. If lower AND no SECURITY-DOWNGRADE.md exists
+  // referencing the new tier, hard-fail the audit.
+  const priorTier = findPriorSecurityTier(cwd);
+  if (priorTier && TIER_RANK[securityTier] < TIER_RANK[priorTier]) {
+    const downgradePath = path.join(cwd, "SECURITY-DOWNGRADE.md");
+    const downgradeOk =
+      fs.existsSync(downgradePath) &&
+      fs.readFileSync(downgradePath, "utf-8").includes(securityTier);
+    if (!downgradeOk) {
+      console.log();
+      console.log(
+        chalk.red(
+          `  ❌ SECURITY DOWNGRADE UNDOCUMENTED: tier ${priorTier} → ${securityTier} but no SECURITY-DOWNGRADE.md exists referencing the new tier.`
+        )
+      );
+      console.log(
+        chalk.gray(
+          "     Create SECURITY-DOWNGRADE.md at the cultivation root with: timestamp, prior tier, new tier, operator note explaining why."
+        )
+      );
+      return { passed: false, exitCode: 4, summary: "undocumented downgrade" };
+    }
+  }
 
   const spinner = ora({
     text: chalk.cyan(
