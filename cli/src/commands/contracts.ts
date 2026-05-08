@@ -60,6 +60,15 @@ export function registerContractsCommand(program: Command): void {
     });
 
   contracts
+    .command("upgrade-tier <new-tier>")
+    .description(
+      "🔼 Promote security tier (demo → startup → regulated). Rewrites mycelium.yaml + re-renders §H of NUTRIENTS."
+    )
+    .action(async (newTierRaw: string) => {
+      await runUpgradeTier(process.cwd(), newTierRaw);
+    });
+
+  contracts
     .command("freeze")
     .description(
       "Freeze all contracts — lock the shared types so agents build on stable ground"
@@ -759,3 +768,83 @@ ${
 }
 ─────────────────────────────────────────────────────────────────────────`;
 }
+
+async function runUpgradeTier(cwd: string, newTierRaw: string): Promise<void> {
+  if (!isSecurityTier(newTierRaw)) {
+    console.log(
+      chalk.red(`  ❌ Invalid tier "${newTierRaw}". Available: demo, startup, regulated`)
+    );
+    process.exit(1);
+  }
+  const newTier = newTierRaw as SecurityTier;
+  const yamlPath = path.join(cwd, "mycelium.yaml");
+  const nutrientsPath = path.join(cwd, "NUTRIENTS.md");
+  if (!fs.existsSync(yamlPath)) {
+    console.log(chalk.red("  ❌ mycelium.yaml not found."));
+    process.exit(1);
+  }
+  const config = YAML.parse(fs.readFileSync(yamlPath, "utf-8"));
+  const currentTierRaw = config?.organism?.security_tier;
+  if (!isSecurityTier(currentTierRaw)) {
+    console.log(
+      chalk.red("  ❌ mycelium.yaml has no organism.security_tier — re-plant with --security.")
+    );
+    process.exit(1);
+  }
+  const currentTier = currentTierRaw as SecurityTier;
+
+  if (TIER_RANK[newTier] <= TIER_RANK[currentTier]) {
+    console.log(
+      chalk.red(
+        `  ❌ Cannot ${newTier === currentTier ? "remain at" : "downgrade to"} ${newTier} (current: ${currentTier}).`
+      )
+    );
+    if (newTier !== currentTier) {
+      console.log(
+        chalk.gray(
+          "     Downgrades require manual mycelium.yaml edit + a SECURITY-DOWNGRADE.md file (see docs)."
+        )
+      );
+    }
+    process.exit(1);
+  }
+
+  const stackName = config?.organism?.stack;
+  const stack = stackName ? getStack(stackName) : null;
+  if (!stack) {
+    console.log(
+      chalk.red(`  ❌ Cannot resolve stack "${stackName}" from yaml.`)
+    );
+    process.exit(1);
+  }
+
+  config.organism.security_tier = newTier;
+  fs.writeFileSync(
+    yamlPath,
+    "# Mycelium Framework — VibeSpace LLC — The network provides.\n\n" +
+      YAML.stringify(config),
+    "utf-8"
+  );
+
+  if (fs.existsSync(nutrientsPath)) {
+    const nutrients = fs.readFileSync(nutrientsPath, "utf-8");
+    const hSectionRe = /### H\. Security Rules[\s\S]*?(?=\n## |\n# |$)/;
+    const newH = `### H. Security Rules\n\n${stack.contractAppendix.securityRules}`;
+    const updated = hSectionRe.test(nutrients)
+      ? nutrients.replace(hSectionRe, newH)
+      : nutrients + "\n\n" + newH;
+    fs.writeFileSync(nutrientsPath, updated, "utf-8");
+  }
+
+  console.log(
+    chalk.greenBright(
+      `  ✓ Upgraded security_tier: ${currentTier} → ${newTier}`
+    )
+  );
+  console.log(
+    chalk.gray(
+      `     Run \`mycelium contracts audit\` to see what now blocks freeze.`
+    )
+  );
+}
+
