@@ -175,5 +175,9 @@ export function renderContractAppendix(appendix: ContractAppendix): string {
     "",
     appendix.screenOwnershipMatrix,
     "",
+    "### H. Security Rules",
+    "",
+    appendix.securityRules,
+    "",
   ].join("\n");
 }
