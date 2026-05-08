@@ -9,6 +9,7 @@ import chalk from "chalk";
 import ora from "ora";
 import fs from "node:fs";
 import path from "node:path";
+import YAML from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import {
   getStack,
@@ -16,6 +17,15 @@ import {
   renderContractAppendix,
 } from "../stacks/index.js";
 import { readMaxBudgetUsd } from "../lib/budget.js";
+
+// Local definitions for M1. Migrated to cli/src/security/types.ts in plan
+// task T11 (M2). Keep local until then — types.ts doesn't exist yet.
+const SECURITY_TIERS = ["demo", "startup", "regulated"] as const;
+type SecurityTier = typeof SECURITY_TIERS[number];
+
+function isSecurityTier(s: unknown): s is SecurityTier {
+  return typeof s === "string" && (SECURITY_TIERS as readonly string[]).includes(s);
+}
 
 export function registerPlantCommand(program: Command): void {
   program
@@ -26,6 +36,10 @@ export function registerPlantCommand(program: Command): void {
     .option(
       "-s, --stack <name>",
       `Stack preset (${Object.keys(STACKS).join(", ")})`
+    )
+    .option(
+      "-S, --security <tier>",
+      "Security tier (demo, startup, regulated). REQUIRED on first plant of an organism; reads from mycelium.yaml on subsequent plants."
     )
     .option("-n, --name <name>", "Organism name (defaults to brief filename)")
     .option(
@@ -78,6 +92,61 @@ export function registerPlantCommand(program: Command): void {
         process.exit(1);
       }
 
+      // Resolve security tier: read from existing yaml if present, else require --security flag.
+      const yamlPath = path.join(targetDir, "mycelium.yaml");
+      const existingTier: string | undefined = (() => {
+        if (!fs.existsSync(yamlPath)) return undefined;
+        try {
+          const cfg = YAML.parse(fs.readFileSync(yamlPath, "utf-8"));
+          return cfg?.organism?.security_tier;
+        } catch {
+          return undefined;
+        }
+      })();
+
+      let securityTier: SecurityTier;
+      if (opts.security) {
+        if (!isSecurityTier(opts.security)) {
+          console.log(
+            chalk.red(`  ❌ Invalid --security tier "${opts.security}". Available: `) +
+              chalk.cyan(SECURITY_TIERS.join(", "))
+          );
+          process.exit(1);
+        }
+        if (existingTier && existingTier !== opts.security) {
+          console.log(
+            chalk.red(
+              `  ❌ Tier flip via plant is not supported (current: ${existingTier}, requested: ${opts.security}).`
+            )
+          );
+          console.log(
+            chalk.gray(
+              `     Use \`mycelium contracts upgrade-tier ${opts.security}\` instead — it's faster and doesn't re-invoke the planner LLM.`
+            )
+          );
+          process.exit(1);
+        }
+        securityTier = opts.security;
+      } else if (existingTier && isSecurityTier(existingTier)) {
+        securityTier = existingTier;
+      } else {
+        console.log(
+          chalk.red("  ❌ --security is required on first plant. Available: ") +
+            chalk.cyan(SECURITY_TIERS.join(", "))
+        );
+        console.log(
+          chalk.gray(
+            "     Tier sets the security contract enforcement strictness. Forgetting it"
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     would default the cultivation to weakest protection — explicit choice required."
+          )
+        );
+        process.exit(1);
+      }
+
       console.log();
       console.log(
         chalk.magentaBright.bold("  🌰 Planting organism ") +
@@ -100,6 +169,7 @@ export function registerPlantCommand(program: Command): void {
         organismName,
         targetDir,
         stack,
+        securityTier,
       });
 
       if (opts.dryRun) {
@@ -219,8 +289,9 @@ function buildPlannerPrompt(args: {
   organismName: string;
   targetDir: string;
   stack: NonNullable<ReturnType<typeof getStack>>;
+  securityTier: SecurityTier;
 }): string {
-  const { brief, organismName, stack } = args;
+  const { brief, organismName, stack, securityTier } = args;
 
   const stackBlock = `STACK PRESET: ${stack.name}
 ${stack.description}
@@ -270,6 +341,7 @@ Your job — produce these files using the Write tool:
    organism:
      name: ${organismName}
      stack: ${stack.name}        # REQUIRED — audit/freeze look up the stack preset to verify contracts
+     security_tier: ${securityTier}    # REQUIRED — audit/freeze/upgrade-tier read this
      ship_target: "<your estimate>"
      health_pulse_interval: 30
      harvest_threshold: 0.8
@@ -283,7 +355,10 @@ Your job — produce these files using the Write tool:
        capabilities: [<tech tags>]
    merge_order: [<ordered list of agent ids>]
    \`\`\`
-   The \`stack:\` field MUST be \`${stack.name}\` (downstream commands look it up).
+   The \`stack:\` field MUST be \`${stack.name}\` and \`security_tier:\` MUST be
+   \`${securityTier}\` (downstream commands — audit, freeze, upgrade-tier — look
+   them up). Section H of NUTRIENTS will be rendered with rules tagged
+   at-tier-or-below + always-block rules active.
    Every required agent (listed above) MUST appear in this file. Decompose the
    brief into the required agents plus any additional brief-specific agents
    (typical total: 5-10). Wire blocked_by/blocks so the dependency graph is
