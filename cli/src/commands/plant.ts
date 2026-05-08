@@ -17,15 +17,11 @@ import {
   renderContractAppendix,
 } from "../stacks/index.js";
 import { readMaxBudgetUsd } from "../lib/budget.js";
-
-// Local definitions for M1. Migrated to cli/src/security/types.ts in plan
-// task T11 (M2). Keep local until then — types.ts doesn't exist yet.
-const SECURITY_TIERS = ["demo", "startup", "regulated"] as const;
-type SecurityTier = typeof SECURITY_TIERS[number];
-
-function isSecurityTier(s: unknown): s is SecurityTier {
-  return typeof s === "string" && (SECURITY_TIERS as readonly string[]).includes(s);
-}
+import {
+  SECURITY_TIERS,
+  isSecurityTier,
+  type SecurityTier,
+} from "../security/types.js";
 
 export function registerPlantCommand(program: Command): void {
   program
