@@ -66,14 +66,58 @@ export function registerHarvestCommand(program: Command): void {
       spinner.text = chalk.cyan("Collecting deliverables...");
       await sleep(300);
 
-      // Determine fruit-ready agents (unblocked agents are simulated as ready)
+      // Determine fruit-ready agents. Truth source (in priority order):
+      //   1. sporenet/state.json — written by `mycelium cultivate` per leaf
+      //      as it transitions through pending → growing → done. This is
+      //      the live cultivation state.
+      //   2. agent.state from mycelium.yaml — set if the operator manually
+      //      flipped state in yaml (rare).
+      //   3. blockers.length === 0 — fallback for pre-cultivation harvests
+      //      ("which biomes COULD start now"); only used if no sporenet
+      //      state exists.
+      //
+      // The bug this replaces: the prior implementation checked only #2 OR
+      // #3, missing #1 entirely. Cultivate writes status to state.json but
+      // never updates yaml, so post-cultivation harvest reported only the
+      // unblocked roots (schema-core, design-system) as ready, even when
+      // every leaf had completed. Fixed in this commit.
+      const sporenetStatePath = path.join(
+        process.cwd(),
+        "sporenet",
+        "state.json"
+      );
+      const leafStatusBySporenetId: Record<string, string> = {};
+      if (fs.existsSync(sporenetStatePath)) {
+        try {
+          const sporenetState = JSON.parse(
+            fs.readFileSync(sporenetStatePath, "utf-8")
+          );
+          for (const leaf of sporenetState.leaves ?? []) {
+            if (typeof leaf?.id === "string" && typeof leaf?.status === "string") {
+              leafStatusBySporenetId[leaf.id] = leaf.status;
+            }
+          }
+        } catch {
+          // sporenet/state.json malformed — fall through to legacy detection.
+        }
+      }
+      const sporenetHasState = Object.keys(leafStatusBySporenetId).length > 0;
+
       const fruitReady: Agent[] = [];
       const notReady: Agent[] = [];
 
       for (const agent of agents) {
-        const blockers = agent.blocked_by || [];
-        const isReady =
-          agent.state === "FRUIT_READY" || blockers.length === 0;
+        let isReady: boolean;
+        if (sporenetHasState) {
+          // Cultivation has run — trust sporenet/state.json.
+          // "done" means the leaf shipped its FRUIT_READY line; everything
+          // else (pending, growing, failed) is not ready to harvest.
+          isReady = leafStatusBySporenetId[agent.id] === "done";
+        } else {
+          // No cultivation yet — use yaml hint or unblocked-root heuristic.
+          const blockers = agent.blocked_by || [];
+          isReady = agent.state === "FRUIT_READY" || blockers.length === 0;
+        }
 
         if (isReady) {
           fruitReady.push(agent);
