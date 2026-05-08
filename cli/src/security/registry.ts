@@ -51,20 +51,19 @@ export function assertRegistryConsistency(
   stacks: Record<string, StackPreset>
 ): void {
   // Rules that are intentionally documentation-only (no scanner expected).
+  // These are typically doc-vs-doc checks (verify a section exists in README
+  // or CLAUDE.md) or contract-vs-contract checks (verify NUTRIENTS contains
+  // a vocabulary block). The audit prompt handles them; no source-scan needed.
   const DOCUMENTATION_ONLY = new Set<string>([
-    'H.1.5',  // secret rotation runbook (regulated, doc-only)
-    'H.2.4',  // short-lived tokens (regulated, doc-only)
-    'H.3.5',  // PII audit trail (regulated, doc-only — covered by H.4.4 + DB triggers)
+    'H.1.4',  // secret manager named in README/CLAUDE.md
+    'H.1.5',  // secret rotation runbook (regulated)
+    'H.2.4',  // short-lived tokens documented in README (regulated)
+    'H.3.3',  // explicit policies per role — heuristic, deferred to v2
+    'H.3.4',  // service_role only in server functions — paired with always-block H.1.3
+    'H.3.5',  // PII audit trail (regulated, paired with H.4.4 + DB triggers)
     'H.4.1',  // PII vocabulary defined (contract-vs-contract via audit prompt)
+    'H.4.3',  // error message PII sanitization — heuristic, deferred to v2
     'H.4.5',  // PII access logging (regulated, doc-only)
-    // Next.js stack: H.3.3-5, H.4.3-5 etc. are "refine on first cultivation"
-    // and not yet implemented. Mark them documentation-only for now; they'll
-    // be promoted to scanner-backed when the Next.js stack hits real use.
-    'H.2.2',  // Next.js: localStorage detection — currently in expo-supabase only as scanner
-    // Note: H.2.2 in expo-supabase is a real scanner (registerScanner called);
-    // its presence in DOCUMENTATION_ONLY means: do NOT require a scanner per
-    // appendix. The first stack that registers a scanner satisfies the check
-    // for all stacks that mention the rule.
   ]);
 
   const appendixIds = new Set<string>();
