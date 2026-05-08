@@ -45,6 +45,12 @@ export interface ContractAppendix {
    * mode observed in run-3.
    */
   screenOwnershipMatrix: string;
+  /**
+   * Section H — Security Rules. Tiered enforcement (demo/startup/regulated)
+   * with [always-block] catastrophic floor. Renders as §H of NUTRIENTS.md.
+   * Contains universal rules + stack-specific addenda inline.
+   */
+  securityRules: string;
 }
 
 export interface StackPreset {
