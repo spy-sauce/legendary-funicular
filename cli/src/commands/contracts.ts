@@ -457,6 +457,16 @@ async function runAudit(args: {
     ? yamlConfig.organism.security_allowlist
     : [];
 
+  // Categorize allowlist entries by expiry status.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const fourteenDaysOut = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const expiredAllowlists = allowlist.filter((e) => e.expires < todayStr);
+  const expiringSoonAllowlists = allowlist.filter(
+    (e) => e.expires >= todayStr && e.expires < fourteenDaysOut
+  );
+
   // Downgrade detection: compare current tier against the highest tier ever
   // committed in git history. If lower AND no SECURITY-DOWNGRADE.md exists
   // referencing the new tier, hard-fail the audit.
@@ -509,6 +519,8 @@ async function runAudit(args: {
     blockingFindings,
     advisoryFindings,
     allowlistedFindings,
+    expiringSoonAllowlists,
+    expiredAllowlists,
   });
   const allowedTools = fix
     ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
@@ -594,6 +606,8 @@ function buildAuditPrompt(args: {
   blockingFindings: Finding[];
   advisoryFindings: Finding[];
   allowlistedFindings: Finding[];
+  expiringSoonAllowlists: SecurityAllowlistEntry[];
+  expiredAllowlists: SecurityAllowlistEntry[];
 }): string {
   const {
     fix,
@@ -604,6 +618,8 @@ function buildAuditPrompt(args: {
     blockingFindings,
     advisoryFindings,
     allowlistedFindings,
+    expiringSoonAllowlists,
+    expiredAllowlists,
   } = args;
 
   const modeBlock = fix
@@ -832,6 +848,24 @@ ${
           (f) =>
             `- ${f.ruleId}: ${f.file} (allowlist: ${f.allowlistedBy?.reason ?? "n/a"}, expires ${f.allowlistedBy?.expires ?? "n/a"})`
         )
+        .join("\n")
+}
+
+### Expiring within 14 days (${expiringSoonAllowlists.length}):
+${
+  expiringSoonAllowlists.length === 0
+    ? "(none)"
+    : expiringSoonAllowlists
+        .map((e) => `- ${e.rule}: ${e.reason} (expires ${e.expires})`)
+        .join("\n")
+}
+
+### EXPIRED ALLOWLISTS (${expiredAllowlists.length}):
+${
+  expiredAllowlists.length === 0
+    ? "(none)"
+    : expiredAllowlists
+        .map((e) => `- ${e.rule}: ${e.reason} (expired ${e.expires}) — original findings now active`)
         .join("\n")
 }
 ─────────────────────────────────────────────────────────────────────────`;
