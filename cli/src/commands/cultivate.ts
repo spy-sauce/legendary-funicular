@@ -19,6 +19,7 @@ import YAML from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Upgrade, UpgradeCtx } from "../lib/upgrades/types.js";
 import { resolveUpgrades } from "../upgrades/registry.js";
+import { readMaxBudgetUsd } from "../lib/budget.js";
 import {
   runBeforePlan,
   runBeforeSpawn,
@@ -475,6 +476,9 @@ async function cultivateLeaf(
   logLine({ event: "start", leaf: leaf.id, scope: leaf.scope, branch: leaf.branch, lineage: leaf.lineage });
   logLine({ event: "prompt", prompt });
 
+  const maxBudgetUsd = readMaxBudgetUsd(config);
+  let budgetExceeded: { spent: number } | null = null;
+
   let stream: any;
   try {
     stream = query({
@@ -483,6 +487,7 @@ async function cultivateLeaf(
         cwd: targetDir,
         allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permissionMode: "acceptEdits",
+        ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
       },
     });
     activeSessions.add(stream);
@@ -504,7 +509,18 @@ async function cultivateLeaf(
             }
           }
         }
+      } else if (
+        msg.type === "result" &&
+        (msg as any).subtype === "error_max_budget_usd"
+      ) {
+        budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
       }
+    }
+
+    if (budgetExceeded) {
+      throw new Error(
+        `BUDGET_EXCEEDED: $${budgetExceeded.spent.toFixed(4)} > cap $${(maxBudgetUsd ?? 0).toFixed(4)}`
+      );
     }
 
     // ── Auto-commit via serialized queue (no git race) ──────────
@@ -524,7 +540,7 @@ async function cultivateLeaf(
         const sha = execFileSync(
           "git",
           ["-C", targetDir, "rev-parse", "HEAD"],
-          { encoding: "utf-8" }
+          { encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
         ).trim();
         updates.commit = sha;
       } catch {}
@@ -655,6 +671,10 @@ class CommitQueue {
 }
 const commitQueue = new CommitQueue();
 
+// 100MB buffer for git invocations — large leaf outputs can otherwise hit the
+// default 1MB cap and fail with ENOBUFS (observed on discovery in run-3).
+const GIT_MAX_BUFFER = 100 * 1024 * 1024;
+
 function autoCommitLeaf(
   leaf: Leaf,
   cwd: string,
@@ -665,30 +685,51 @@ function autoCommitLeaf(
     const status = execFileSync("git", ["status", "--porcelain"], {
       cwd,
       encoding: "utf-8",
+      maxBuffer: GIT_MAX_BUFFER,
     }).trim();
     if (!status) return null;
 
     const tag = leaf.biome.replace(/-agent$/, "").toUpperCase();
+    const branchName = `feat/${leaf.id}`;
     const msg = `${tag}/${leaf.id}: ${leaf.scope}`;
-    execFileSync("git", ["add", "-A"], { cwd });
+    execFileSync("git", ["add", "-A"], {
+      cwd,
+      maxBuffer: GIT_MAX_BUFFER,
+    });
     execFileSync("git", ["commit", "-m", msg, "--no-verify"], {
       cwd,
       stdio: "pipe",
+      maxBuffer: GIT_MAX_BUFFER,
     });
+
+    // Stamp the per-biome branch to point at this commit. The serialized
+    // commit queue guarantees HEAD is THIS leaf's commit at this instant,
+    // so a force-update of feat/<id> to HEAD is safe and creates the branch
+    // that `mycelium harvest` expects to find.
+    try {
+      execFileSync("git", ["branch", "-f", branchName, "HEAD"], {
+        cwd,
+        stdio: "pipe",
+        maxBuffer: GIT_MAX_BUFFER,
+      });
+    } catch (branchErr: any) {
+      // Non-fatal: if branch stamping fails (rare), the commit still landed.
+      const errMsg = String(branchErr?.stderr ?? branchErr?.message ?? branchErr);
+      console.error(
+        chalk.yellow(`  ⚠️  feat/${leaf.id} branch stamp failed: ${errMsg.split("\n")[0]}`)
+      );
+    }
 
     // Push — set upstream on first push per branch, swallow no-remote errors.
     let pushStatus = "committed";
     if (!push) {
-      return chalk.gray(`committed (no-push) ${tag}/${leaf.id}`);
+      return chalk.gray(`committed (no-push) ${branchName}`);
     }
     try {
-      const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-        cwd,
-        encoding: "utf-8",
-      }).trim();
-      execFileSync("git", ["push", "--set-upstream", "origin", branch], {
+      execFileSync("git", ["push", "--set-upstream", "origin", branchName], {
         cwd,
         stdio: "pipe",
+        maxBuffer: GIT_MAX_BUFFER,
       });
       pushStatus = "committed+pushed";
     } catch (pushErr: any) {
@@ -700,7 +741,7 @@ function autoCommitLeaf(
       }
     }
 
-    return chalk.gray(`${pushStatus} ${tag}/${leaf.id}`);
+    return chalk.gray(`${pushStatus} ${branchName}`);
   } catch (err: any) {
     return chalk.yellow(`commit skipped: ${err?.message?.split("\n")[0] ?? err}`);
   }

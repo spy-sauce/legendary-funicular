@@ -10,7 +10,12 @@ import ora from "ora";
 import fs from "node:fs";
 import path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { getStack, STACKS } from "../stacks/index.js";
+import {
+  getStack,
+  STACKS,
+  renderContractAppendix,
+} from "../stacks/index.js";
+import { readMaxBudgetUsd } from "../lib/budget.js";
 
 export function registerPlantCommand(program: Command): void {
   program
@@ -40,9 +45,32 @@ export function registerPlantCommand(program: Command): void {
       const targetDir = path.resolve(opts.dir);
       const organismName =
         opts.name ?? path.basename(briefAbs, path.extname(briefAbs));
-      const stack = getStack(opts.stack);
 
-      if (opts.stack && !stack) {
+      if (!opts.stack) {
+        console.log(
+          chalk.red("  ❌ --stack is required. Available: ") +
+            chalk.cyan(Object.keys(STACKS).join(", "))
+        );
+        console.log(
+          chalk.gray(
+            "     Stack determines the contract baseline the planner injects"
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     into NUTRIENTS.md. Without a stack, contracts cannot be"
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     hardened against drift, and parallel leaves drift apart."
+          )
+        );
+        process.exit(1);
+      }
+
+      const stack = getStack(opts.stack);
+      if (!stack) {
         console.log(
           chalk.red(`  ❌ Unknown stack "${opts.stack}". Available: `) +
             chalk.cyan(Object.keys(STACKS).join(", "))
@@ -89,6 +117,7 @@ export function registerPlantCommand(program: Command): void {
         spinner: "earth",
       }).start();
 
+      const maxBudgetUsd = readMaxBudgetUsd();
       try {
         const result = query({
           prompt,
@@ -96,10 +125,12 @@ export function registerPlantCommand(program: Command): void {
             cwd: targetDir,
             allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
             permissionMode: "acceptEdits",
+            ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
           },
         });
 
         let lastText = "";
+        let budgetExceeded: { spent: number } | null = null;
         for await (const msg of result) {
           if (msg.type === "assistant") {
             const blocks = (msg as any).message?.content ?? [];
@@ -114,7 +145,21 @@ export function registerPlantCommand(program: Command): void {
                 lastText = b.text;
               }
             }
+          } else if (
+            msg.type === "result" &&
+            (msg as any).subtype === "error_max_budget_usd"
+          ) {
+            budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
           }
+        }
+
+        if (budgetExceeded) {
+          spinner.fail(
+            chalk.red(
+              `BUDGET_EXCEEDED — stopped at $${budgetExceeded.spent.toFixed(4)} (cap $${(maxBudgetUsd ?? 0).toFixed(4)})`
+            )
+          );
+          process.exit(1);
         }
 
         spinner.succeed(chalk.greenBright("Organism planted!"));
@@ -173,12 +218,11 @@ function buildPlannerPrompt(args: {
   brief: string;
   organismName: string;
   targetDir: string;
-  stack: ReturnType<typeof getStack>;
+  stack: NonNullable<ReturnType<typeof getStack>>;
 }): string {
   const { brief, organismName, stack } = args;
 
-  const stackBlock = stack
-    ? `STACK PRESET: ${stack.name}
+  const stackBlock = `STACK PRESET: ${stack.name}
 ${stack.description}
 
 CLAUDE.md stack section to use verbatim:
@@ -187,10 +231,19 @@ ${stack.claudeMdHeader}
 Project rules to embed in CLAUDE.md:
 ${stack.rules}
 
-Suggested archetype agents (use only those that fit the brief; rename freely):
-${stack.archetypeAgents.map((a) => `  - ${a}`).join("\n")}
-`
-    : `STACK: not specified — infer the smallest reasonable stack from the brief itself.`;
+REQUIRED agents (you MUST create agents with these exact ids — they own the
+contract baseline declared in the verbatim contract appendix below):
+${stack.requiredAgents.map((a) => `  - ${a}`).join("\n")}
+
+Additional archetype agents (use those that fit the brief; rename freely;
+extend with brief-specific agents as needed):
+${stack.archetypeAgents
+  .filter((a) => !stack.requiredAgents.includes(a))
+  .map((a) => `  - ${a}`)
+  .join("\n")}
+`;
+
+  const renderedAppendix = renderContractAppendix(stack.contractAppendix);
 
   return `You are the Mycelium planner sub-agent. You have been given a business brief
 and must scaffold a complete Mycelium organism in the current working directory.
@@ -216,6 +269,7 @@ Your job — produce these files using the Write tool:
    \`\`\`yaml
    organism:
      name: ${organismName}
+     stack: ${stack.name}        # REQUIRED — audit/freeze look up the stack preset to verify contracts
      ship_target: "<your estimate>"
      health_pulse_interval: 30
      harvest_threshold: 0.8
@@ -229,23 +283,82 @@ Your job — produce these files using the Write tool:
        capabilities: [<tech tags>]
    merge_order: [<ordered list of agent ids>]
    \`\`\`
-   Decompose the brief into 3-7 agents. Wire blocked_by/blocks so the
-   dependency graph is acyclic and matches real build order.
+   The \`stack:\` field MUST be \`${stack.name}\` (downstream commands look it up).
+   Every required agent (listed above) MUST appear in this file. Decompose the
+   brief into the required agents plus any additional brief-specific agents
+   (typical total: 5-10). Wire blocked_by/blocks so the dependency graph is
+   acyclic and matches real build order.
 
 3. **hyphae/HYPHA-{DOMAIN}.md** — one file per agent, where {DOMAIN} matches
    the agent id in upper-snake-case. Each HYPHA file must include:
    - Goal (1-2 sentences)
    - Scope (in / out)
    - Inputs (contracts + upstream agents it depends on)
-   - Outputs (contracts + deliverables)
+   - **Outputs (deliverables)** — list EVERY file the biome will produce, by
+     full path (e.g., \`src/screens/auth/WelcomeScreen.tsx\`). The audit reads
+     this list and verifies each file exists on disk after cultivation. A
+     biome that lists a file in Outputs but doesn't ship it FAILS the audit.
    - Acceptance criteria (bulleted, testable)
    - Notes (anything specific from the brief)
 
-4. **NUTRIENTS.md** — frozen contracts doc. Sections:
-   - DATA_CONTRACTS (TypeScript-style interface stubs for the main entities
-     in the brief — leave fields TODO if unclear)
-   - DESIGN_TOKENS (colors, typography, spacing — placeholders OK)
-   - API_CONTRACTS (one line per endpoint: METHOD path → response shape)
+   Critically: every screen referenced in the route map (Section E of the
+   contract appendix in NUTRIENTS) MUST be claimed as a deliverable by some
+   biome's HYPHA Outputs section. Cross-reference the screen ownership matrix
+   in Section G — every row's "Screen file path" must appear in exactly one
+   biome's HYPHA Outputs.
+
+4. **NUTRIENTS.md** — frozen contracts. STRICT RULES:
+   - NO \`#TODO\`. NO placeholders. NO "fill in later". Every field, every
+     row, every value is concrete.
+   - The first part of NUTRIENTS.md is a CONTRACT APPENDIX section copied
+     VERBATIM from the stack preset (see VERBATIM CONTRACT APPENDIX block
+     near the end of this prompt). Copy that block byte-for-byte. Do not
+     paraphrase. Do not omit subsections. Do not reorder.
+   - After the verbatim appendix, add the organism-specific extensions:
+
+     **DATA_CONTRACTS** — full TypeScript interfaces for every domain entity
+     in the brief. Every field has a concrete type. If a field's type is
+     genuinely ambiguous from the brief, infer from the strongest signal and
+     add a single-line comment explaining the inference. NEVER \`any\` or
+     \`unknown\`.
+
+     **Section C extension rows** — append to the Symbol Ownership Matrix
+     (from the verbatim appendix) one row for every: domain entity type,
+     domain enum, biome-level component, hook, context, and lib utility the
+     brief implies. Owner must be one of the agents you created. Path
+     conventions follow §D in the appendix. NO symbol claimed by two agents.
+
+     **Section E extension rows** — append to Allow-listed Identifiers:
+       - Domain enums: full TS union types for every enum in the brief
+         (categories, statuses, roles, types) owned by the schema-core /
+         types-owning agent.
+       - Route map: complete \`RootStackParamList\` (or stack equivalent) with
+         every screen, sub-screen, and modal in the brief, typed.
+       - BrandIcon name union: narrow \`BrandIconProps['name']\` to the
+         specific brand glyphs the brief uses (Spotify, Google, etc.).
+
+     **Section G extension — Screen Ownership Matrix table** — for EVERY
+     route in §E's route map, append a row to the table in §G with:
+       - Route name (matches the route map literal)
+       - Owner biome (must exist in mycelium.yaml AND must claim the file as
+         a deliverable in its HYPHA Outputs)
+       - Screen file path (e.g., \`src/screens/auth/WelcomeScreen.tsx\`)
+       - Import statement app-shell will use in \`RootNavigator.tsx\`
+
+     The table is load-bearing — app-shell's RootNavigator MUST import each
+     screen at the listed path. PlaceholderScreen-returns-null is FORBIDDEN
+     (rule §F.9). If the owning biome hasn't shipped the screen yet at
+     cultivation time, the placeholder MUST render the route name visibly
+     (see §F.9 for the pattern).
+
+     **DESIGN_TOKENS** — actual token values: colors (with hex), typography
+     scale, spacing scale, radii, shadows, motion durations. Source from the
+     brief if present; otherwise synthesize a coherent palette aligned with
+     the brand. NO placeholders. The design-system agent must be able to
+     ship \`tokens.ts\` directly from this section.
+
+     **API_CONTRACTS** — one block per endpoint with full request/response
+     shapes as TS interfaces. NO \`METHOD path → shape\` shorthand.
 
 5. **agents/{id}.ts** — for each agent, write a stub matching this shape
    (id, scope, branch, blocked_by, blocks, capabilities + germinate/grow/fruit
@@ -293,7 +406,21 @@ Your job — produce these files using the Write tool:
 
 After writing all files, output a short markdown summary listing what you
 created and any open questions the user should resolve before running
-\`mycelium cultivate\`.
+\`mycelium contracts audit\` and then \`mycelium contracts freeze\`.
 
-Do NOT install dependencies, run builds, or commit. Just write the files.`;
+Do NOT install dependencies, run builds, or commit. Just write the files.
+
+─────────────────────────────────────────────────────────────────────────
+VERBATIM CONTRACT APPENDIX
+Copy the entire block between the START and END markers below into
+NUTRIENTS.md as-is. Do not modify, paraphrase, or omit any part. After
+this block ends in NUTRIENTS.md, append the organism-specific extensions
+described in step 4 above.
+─────────────────────────────────────────────────────────────────────────
+START VERBATIM CONTRACT APPENDIX
+
+${renderedAppendix}
+
+END VERBATIM CONTRACT APPENDIX
+─────────────────────────────────────────────────────────────────────────`;
 }
