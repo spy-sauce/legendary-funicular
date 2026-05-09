@@ -174,49 +174,103 @@ export function registerPlantCommand(program: Command): void {
         return;
       }
 
-      fs.mkdirSync(path.join(targetDir, "hyphae"), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, "agents"), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, "contracts"), { recursive: true });
+      const REQUIRED_FILES = [
+        "mycelium.yaml",
+        "NUTRIENTS.md",
+        "CLAUDE.md",
+      ];
+      // Files/dirs the planner produces — wiped between retry attempts so a
+      // fresh planning session doesn't see partial output from a prior one.
+      // brief.md and .gitignore are operator-bootstrap files; .git is the repo.
+      const PLANNER_OUTPUT_PATHS = [
+        "mycelium.yaml",
+        "NUTRIENTS.md",
+        "CLAUDE.md",
+        "CELLULAR-MAP.md",
+        "agents",
+        "hyphae",
+        "contracts",
+        "sporenet",
+        "src",
+      ];
 
-      const spinner = ora({
-        text: chalk.cyan("Sub-agent decomposing brief into HYPHAE..."),
-        spinner: "earth",
-      }).start();
-
+      const MAX_PLANNER_ATTEMPTS = 3;
       const maxBudgetUsd = readMaxBudgetUsd();
-      try {
-        const result = query({
-          prompt,
-          options: {
-            cwd: targetDir,
-            allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-            permissionMode: "acceptEdits",
-            ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
-          },
-        });
+
+      function ensureScaffoldDirs(): void {
+        fs.mkdirSync(path.join(targetDir, "hyphae"), { recursive: true });
+        fs.mkdirSync(path.join(targetDir, "agents"), { recursive: true });
+        fs.mkdirSync(path.join(targetDir, "contracts"), { recursive: true });
+      }
+
+      function wipePartialScaffold(): void {
+        for (const rel of PLANNER_OUTPUT_PATHS) {
+          const abs = path.join(targetDir, rel);
+          try {
+            fs.rmSync(abs, { recursive: true, force: true });
+          } catch {}
+        }
+      }
+
+      async function attemptPlanting(): Promise<{
+        ok: boolean;
+        lastText: string;
+        missing: string[];
+        budgetExceeded: { spent: number } | null;
+      }> {
+        ensureScaffoldDirs();
+
+        const spinner = ora({
+          text: chalk.cyan("Sub-agent decomposing brief into HYPHAE..."),
+          spinner: "earth",
+        }).start();
 
         let lastText = "";
         let budgetExceeded: { spent: number } | null = null;
-        for await (const msg of result) {
-          if (msg.type === "assistant") {
-            const blocks = (msg as any).message?.content ?? [];
-            for (const b of blocks) {
-              if (b.type === "tool_use") {
-                spinner.text = chalk.cyan(
-                  `Sub-agent: ${chalk.white(b.name)} ${chalk.gray(
-                    summarizeToolInput(b.name, b.input)
-                  )}`
-                );
-              } else if (b.type === "text" && b.text) {
-                lastText = b.text;
+
+        try {
+          const result = query({
+            prompt,
+            options: {
+              cwd: targetDir,
+              allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+              permissionMode: "acceptEdits",
+              ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
+            },
+          });
+
+          for await (const msg of result) {
+            if (msg.type === "assistant") {
+              const blocks = (msg as any).message?.content ?? [];
+              for (const b of blocks) {
+                if (b.type === "tool_use") {
+                  spinner.text = chalk.cyan(
+                    `Sub-agent: ${chalk.white(b.name)} ${chalk.gray(
+                      summarizeToolInput(b.name, b.input)
+                    )}`
+                  );
+                } else if (b.type === "text" && b.text) {
+                  lastText = b.text;
+                }
               }
+            } else if (
+              msg.type === "result" &&
+              (msg as any).subtype === "error_max_budget_usd"
+            ) {
+              budgetExceeded = {
+                spent: Number((msg as any).total_cost_usd) || 0,
+              };
             }
-          } else if (
-            msg.type === "result" &&
-            (msg as any).subtype === "error_max_budget_usd"
-          ) {
-            budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
           }
+        } catch (err: any) {
+          spinner.fail(chalk.red("Planner SDK error"));
+          console.log(chalk.red(`     ${err?.message ?? String(err)}`));
+          return {
+            ok: false,
+            lastText,
+            missing: REQUIRED_FILES,
+            budgetExceeded,
+          };
         }
 
         if (budgetExceeded) {
@@ -225,55 +279,89 @@ export function registerPlantCommand(program: Command): void {
               `BUDGET_EXCEEDED — stopped at $${budgetExceeded.spent.toFixed(4)} (cap $${(maxBudgetUsd ?? 0).toFixed(4)})`
             )
           );
-          process.exit(1);
+          return {
+            ok: false,
+            lastText,
+            missing: REQUIRED_FILES,
+            budgetExceeded,
+          };
         }
 
-        // Verify the planner actually wrote the expected files. The agent
-        // occasionally returns a text summary describing files it claims to
-        // have created without invoking the Write tool — running the SDK to
-        // exit-zero is not proof the scaffold landed on disk. Catch this
-        // class of flake here rather than letting downstream commands fail
-        // mysteriously with "mycelium.yaml not found" several stages later.
-        const requiredFiles = [
-          "mycelium.yaml",
-          "NUTRIENTS.md",
-          "CLAUDE.md",
-        ];
-        const missing = requiredFiles.filter(
+        const missing = REQUIRED_FILES.filter(
           (f) => !fs.existsSync(path.join(targetDir, f))
         );
+
         if (missing.length > 0) {
           spinner.fail(
             chalk.red(
               `PLANNER FLAKE — SDK returned success but expected files missing: ${missing.join(", ")}`
             )
           );
-          console.log();
-          console.log(
-            chalk.gray(
-              "     The planner agent likely produced a text summary without invoking Write."
-            )
-          );
-          console.log(
-            chalk.gray(
-              "     This is non-deterministic at large prompt scale. Re-run the same command."
-            )
-          );
-          if (lastText) {
-            console.log();
-            console.log(chalk.gray("  ── Planner output (for diagnosis) ──"));
-            console.log(
-              lastText
-                .split("\n")
-                .slice(-30)
-                .map((l) => chalk.gray("  ") + l)
-                .join("\n")
-            );
-          }
-          process.exit(1);
+          return { ok: false, lastText, missing, budgetExceeded: null };
         }
 
         spinner.succeed(chalk.greenBright("Organism planted!"));
+        return { ok: true, lastText, missing: [], budgetExceeded: null };
+      }
+
+      let attemptResult: Awaited<ReturnType<typeof attemptPlanting>> | null =
+        null;
+      let attemptNumber = 0;
+
+      while (attemptNumber < MAX_PLANNER_ATTEMPTS) {
+        attemptNumber++;
+        if (attemptNumber > 1) {
+          console.log();
+          console.log(
+            chalk.yellow(
+              `  ↻ Plant attempt ${attemptNumber} of ${MAX_PLANNER_ATTEMPTS} — wiping partial scaffold from prior attempt...`
+            )
+          );
+          wipePartialScaffold();
+        }
+
+        attemptResult = await attemptPlanting();
+
+        if (attemptResult.ok) break;
+
+        // Budget-exceeded is non-retriable; abort immediately.
+        if (attemptResult.budgetExceeded) {
+          process.exit(1);
+        }
+      }
+
+      if (!attemptResult || !attemptResult.ok) {
+        console.log();
+        console.log(
+          chalk.red(
+            `  ❌ Plant failed after ${MAX_PLANNER_ATTEMPTS} attempts. Last missing: ${(attemptResult?.missing ?? REQUIRED_FILES).join(", ")}`
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     This is non-deterministic at large prompt scale; another retry may succeed."
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     Durable fix is to split the planner into multiple SDK calls — tracked for M4."
+          )
+        );
+        if (attemptResult?.lastText) {
+          console.log();
+          console.log(chalk.gray("  ── Last planner output (for diagnosis) ──"));
+          console.log(
+            attemptResult.lastText
+              .split("\n")
+              .slice(-30)
+              .map((l) => chalk.gray("  ") + l)
+              .join("\n")
+          );
+        }
+        process.exit(1);
+      }
+
+      const lastText = attemptResult.lastText;
 
         if (lastText) {
           console.log();
@@ -306,11 +394,6 @@ export function registerPlantCommand(program: Command): void {
             chalk.white(" to wake the organism")
         );
         console.log();
-      } catch (err: any) {
-        spinner.fail(chalk.red("Planner failed"));
-        console.log(chalk.red(err?.message ?? String(err)));
-        process.exit(1);
-      }
     });
 }
 
