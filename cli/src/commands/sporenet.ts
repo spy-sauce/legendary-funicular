@@ -31,6 +31,13 @@ interface Leaf {
   commit?: string;
   started_at?: string;
   completed_at?: string;
+  // F7: plain-English one-sentence summary for non-tech demo audience.
+  // Sourced from leaf commit-body trailer; falls back to scope.
+  synopsis?: string;
+  // F10: persisted by cultivate.ts on done so the dashboard can show
+  // wall-clock + file count without recomputing from started/completed.
+  duration_seconds?: number;
+  files_produced?: number;
 }
 
 interface SporeNetState {
@@ -97,7 +104,74 @@ function loadMycelium(dir: string): any {
   return YAML.parse(fs.readFileSync(yamlPath, "utf-8"));
 }
 
-function renderHtml(state: SporeNetState, mycelium: any): string {
+// F9: pull the first sentence of `## Why` from brief.md for the
+// orientation line. Strip markdown bold/italic markers + inline code so
+// the dashboard renders prose, not raw asterisks. Returns null if the
+// file or section doesn't exist or can't be parsed — caller skips the
+// element silently in that case.
+function readBriefWhy(dir: string): string | null {
+  try {
+    const briefPath = path.join(dir, "brief.md");
+    if (!fs.existsSync(briefPath)) return null;
+    const md = fs.readFileSync(briefPath, "utf-8");
+    // Match the Why section (## Why ... up to next ## or EOF).
+    const m = md.match(/^##\s+Why\s*$([\s\S]*?)(?=^##\s|\Z)/m);
+    if (!m) return null;
+    const body = m[1].trim();
+    if (!body) return null;
+    // Take the first non-empty paragraph, then the first sentence.
+    const firstPara = body.split(/\n\s*\n/).find((p) => p.trim().length > 0);
+    if (!firstPara) return null;
+    const sentence = firstPara
+      .replace(/\n+/g, " ")
+      .match(/^([^.!?]+[.!?])/);
+    if (!sentence) return null;
+    // Strip markdown emphasis markers + backticks for inline code.
+    return sentence[1]
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/\*(.+?)\*/g, "$1")
+      .replace(/_(.+?)_/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .trim();
+  } catch {
+    return null;
+  }
+}
+
+// F10: format duration_seconds as "Xs" (sub-minute) or "Xm Ys" (else).
+function formatDuration(seconds: number | undefined): string | null {
+  if (seconds === undefined || seconds === null || !isFinite(seconds) || seconds < 0) return null;
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds - m * 60);
+  if (s === 0) return `${m}m`;
+  return `${m}m ${s}s`;
+}
+
+// F8: build the page-level organism summary. Prefer the explicit
+// `organism.synopsis` from mycelium.yaml; else stitch one from the
+// done-leaf synopses so the dashboard always has a sentence-shaped
+// orientation line at the top of the leaf grid.
+function buildOrganismSummary(state: SporeNetState, mycelium: any): string | null {
+  const yamlSynopsis = mycelium?.organism?.synopsis;
+  if (typeof yamlSynopsis === "string" && yamlSynopsis.trim()) {
+    return yamlSynopsis.trim();
+  }
+  const done = state.leaves.filter((l) => l.status === "done");
+  if (done.length === 0) return null;
+  const synopses = done
+    .map((l) => l.synopsis || l.scope)
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    .map((s) => s.replace(/\.+$/, "").trim());
+  if (synopses.length === 0) return null;
+  return `${done.length} systems shipped: ${synopses.join("; ")}.`;
+}
+
+function renderHtml(
+  state: SporeNetState,
+  mycelium: any,
+  briefDir?: string
+): string {
   const biomes = (mycelium.agents ?? []).map((a: any) => a.id);
   const byBiome = new Map<string, Leaf[]>();
   for (const id of biomes) byBiome.set(id, []);
@@ -108,6 +182,11 @@ function renderHtml(state: SporeNetState, mycelium: any): string {
 
   const done = state.leaves.filter((l) => l.status === "done").length;
   const pct = state.total > 0 ? (done * 100) / state.total : 0;
+
+  // F8 + F9: page-level summary + Why orientation line. Cached per
+  // renderHtml call (not per leaf) — readBriefWhy hits disk once.
+  const organismSummary = buildOrganismSummary(state, mycelium);
+  const organismWhy = briefDir ? readBriefWhy(briefDir) : null;
   const lastLeaf = [...state.leaves]
     .filter((l) => l.status === "done")
     .sort((a, b) =>
@@ -134,11 +213,32 @@ function renderHtml(state: SporeNetState, mycelium: any): string {
           const commit = l.commit
             ? `<span class="commit">${l.commit.slice(0, 7)}</span>`
             : "";
+          // F7: synopsis is the prominent line; scope demoted to muted
+          // smaller text below. Tolerate missing synopsis by falling
+          // back to scope so older state.json entries still render.
+          const synopsisText = l.synopsis ?? l.scope;
+          const synopsisHtml = synopsisText
+            ? `<div class="synopsis">${escapeHtml(synopsisText)}</div>`
+            : "";
+          // F10: duration + file count line, both optional. Position
+          // beside the commit hash on a small monospace muted line.
+          const durStr = formatDuration(l.duration_seconds);
+          const fileStr =
+            typeof l.files_produced === "number" && l.files_produced > 0
+              ? `${l.files_produced} files`
+              : "";
+          const metaParts = [durStr, fileStr].filter(
+            (s): s is string => !!s && s.length > 0
+          );
+          const metaHtml =
+            metaParts.length > 0
+              ? `<span class="leaf-meta">${escapeHtml(metaParts.join(" · "))}</span>`
+              : "";
           return `<div class="${cls}" data-leaf-id="${escapeHtml(
             l.id
           )}" role="button" tabindex="0"><span class="dot">●</span><span class="lid">${escapeHtml(
             l.id
-          )}</span> ${commit}<div class="scope">${escapeHtml(
+          )}</span> ${commit}${metaHtml}${synopsisHtml}<div class="scope">${escapeHtml(
             l.scope
           )}</div></div>`;
         })
@@ -207,8 +307,12 @@ main { display:grid; grid-template-columns:1fr 320px; gap:0; }
 .leaf.pending .dot { color:var(--muted); }
 .leaf.failed .dot { color:#ef4444; }
 .lid { color:var(--fg); }
-.commit { color:var(--muted); margin-left:6px; font-size:10px; }
-.scope { color:var(--muted); font-size:10px; margin-top:2px; margin-left:16px; }
+.commit { color:var(--muted); margin-left:6px; font-size:10px; font-family:ui-monospace,Menlo,monospace; }
+.leaf-meta { color:var(--muted); margin-left:6px; font-size:10px; font-family:ui-monospace,Menlo,monospace; }
+.synopsis { color:var(--fg); font-size:12px; font-style:italic; margin-top:4px; margin-left:16px; line-height:1.4; }
+.scope { color:var(--muted); font-size:10px; margin-top:2px; margin-left:16px; opacity:.75; }
+.organism-why { color:var(--muted); font-size:11px; font-style:italic; margin:0 0 6px; max-width:780px; line-height:1.4; }
+.organism-summary { color:var(--fg); font-size:17px; font-style:italic; margin-top:14px; line-height:1.5; max-width:880px; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
 aside { background:var(--panel); border-left:1px solid #1f1f2a; padding:24px; height:100vh; overflow-y:auto; position:sticky; top:0; }
 aside h2 { margin:0 0 12px; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:600; }
@@ -256,7 +360,11 @@ footer { padding:16px 32px; color:var(--muted); font-size:10px; border-top:1px s
 .modal .diff-loading { color:var(--muted); font-style:italic; font-size:11px; }
 </style></head><body>
 <header>
-  <div><h1>SporeNet · ${escapeHtml(
+  <div>${
+    organismWhy
+      ? `<div class="organism-why">${escapeHtml(organismWhy)}</div>`
+      : ""
+  }<h1>SporeNet · ${escapeHtml(
     state.organism
   )}</h1><div class="session">execution ${escapeHtml(
     state.session_id
@@ -270,6 +378,11 @@ footer { padding:16px 32px; color:var(--muted); font-size:10px; border-top:1px s
   <div class="bar"><div class="fill" style="width:${pct.toFixed(
     1
   )}%"></div></div>
+  ${
+    organismSummary
+      ? `<div class="organism-summary">${escapeHtml(organismSummary)}</div>`
+      : ""
+  }
   <div class="meta">
     <div>started <b>${escapeHtml(state.started_at)}</b></div>
     <div>last <b>${
@@ -939,7 +1052,7 @@ export function registerSporenetCommand(program: Command): void {
       );
       fs.writeFileSync(
         path.join(snDir, "index.html"),
-        renderHtml(state, mycelium)
+        renderHtml(state, mycelium, dir)
       );
       console.log(
         chalk.greenBright(
@@ -969,7 +1082,7 @@ export function registerSporenetCommand(program: Command): void {
       );
       fs.writeFileSync(
         path.join(dir, "sporenet", "index.html"),
-        renderHtml(state, mycelium)
+        renderHtml(state, mycelium, dir)
       );
       console.log(chalk.greenBright("  ✔ Re-rendered sporenet/index.html"));
     });
@@ -999,7 +1112,7 @@ export function registerSporenetCommand(program: Command): void {
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
       fs.writeFileSync(
         path.join(dir, "sporenet", "index.html"),
-        renderHtml(state, mycelium)
+        renderHtml(state, mycelium, dir)
       );
       console.log(
         chalk.greenBright(`  ✔ ${leafId} → ${opts.status}`) +
@@ -1014,13 +1127,28 @@ export function registerSporenetCommand(program: Command): void {
     .action((opts) => {
       const dir = path.resolve(opts.dir);
       const snDir = path.join(dir, "sporenet");
-      if (!fs.existsSync(path.join(snDir, "index.html"))) {
-        console.log(
-          chalk.red(
-            "  ❌ sporenet/index.html not found. Run `mycelium sporenet init` first."
-          )
-        );
-        process.exit(1);
+      // F5: don't gate serve on index.html existence — `/` now renders
+      // on-the-fly from current state.json on every request, so the
+      // dashboard reflects writes (e.g. cultivate's status=active/done
+      // transitions) without needing a manual `mycelium sporenet render`
+      // between writes. mycelium.yaml is still required for biome metadata.
+      if (!fs.existsSync(path.join(dir, "mycelium.yaml"))) {
+        // Tolerate missing mycelium.yaml only if both index.html AND
+        // state.json exist (legacy serve-only-static path). Otherwise
+        // bail with a helpful message.
+        const hasStatic =
+          fs.existsSync(path.join(snDir, "index.html")) &&
+          fs.existsSync(path.join(snDir, "state.json"));
+        if (!hasStatic) {
+          console.log(
+            chalk.red(
+              "  ❌ mycelium.yaml not found in " +
+                dir +
+                ". Run from an organism directory, or pass --dir <organism>."
+            )
+          );
+          process.exit(1);
+        }
       }
       const port = parseInt(opts.port, 10);
       const server = http.createServer(async (req, res) => {
@@ -1077,17 +1205,73 @@ export function registerSporenetCommand(program: Command): void {
           return;
         }
 
-        // Try live template first, fall back to rendered index.html
-        let url = pathOnly === "/" ? "/index.html" : pathOnly;
-        const liveTemplatePath = path.join(
-          dir, "cli/src/commands/sporenet/templates/scale.html"
-        );
-        if (pathOnly === "/" && fs.existsSync(liveTemplatePath)) {
-          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
-          res.end(fs.readFileSync(liveTemplatePath, "utf-8"));
-          return;
+        // F5: render-on-the-fly for / — re-reads state.json + mycelium.yaml
+        // each request so the dashboard reflects the latest writes
+        // (cultivate's writeLeafState transitions, sporenet mark, etc.)
+        // without a manual render step. The dashboard's 3s polling already
+        // refetches /; with this render-on-the-fly, those polls now see
+        // live data rather than a static snapshot.
+        if (pathOnly === "/") {
+          // Live template (scale.html in dev checkouts) wins if present.
+          const liveTemplatePath = path.join(
+            dir,
+            "cli/src/commands/sporenet/templates/scale.html"
+          );
+          if (fs.existsSync(liveTemplatePath)) {
+            res.writeHead(200, {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "no-store",
+            });
+            res.end(fs.readFileSync(liveTemplatePath, "utf-8"));
+            return;
+          }
+          // Otherwise render from current state.json + mycelium.yaml.
+          try {
+            const statePath = path.join(snDir, "state.json");
+            const myceliumPath = path.join(dir, "mycelium.yaml");
+            if (
+              fs.existsSync(statePath) &&
+              fs.existsSync(myceliumPath)
+            ) {
+              const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+              const mycelium = YAML.parse(
+                fs.readFileSync(myceliumPath, "utf-8")
+              );
+              res.writeHead(200, {
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "no-store",
+              });
+              res.end(renderHtml(state, mycelium, dir));
+              return;
+            }
+            // Last-resort fallback to the static rendered index.html
+            // (in case someone serves a snapshot without mycelium.yaml).
+            const staticIndex = path.join(snDir, "index.html");
+            if (fs.existsSync(staticIndex)) {
+              res.writeHead(200, {
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "no-store",
+              });
+              res.end(fs.readFileSync(staticIndex));
+              return;
+            }
+            res.writeHead(503, { "Content-Type": "text/plain" });
+            res.end(
+              "SporeNet not ready: missing mycelium.yaml + sporenet/state.json. " +
+                "Run `mycelium plant` (or wait for cultivate to seed state.json)."
+            );
+            return;
+          } catch (err: any) {
+            res.writeHead(500, { "Content-Type": "text/plain" });
+            res.end("SporeNet render error: " + (err?.message ?? String(err)));
+            return;
+          }
         }
 
+        // Non-root: serve sporenet/<path> as static asset (state.json,
+        // any future asset bundles, etc.). state.json is also handled
+        // by the explicit /state.json branch above; this catches misc.
+        const url = pathOnly;
         const filePath = path.normalize(path.join(snDir, url));
         if (!filePath.startsWith(snDir) || !fs.existsSync(filePath)) {
           res.writeHead(404, { "Content-Type": "text/plain" });
