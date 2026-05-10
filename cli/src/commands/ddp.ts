@@ -1,7 +1,7 @@
 // Mycelium Framework — VibeSpace LLC — The network provides.
 //
 // `mycelium ddp` — single-call pipeline runner.
-// Chains: plant → contracts audit → contracts freeze → cultivate → harvest
+// Chains: plant → contracts audit → contracts freeze → sporenet init → cultivate → harvest
 //         → sporenet serve (optional).
 //
 // Each stage spawns the mycelium binary as a child process. Streams stdio
@@ -45,7 +45,7 @@ export function registerDdpCommand(program: Command): void {
   program
     .command("ddp")
     .description(
-      "🌍 Single-call pipeline — plant → audit → freeze → cultivate → harvest → serve"
+      "🌍 Single-call pipeline — plant → audit → freeze → sporenet init → cultivate → harvest → serve"
     )
     .requiredOption("--brief <path>", "Path to brief.md")
     .requiredOption("-s, --stack <name>", "Stack preset (passed to plant)")
@@ -99,6 +99,17 @@ export function registerDdpCommand(program: Command): void {
           args: opts.skipAudit
             ? ["contracts", "freeze", "--skip-audit"]
             : ["contracts", "freeze"],
+        },
+        // F6: scaffold sporenet/ before cultivate so the dashboard has
+        // a meaningful (all-pending) state.json and index.html the moment
+        // cultivate kicks off. Cultivate's ensureSporenetState is idempotent
+        // — sees state.json exists and skips re-seeding, then writes
+        // active/done transitions during the run. Without this stage, the
+        // dashboard had no baseline render to show during the multi-hour
+        // cultivate phase.
+        {
+          name: "sporenet init",
+          args: ["sporenet", "init"],
         },
         {
           name: "cultivate",
