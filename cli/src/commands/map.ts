@@ -10,7 +10,9 @@ import chalk from "chalk";
 import ora from "ora";
 import fs from "node:fs";
 import path from "node:path";
+import YAML from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { readMaxBudgetUsd } from "../lib/budget.js";
 
 export function registerMapCommand(program: Command): void {
   program
@@ -92,6 +94,9 @@ export function registerMapCommand(program: Command): void {
         spinner: "earth",
       }).start();
 
+      let parsedConfig: any;
+      try { parsedConfig = YAML.parse(myceliumYaml); } catch { parsedConfig = undefined; }
+      const maxBudgetUsd = readMaxBudgetUsd(parsedConfig);
       try {
         const result = query({
           prompt,
@@ -99,10 +104,12 @@ export function registerMapCommand(program: Command): void {
             cwd: targetDir,
             allowedTools: ["Read", "Write", "Edit", "Glob", "Grep"],
             permissionMode: "acceptEdits",
+            ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
           },
         });
 
         let lastText = "";
+        let budgetExceeded: { spent: number } | null = null;
         for await (const msg of result) {
           if (msg.type === "assistant") {
             const blocks = (msg as any).message?.content ?? [];
@@ -117,7 +124,21 @@ export function registerMapCommand(program: Command): void {
                 lastText = b.text;
               }
             }
+          } else if (
+            msg.type === "result" &&
+            (msg as any).subtype === "error_max_budget_usd"
+          ) {
+            budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
           }
+        }
+
+        if (budgetExceeded) {
+          spinner.fail(
+            chalk.red(
+              `BUDGET_EXCEEDED — stopped at $${budgetExceeded.spent.toFixed(4)} (cap $${(maxBudgetUsd ?? 0).toFixed(4)})`
+            )
+          );
+          process.exit(1);
         }
 
         spinner.succeed(chalk.greenBright("Cellular map ready!"));
