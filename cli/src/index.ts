@@ -21,6 +21,7 @@ import { registerExportCommand } from "./commands/export.js";
 import { registerSporenetCommand } from "./commands/sporenet.js";
 import { registerUpgradesCommand } from "./commands/upgrades.js";
 import { registerIntegrateCommand } from "./commands/integrate.js";
+import { registerDdpCommand } from "./commands/ddp.js";
 
 const banner = boxen(
   chalk.magentaBright.bold("🍄 Mycelium") +
@@ -59,5 +60,6 @@ registerExportCommand(program);
 registerSporenetCommand(program);
 registerUpgradesCommand(program);
 registerIntegrateCommand(program);
+registerDdpCommand(program);
 
 program.parse();

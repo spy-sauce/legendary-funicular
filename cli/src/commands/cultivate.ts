@@ -19,6 +19,7 @@ import YAML from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Upgrade, UpgradeCtx } from "../lib/upgrades/types.js";
 import { resolveUpgrades } from "../upgrades/registry.js";
+import { readMaxBudgetUsd } from "../lib/budget.js";
 import {
   runBeforePlan,
   runBeforeSpawn,
@@ -142,6 +143,16 @@ export function registerCultivateCommand(program: Command): void {
       }
 
       let leaves: Leaf[] = biomes.flatMap((biome) => flattenBiome(biome));
+
+      // ── F3: ensure sporenet/state.json exists so per-leaf writes during
+      // cultivate land on disk. Without this, writeLeafState silently no-ops
+      // when cultivate runs through `mycelium ddp` (which doesn't include a
+      // sporenet init step in its pipeline).
+      ensureSporenetState(
+        process.cwd(),
+        leaves.map((l) => ({ id: l.id, biome: l.biome, scope: l.scope })),
+        organism
+      );
 
       // ── F1: skip leaves already marked done in sporenet/state.json ──
       const doneIds = loadDoneLeafIds(process.cwd());
@@ -309,6 +320,13 @@ export function registerCultivateCommand(program: Command): void {
         throw err;
       }
 
+      // ── F3: drain queued sporenet/state.json writes before exit ────
+      // Each writeLeafState call enqueues onto a serialized promise chain
+      // (see helper). Without an explicit drain, the process can return
+      // before the final status=done writes hit disk, leaving harvest +
+      // dashboard with a stale view.
+      await drainLeafStateWrites();
+
       // ── Report ─────────────────────────────────────────────────────
       summary(allResults, organism);
     });
@@ -464,16 +482,30 @@ async function cultivateLeaf(
     indent: 2,
   }).start();
 
+  // F3: mark active so the live dashboard reflects in-flight leaves
+  // during the multi-hour cultivate phase, not only at completion.
+  writeLeafState(targetDir, leaf.id, {
+    status: "active",
+    started_at: new Date().toISOString(),
+  });
+
   let prompt = buildLeafPrompt(leaf, config);
   if (upgrades.length > 0 && upgradeCtx) {
     prompt = await runTransformPrompt(upgrades, upgradeCtx, leaf, prompt);
   }
   const artifacts: string[] = [];
+  // F7: collect all text emitted by the leaf so we can extract the
+  // `Synopsis: <one sentence>` trailer and bake it into the commit body
+  // (canonical source the dashboard reads back via git log).
+  const leafTextChunks: string[] = [];
   const logPath = path.join(logDir, `${leaf.id}.log`);
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
   const logLine = (obj: any) => logStream.write(JSON.stringify({ t: new Date().toISOString(), ...obj }) + "\n");
   logLine({ event: "start", leaf: leaf.id, scope: leaf.scope, branch: leaf.branch, lineage: leaf.lineage });
   logLine({ event: "prompt", prompt });
+
+  const maxBudgetUsd = readMaxBudgetUsd(config);
+  let budgetExceeded: { spent: number } | null = null;
 
   let stream: any;
   try {
@@ -483,6 +515,7 @@ async function cultivateLeaf(
         cwd: targetDir,
         allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permissionMode: "acceptEdits",
+        ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
       },
     });
     activeSessions.add(stream);
@@ -502,33 +535,96 @@ async function cultivateLeaf(
                 if (b.input?.file_path) artifacts.push(b.input.file_path);
               }
             }
+          } else if (b.type === "text" && typeof b.text === "string") {
+            // F7: capture text output to extract Synopsis trailer later
+            leafTextChunks.push(b.text);
           }
         }
+      } else if (
+        msg.type === "result" &&
+        (msg as any).subtype === "error_max_budget_usd"
+      ) {
+        budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
       }
     }
 
+    if (budgetExceeded) {
+      throw new Error(
+        `BUDGET_EXCEEDED: $${budgetExceeded.spent.toFixed(4)} > cap $${(maxBudgetUsd ?? 0).toFixed(4)}`
+      );
+    }
+
+    // ── F7: extract leaf-emitted Synopsis trailer ──────────────
+    // Pulled from the leaf's text output (single-line, case-insensitive
+    // match of "Synopsis: <text>"). Baked into the commit body below so
+    // the commit becomes the canonical record; we also re-read it back
+    // post-commit via the SHA to confirm it landed.
+    const leafSynopsis = extractSynopsis(leafTextChunks.join("\n"));
+
     // ── Auto-commit via serialized queue (no git race) ──────────
-    const commitMsg = await commitQueue.enqueue(async () => {
-      return autoCommitLeaf(leaf, targetDir, artifacts, (config as any)._push !== false);
+    const commitResult = await commitQueue.enqueue(async () => {
+      return autoCommitLeaf(
+        leaf,
+        targetDir,
+        artifacts,
+        (config as any)._push !== false,
+        leafSynopsis
+      );
     });
+    const commitMsg = commitResult?.message ?? null;
+    const commitSha = commitResult?.sha ?? null;
 
     // ── Mark done in SporeNet (F2: symmetric with failure path) ─
     const updates: Record<string, any> = {
       status: "done",
       completed_at: new Date().toISOString(),
+      // F3: persist duration + file count for the dashboard (F10).
+      duration_seconds: Math.round(((Date.now() - started) / 1000) * 10) / 10,
+      files_produced: Array.from(new Set(artifacts)).length,
     };
-    const shaMatch = (commitMsg ?? "").match(/\b[0-9a-f]{7,40}\b/);
-    if (shaMatch) updates.commit = shaMatch[0];
-    else if ((commitMsg ?? "").includes("committed")) {
+    if (commitSha) {
+      updates.commit = commitSha;
+    } else {
+      const shaMatch = (commitMsg ?? "").match(/\b[0-9a-f]{7,40}\b/);
+      if (shaMatch) updates.commit = shaMatch[0];
+      else if ((commitMsg ?? "").includes("committed")) {
+        try {
+          const sha = execFileSync(
+            "git",
+            ["-C", targetDir, "rev-parse", "HEAD"],
+            { encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
+          ).trim();
+          updates.commit = sha;
+        } catch {}
+      }
+    }
+
+    // F7: re-extract Synopsis from the commit body using the SHA
+    // (race-free vs HEAD; HEAD may already be a sibling leaf's commit
+    // by the time we read). Fall back to the in-memory captured value;
+    // last-resort fall back to scope so the dashboard always renders.
+    let synopsis: string | null = null;
+    if (updates.commit) {
       try {
-        const sha = execFileSync(
+        const body = execFileSync(
           "git",
-          ["-C", targetDir, "rev-parse", "HEAD"],
-          { encoding: "utf-8" }
-        ).trim();
-        updates.commit = sha;
+          ["-C", targetDir, "log", "-1", "--format=%B", updates.commit],
+          { encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
+        );
+        synopsis = extractSynopsis(body);
       } catch {}
     }
+    if (!synopsis) synopsis = leafSynopsis;
+    if (!synopsis) {
+      console.log(
+        chalk.yellow(
+          `  ⚠ ${leaf.id}: no Synopsis: trailer in commit body, falling back to scope`
+        )
+      );
+      synopsis = leaf.scope || "";
+    }
+    updates.synopsis = synopsis;
+
     writeLeafState(targetDir, leaf.id, updates);
 
     const ms = Date.now() - started;
@@ -591,22 +687,85 @@ function loadDoneLeafIds(targetDir: string): Set<string> {
   }
 }
 
+// F3: ensure sporenet/state.json exists before cultivate writes to it.
+// Without this, writeLeafState silently no-ops when ddp/cultivate runs
+// without a prior `mycelium sporenet init` — the dashboard never updates.
+// Idempotent: bails if the file already exists.
+function ensureSporenetState(
+  targetDir: string,
+  leaves: Array<{ id: string; biome: string; scope: string }>,
+  organism: { name?: string; ship_target?: string; gating?: string }
+): void {
+  try {
+    const sporenetDir = path.join(targetDir, "sporenet");
+    const statePath = path.join(sporenetDir, "state.json");
+    if (fs.existsSync(statePath)) return;
+    fs.mkdirSync(sporenetDir, { recursive: true });
+    const sessionId =
+      "cultivate-" + new Date().toISOString().replace(/[:.]/g, "-");
+    const state = {
+      session_id: sessionId,
+      organism: organism.name ?? "organism",
+      started_at: new Date().toISOString(),
+      ...(organism.ship_target ? { ship_target: organism.ship_target } : {}),
+      ...(organism.gating ? { gating: organism.gating } : {}),
+      total: leaves.length,
+      leaves: leaves.map((l) => ({
+        id: l.id,
+        agent: l.biome,
+        tag: l.biome.replace(/-agent$/, "").toUpperCase(),
+        scope: l.scope,
+        status: "pending" as const,
+      })),
+    };
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  } catch {
+    // best-effort; downstream writeLeafState calls will quietly no-op
+    // rather than crash cultivate if the seed fails for any reason.
+  }
+}
+
+// F3: serialize concurrent writeLeafState calls. Multiple leaves cultivate
+// in parallel and may both hit writeLeafState (status=active at start,
+// status=done at completion) at overlapping times. Without serialization,
+// read-modify-write races silently drop one leaf's update. Pair with
+// atomic temp-file + rename so the file never appears partially written
+// to a concurrent reader (e.g. the live-refresh dashboard polling /).
+let _leafStateChain: Promise<void> = Promise.resolve();
+
 function writeLeafState(
   targetDir: string,
   leafId: string,
   updates: Record<string, any>
 ): void {
-  try {
-    const statePath = path.join(targetDir, "sporenet", "state.json");
-    if (!fs.existsSync(statePath)) return;
-    const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-    const stateLeaf = state.leaves?.find((l: any) => l.id === leafId);
-    if (!stateLeaf) return;
-    Object.assign(stateLeaf, updates);
-    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
-  } catch {
-    // best-effort
-  }
+  _leafStateChain = _leafStateChain.then(
+    () =>
+      new Promise<void>((resolve) => {
+        try {
+          const statePath = path.join(targetDir, "sporenet", "state.json");
+          if (!fs.existsSync(statePath)) return resolve();
+          const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+          const stateLeaf = state.leaves?.find((l: any) => l.id === leafId);
+          if (!stateLeaf) return resolve();
+          Object.assign(stateLeaf, updates);
+          // Atomic: write to sibling .tmp, rename. Concurrent readers always
+          // see a complete state, never a half-truncated mid-write file.
+          const tmpPath = statePath + ".tmp";
+          fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2));
+          fs.renameSync(tmpPath, statePath);
+          resolve();
+        } catch {
+          resolve(); // best-effort
+        }
+      })
+  );
+}
+
+// Wait for queued writeLeafState calls to drain. Call before cultivate
+// returns so final-state writes (status=done, completed_at, commit) are
+// guaranteed flushed to disk even if the process exits immediately after.
+async function drainLeafStateWrites(): Promise<void> {
+  await _leafStateChain;
 }
 
 function buildLeafPrompt(leaf: Leaf, config: any): string {
@@ -639,6 +798,35 @@ function buildLeafPrompt(leaf: Leaf, config: any): string {
     ``,
     `  [${leaf.id}] FRUIT_READY — <one-line summary of what you built>`,
     ``,
+    `═══════════════════════════════════════════════════════════════════════`,
+    `REQUIRED — DASHBOARD SYNOPSIS (do not skip, do not drop):`,
+    `═══════════════════════════════════════════════════════════════════════`,
+    ``,
+    `When you finish your final summary line above, you MUST also include a`,
+    `Synopsis line for the live launch-demo dashboard. Format exactly:`,
+    ``,
+    `  Synopsis: <one sentence>`,
+    ``,
+    `Voice rules — these are non-negotiable:`,
+    `  • Active voice, past tense.`,
+    `  • Plain English for a non-technical guest at a launch demo.`,
+    `  • NO tech terms — banned: state machine, OAuth, RLS, middleware, API,`,
+    `    schema, SDK, hook, route, endpoint, migration, JWT, framework.`,
+    `  • Describe what a person at the demo would SEE and DO.`,
+    ``,
+    `Example (good):`,
+    `  Synopsis: Built the inbox and message threads where bookings get`,
+    `  negotiated and reviewed.`,
+    ``,
+    `Example (bad — too jargon):`,
+    `  Synopsis: Wired Supabase auth middleware with OAuth providers and RLS`,
+    `  policies for session management.`,
+    ``,
+    `The orchestrator will pull this Synopsis line out of your commit body`,
+    `and render it on the dashboard. If you skip it, your leaf shows up with`,
+    `the raw scope (jargon-walled) at a public demo. Do not skip it.`,
+    `═══════════════════════════════════════════════════════════════════════`,
+    ``,
     `The network provides. Grow in your lane. 🍄`,
   ].join("\n");
 }
@@ -655,40 +843,135 @@ class CommitQueue {
 }
 const commitQueue = new CommitQueue();
 
+// 100MB buffer for git invocations — large leaf outputs can otherwise hit the
+// default 1MB cap and fail with ENOBUFS (observed on discovery in run-3).
+const GIT_MAX_BUFFER = 100 * 1024 * 1024;
+
+interface AutoCommitResult {
+  message: string;
+  sha: string | null;
+}
+
+// F7: extract a single-line `Synopsis: <text>` trailer from arbitrary
+// text (leaf assistant output OR a git commit body). Case-insensitive;
+// trims trailing whitespace; returns null if no match.
+function extractSynopsis(text: string): string | null {
+  if (!text) return null;
+  const m = text.match(/^[\t ]*synopsis:[\t ]*(.+?)[\t ]*$/im);
+  if (!m) return null;
+  const v = m[1].trim();
+  return v.length > 0 ? v : null;
+}
+
 function autoCommitLeaf(
   leaf: Leaf,
   cwd: string,
   artifacts: string[],
-  push: boolean = true
-): string | null {
+  push: boolean = true,
+  synopsis: string | null = null
+): AutoCommitResult | null {
   try {
-    const status = execFileSync("git", ["status", "--porcelain"], {
+    // F4 (Bug 2): stage only THIS leaf's Write/Edit paths. The previous
+    // `git add -A` pattern grabbed every modified file in the shared
+    // working tree — including files that parallel leaves had written
+    // but not yet committed. Whichever leaf hit the serialized commit
+    // queue first absorbed everyone's pending work; later leaves saw an
+    // empty `git status` and returned null with no feat branch stamped.
+    // (Run8 talent-onboarding hit exactly this — its 26 files committed
+    // under DISCOVERY's commit, no feat/talent-onboarding branch.)
+    //
+    // De-dup + path-resolve artifacts so we don't pass duplicates or
+    // absolute paths git would reject. Strip cwd prefix so paths are
+    // relative to the repo root.
+    const cwdAbs = path.resolve(cwd) + path.sep;
+    const stagedPaths = Array.from(
+      new Set(
+        artifacts
+          .map((a) => path.resolve(a))
+          .filter((a) => a.startsWith(cwdAbs))
+          .map((a) => a.slice(cwdAbs.length))
+      )
+    );
+
+    if (stagedPaths.length === 0) {
+      // Leaf produced no Write/Edit artifacts the SDK tracked — likely
+      // a no-op leaf (skipped, already-done, or pure-validation pass).
+      return null;
+    }
+
+    // Use --all so deletes are also staged, scoped to the leaf's paths.
+    execFileSync("git", ["add", "--all", "--", ...stagedPaths], {
       cwd,
-      encoding: "utf-8",
-    }).trim();
-    if (!status) return null;
+      maxBuffer: GIT_MAX_BUFFER,
+    });
+
+    // Verify something was actually staged (artifact paths could be
+    // unchanged if the leaf rewrote files identically). If nothing
+    // staged, bail before commit so we don't create an empty commit.
+    const staged = execFileSync(
+      "git",
+      ["diff", "--cached", "--name-only"],
+      { cwd, encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
+    ).trim();
+    if (!staged) return null;
 
     const tag = leaf.biome.replace(/-agent$/, "").toUpperCase();
-    const msg = `${tag}/${leaf.id}: ${leaf.scope}`;
-    execFileSync("git", ["add", "-A"], { cwd });
-    execFileSync("git", ["commit", "-m", msg, "--no-verify"], {
+    const branchName = `feat/${leaf.id}`;
+    const subject = `${tag}/${leaf.id}: ${leaf.scope}`;
+    // F7: bake `Synopsis: <one sentence>` into the commit body so the
+    // dashboard can re-read it via git log later. Multi -m flags become
+    // body paragraphs separated by blank lines.
+    const commitArgs = ["commit", "-m", subject];
+    if (synopsis) {
+      commitArgs.push("-m", `Synopsis: ${synopsis}`);
+    }
+    commitArgs.push("--no-verify");
+    execFileSync("git", commitArgs, {
       cwd,
       stdio: "pipe",
+      maxBuffer: GIT_MAX_BUFFER,
     });
+
+    // Capture the resulting SHA before any sibling leaf advances HEAD.
+    // The serialized commit queue guarantees HEAD == this leaf's commit
+    // right here, so rev-parse HEAD is safe at this exact instant.
+    let sha: string | null = null;
+    try {
+      sha = execFileSync(
+        "git",
+        ["rev-parse", "HEAD"],
+        { cwd, encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
+      ).trim();
+    } catch {}
+
+    // Stamp the per-biome branch to point at this commit. The serialized
+    // commit queue guarantees HEAD is THIS leaf's commit at this instant,
+    // so a force-update of feat/<id> to HEAD is safe and creates the branch
+    // that `mycelium harvest` expects to find.
+    try {
+      execFileSync("git", ["branch", "-f", branchName, "HEAD"], {
+        cwd,
+        stdio: "pipe",
+        maxBuffer: GIT_MAX_BUFFER,
+      });
+    } catch (branchErr: any) {
+      // Non-fatal: if branch stamping fails (rare), the commit still landed.
+      const errMsg = String(branchErr?.stderr ?? branchErr?.message ?? branchErr);
+      console.error(
+        chalk.yellow(`  ⚠️  feat/${leaf.id} branch stamp failed: ${errMsg.split("\n")[0]}`)
+      );
+    }
 
     // Push — set upstream on first push per branch, swallow no-remote errors.
     let pushStatus = "committed";
     if (!push) {
-      return chalk.gray(`committed (no-push) ${tag}/${leaf.id}`);
+      return { message: chalk.gray(`committed (no-push) ${branchName}`), sha };
     }
     try {
-      const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-        cwd,
-        encoding: "utf-8",
-      }).trim();
-      execFileSync("git", ["push", "--set-upstream", "origin", branch], {
+      execFileSync("git", ["push", "--set-upstream", "origin", branchName], {
         cwd,
         stdio: "pipe",
+        maxBuffer: GIT_MAX_BUFFER,
       });
       pushStatus = "committed+pushed";
     } catch (pushErr: any) {
@@ -700,9 +983,12 @@ function autoCommitLeaf(
       }
     }
 
-    return chalk.gray(`${pushStatus} ${tag}/${leaf.id}`);
+    return { message: chalk.gray(`${pushStatus} ${branchName}`), sha };
   } catch (err: any) {
-    return chalk.yellow(`commit skipped: ${err?.message?.split("\n")[0] ?? err}`);
+    return {
+      message: chalk.yellow(`commit skipped: ${err?.message?.split("\n")[0] ?? err}`),
+      sha: null,
+    };
   }
 }
 

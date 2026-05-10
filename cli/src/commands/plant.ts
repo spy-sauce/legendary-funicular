@@ -9,8 +9,19 @@ import chalk from "chalk";
 import ora from "ora";
 import fs from "node:fs";
 import path from "node:path";
+import YAML from "yaml";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { getStack, STACKS } from "../stacks/index.js";
+import {
+  getStack,
+  STACKS,
+  renderContractAppendix,
+} from "../stacks/index.js";
+import { readMaxBudgetUsd } from "../lib/budget.js";
+import {
+  SECURITY_TIERS,
+  isSecurityTier,
+  type SecurityTier,
+} from "../security/types.js";
 
 export function registerPlantCommand(program: Command): void {
   program
@@ -21,6 +32,10 @@ export function registerPlantCommand(program: Command): void {
     .option(
       "-s, --stack <name>",
       `Stack preset (${Object.keys(STACKS).join(", ")})`
+    )
+    .option(
+      "-S, --security <tier>",
+      "Security tier (demo, startup, regulated). REQUIRED on first plant of an organism; reads from mycelium.yaml on subsequent plants."
     )
     .option("-n, --name <name>", "Organism name (defaults to brief filename)")
     .option(
@@ -40,12 +55,90 @@ export function registerPlantCommand(program: Command): void {
       const targetDir = path.resolve(opts.dir);
       const organismName =
         opts.name ?? path.basename(briefAbs, path.extname(briefAbs));
-      const stack = getStack(opts.stack);
 
-      if (opts.stack && !stack) {
+      if (!opts.stack) {
+        console.log(
+          chalk.red("  ❌ --stack is required. Available: ") +
+            chalk.cyan(Object.keys(STACKS).join(", "))
+        );
+        console.log(
+          chalk.gray(
+            "     Stack determines the contract baseline the planner injects"
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     into NUTRIENTS.md. Without a stack, contracts cannot be"
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     hardened against drift, and parallel leaves drift apart."
+          )
+        );
+        process.exit(1);
+      }
+
+      const stack = getStack(opts.stack);
+      if (!stack) {
         console.log(
           chalk.red(`  ❌ Unknown stack "${opts.stack}". Available: `) +
             chalk.cyan(Object.keys(STACKS).join(", "))
+        );
+        process.exit(1);
+      }
+
+      // Resolve security tier: read from existing yaml if present, else require --security flag.
+      const yamlPath = path.join(targetDir, "mycelium.yaml");
+      const existingTier: string | undefined = (() => {
+        if (!fs.existsSync(yamlPath)) return undefined;
+        try {
+          const cfg = YAML.parse(fs.readFileSync(yamlPath, "utf-8"));
+          return cfg?.organism?.security_tier;
+        } catch {
+          return undefined;
+        }
+      })();
+
+      let securityTier: SecurityTier;
+      if (opts.security) {
+        if (!isSecurityTier(opts.security)) {
+          console.log(
+            chalk.red(`  ❌ Invalid --security tier "${opts.security}". Available: `) +
+              chalk.cyan(SECURITY_TIERS.join(", "))
+          );
+          process.exit(1);
+        }
+        if (existingTier && existingTier !== opts.security) {
+          console.log(
+            chalk.red(
+              `  ❌ Tier flip via plant is not supported (current: ${existingTier}, requested: ${opts.security}).`
+            )
+          );
+          console.log(
+            chalk.gray(
+              `     Use \`mycelium contracts upgrade-tier ${opts.security}\` instead — it's faster and doesn't re-invoke the planner LLM.`
+            )
+          );
+          process.exit(1);
+        }
+        securityTier = opts.security;
+      } else if (existingTier && isSecurityTier(existingTier)) {
+        securityTier = existingTier;
+      } else {
+        console.log(
+          chalk.red("  ❌ --security is required on first plant. Available: ") +
+            chalk.cyan(SECURITY_TIERS.join(", "))
+        );
+        console.log(
+          chalk.gray(
+            "     Tier sets the security contract enforcement strictness. Forgetting it"
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     would default the cultivation to weakest protection — explicit choice required."
+          )
         );
         process.exit(1);
       }
@@ -72,6 +165,7 @@ export function registerPlantCommand(program: Command): void {
         organismName,
         targetDir,
         stack,
+        securityTier,
       });
 
       if (opts.dryRun) {
@@ -80,44 +174,194 @@ export function registerPlantCommand(program: Command): void {
         return;
       }
 
-      fs.mkdirSync(path.join(targetDir, "hyphae"), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, "agents"), { recursive: true });
-      fs.mkdirSync(path.join(targetDir, "contracts"), { recursive: true });
+      const REQUIRED_FILES = [
+        "mycelium.yaml",
+        "NUTRIENTS.md",
+        "CLAUDE.md",
+      ];
+      // Files/dirs the planner produces — wiped between retry attempts so a
+      // fresh planning session doesn't see partial output from a prior one.
+      // brief.md and .gitignore are operator-bootstrap files; .git is the repo.
+      const PLANNER_OUTPUT_PATHS = [
+        "mycelium.yaml",
+        "NUTRIENTS.md",
+        "CLAUDE.md",
+        "CELLULAR-MAP.md",
+        "agents",
+        "hyphae",
+        "contracts",
+        "sporenet",
+        "src",
+      ];
 
-      const spinner = ora({
-        text: chalk.cyan("Sub-agent decomposing brief into HYPHAE..."),
-        spinner: "earth",
-      }).start();
+      const MAX_PLANNER_ATTEMPTS = 3;
+      const maxBudgetUsd = readMaxBudgetUsd();
 
-      try {
-        const result = query({
-          prompt,
-          options: {
-            cwd: targetDir,
-            allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-            permissionMode: "acceptEdits",
-          },
-        });
+      function ensureScaffoldDirs(): void {
+        fs.mkdirSync(path.join(targetDir, "hyphae"), { recursive: true });
+        fs.mkdirSync(path.join(targetDir, "agents"), { recursive: true });
+        fs.mkdirSync(path.join(targetDir, "contracts"), { recursive: true });
+      }
+
+      function wipePartialScaffold(): void {
+        for (const rel of PLANNER_OUTPUT_PATHS) {
+          const abs = path.join(targetDir, rel);
+          try {
+            fs.rmSync(abs, { recursive: true, force: true });
+          } catch {}
+        }
+      }
+
+      async function attemptPlanting(): Promise<{
+        ok: boolean;
+        lastText: string;
+        missing: string[];
+        budgetExceeded: { spent: number } | null;
+      }> {
+        ensureScaffoldDirs();
+
+        const spinner = ora({
+          text: chalk.cyan("Sub-agent decomposing brief into HYPHAE..."),
+          spinner: "earth",
+        }).start();
 
         let lastText = "";
-        for await (const msg of result) {
-          if (msg.type === "assistant") {
-            const blocks = (msg as any).message?.content ?? [];
-            for (const b of blocks) {
-              if (b.type === "tool_use") {
-                spinner.text = chalk.cyan(
-                  `Sub-agent: ${chalk.white(b.name)} ${chalk.gray(
-                    summarizeToolInput(b.name, b.input)
-                  )}`
-                );
-              } else if (b.type === "text" && b.text) {
-                lastText = b.text;
+        let budgetExceeded: { spent: number } | null = null;
+
+        try {
+          const result = query({
+            prompt,
+            options: {
+              cwd: targetDir,
+              allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+              permissionMode: "acceptEdits",
+              ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
+            },
+          });
+
+          for await (const msg of result) {
+            if (msg.type === "assistant") {
+              const blocks = (msg as any).message?.content ?? [];
+              for (const b of blocks) {
+                if (b.type === "tool_use") {
+                  spinner.text = chalk.cyan(
+                    `Sub-agent: ${chalk.white(b.name)} ${chalk.gray(
+                      summarizeToolInput(b.name, b.input)
+                    )}`
+                  );
+                } else if (b.type === "text" && b.text) {
+                  lastText = b.text;
+                }
               }
+            } else if (
+              msg.type === "result" &&
+              (msg as any).subtype === "error_max_budget_usd"
+            ) {
+              budgetExceeded = {
+                spent: Number((msg as any).total_cost_usd) || 0,
+              };
             }
           }
+        } catch (err: any) {
+          spinner.fail(chalk.red("Planner SDK error"));
+          console.log(chalk.red(`     ${err?.message ?? String(err)}`));
+          return {
+            ok: false,
+            lastText,
+            missing: REQUIRED_FILES,
+            budgetExceeded,
+          };
+        }
+
+        if (budgetExceeded) {
+          spinner.fail(
+            chalk.red(
+              `BUDGET_EXCEEDED — stopped at $${budgetExceeded.spent.toFixed(4)} (cap $${(maxBudgetUsd ?? 0).toFixed(4)})`
+            )
+          );
+          return {
+            ok: false,
+            lastText,
+            missing: REQUIRED_FILES,
+            budgetExceeded,
+          };
+        }
+
+        const missing = REQUIRED_FILES.filter(
+          (f) => !fs.existsSync(path.join(targetDir, f))
+        );
+
+        if (missing.length > 0) {
+          spinner.fail(
+            chalk.red(
+              `PLANNER FLAKE — SDK returned success but expected files missing: ${missing.join(", ")}`
+            )
+          );
+          return { ok: false, lastText, missing, budgetExceeded: null };
         }
 
         spinner.succeed(chalk.greenBright("Organism planted!"));
+        return { ok: true, lastText, missing: [], budgetExceeded: null };
+      }
+
+      let attemptResult: Awaited<ReturnType<typeof attemptPlanting>> | null =
+        null;
+      let attemptNumber = 0;
+
+      while (attemptNumber < MAX_PLANNER_ATTEMPTS) {
+        attemptNumber++;
+        if (attemptNumber > 1) {
+          console.log();
+          console.log(
+            chalk.yellow(
+              `  ↻ Plant attempt ${attemptNumber} of ${MAX_PLANNER_ATTEMPTS} — wiping partial scaffold from prior attempt...`
+            )
+          );
+          wipePartialScaffold();
+        }
+
+        attemptResult = await attemptPlanting();
+
+        if (attemptResult.ok) break;
+
+        // Budget-exceeded is non-retriable; abort immediately.
+        if (attemptResult.budgetExceeded) {
+          process.exit(1);
+        }
+      }
+
+      if (!attemptResult || !attemptResult.ok) {
+        console.log();
+        console.log(
+          chalk.red(
+            `  ❌ Plant failed after ${MAX_PLANNER_ATTEMPTS} attempts. Last missing: ${(attemptResult?.missing ?? REQUIRED_FILES).join(", ")}`
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     This is non-deterministic at large prompt scale; another retry may succeed."
+          )
+        );
+        console.log(
+          chalk.gray(
+            "     Durable fix is to split the planner into multiple SDK calls — tracked for M4."
+          )
+        );
+        if (attemptResult?.lastText) {
+          console.log();
+          console.log(chalk.gray("  ── Last planner output (for diagnosis) ──"));
+          console.log(
+            attemptResult.lastText
+              .split("\n")
+              .slice(-30)
+              .map((l) => chalk.gray("  ") + l)
+              .join("\n")
+          );
+        }
+        process.exit(1);
+      }
+
+      const lastText = attemptResult.lastText;
 
         if (lastText) {
           console.log();
@@ -150,11 +394,6 @@ export function registerPlantCommand(program: Command): void {
             chalk.white(" to wake the organism")
         );
         console.log();
-      } catch (err: any) {
-        spinner.fail(chalk.red("Planner failed"));
-        console.log(chalk.red(err?.message ?? String(err)));
-        process.exit(1);
-      }
     });
 }
 
@@ -173,12 +412,12 @@ function buildPlannerPrompt(args: {
   brief: string;
   organismName: string;
   targetDir: string;
-  stack: ReturnType<typeof getStack>;
+  stack: NonNullable<ReturnType<typeof getStack>>;
+  securityTier: SecurityTier;
 }): string {
-  const { brief, organismName, stack } = args;
+  const { brief, organismName, stack, securityTier } = args;
 
-  const stackBlock = stack
-    ? `STACK PRESET: ${stack.name}
+  const stackBlock = `STACK PRESET: ${stack.name}
 ${stack.description}
 
 CLAUDE.md stack section to use verbatim:
@@ -187,10 +426,19 @@ ${stack.claudeMdHeader}
 Project rules to embed in CLAUDE.md:
 ${stack.rules}
 
-Suggested archetype agents (use only those that fit the brief; rename freely):
-${stack.archetypeAgents.map((a) => `  - ${a}`).join("\n")}
-`
-    : `STACK: not specified — infer the smallest reasonable stack from the brief itself.`;
+REQUIRED agents (you MUST create agents with these exact ids — they own the
+contract baseline declared in the verbatim contract appendix below):
+${stack.requiredAgents.map((a) => `  - ${a}`).join("\n")}
+
+Additional archetype agents (use those that fit the brief; rename freely;
+extend with brief-specific agents as needed):
+${stack.archetypeAgents
+  .filter((a) => !stack.requiredAgents.includes(a))
+  .map((a) => `  - ${a}`)
+  .join("\n")}
+`;
+
+  const renderedAppendix = renderContractAppendix(stack.contractAppendix);
 
   return `You are the Mycelium planner sub-agent. You have been given a business brief
 and must scaffold a complete Mycelium organism in the current working directory.
@@ -216,6 +464,8 @@ Your job — produce these files using the Write tool:
    \`\`\`yaml
    organism:
      name: ${organismName}
+     stack: ${stack.name}        # REQUIRED — audit/freeze look up the stack preset to verify contracts
+     security_tier: ${securityTier}    # REQUIRED — audit/freeze/upgrade-tier read this
      ship_target: "<your estimate>"
      health_pulse_interval: 30
      harvest_threshold: 0.8
@@ -229,23 +479,85 @@ Your job — produce these files using the Write tool:
        capabilities: [<tech tags>]
    merge_order: [<ordered list of agent ids>]
    \`\`\`
-   Decompose the brief into 3-7 agents. Wire blocked_by/blocks so the
-   dependency graph is acyclic and matches real build order.
+   The \`stack:\` field MUST be \`${stack.name}\` and \`security_tier:\` MUST be
+   \`${securityTier}\` (downstream commands — audit, freeze, upgrade-tier — look
+   them up). Section H of NUTRIENTS will be rendered with rules tagged
+   at-tier-or-below + always-block rules active.
+   Every required agent (listed above) MUST appear in this file. Decompose the
+   brief into the required agents plus any additional brief-specific agents
+   (typical total: 5-10). Wire blocked_by/blocks so the dependency graph is
+   acyclic and matches real build order.
 
 3. **hyphae/HYPHA-{DOMAIN}.md** — one file per agent, where {DOMAIN} matches
    the agent id in upper-snake-case. Each HYPHA file must include:
    - Goal (1-2 sentences)
    - Scope (in / out)
    - Inputs (contracts + upstream agents it depends on)
-   - Outputs (contracts + deliverables)
+   - **Outputs (deliverables)** — list EVERY file the biome will produce, by
+     full path (e.g., \`src/screens/auth/WelcomeScreen.tsx\`). The audit reads
+     this list and verifies each file exists on disk after cultivation. A
+     biome that lists a file in Outputs but doesn't ship it FAILS the audit.
    - Acceptance criteria (bulleted, testable)
    - Notes (anything specific from the brief)
 
-4. **NUTRIENTS.md** — frozen contracts doc. Sections:
-   - DATA_CONTRACTS (TypeScript-style interface stubs for the main entities
-     in the brief — leave fields TODO if unclear)
-   - DESIGN_TOKENS (colors, typography, spacing — placeholders OK)
-   - API_CONTRACTS (one line per endpoint: METHOD path → response shape)
+   Critically: every screen referenced in the route map (Section E of the
+   contract appendix in NUTRIENTS) MUST be claimed as a deliverable by some
+   biome's HYPHA Outputs section. Cross-reference the screen ownership matrix
+   in Section G — every row's "Screen file path" must appear in exactly one
+   biome's HYPHA Outputs.
+
+4. **NUTRIENTS.md** — frozen contracts. STRICT RULES:
+   - NO \`#TODO\`. NO placeholders. NO "fill in later". Every field, every
+     row, every value is concrete.
+   - The first part of NUTRIENTS.md is a CONTRACT APPENDIX section copied
+     VERBATIM from the stack preset (see VERBATIM CONTRACT APPENDIX block
+     near the end of this prompt). Copy that block byte-for-byte. Do not
+     paraphrase. Do not omit subsections. Do not reorder.
+   - After the verbatim appendix, add the organism-specific extensions:
+
+     **DATA_CONTRACTS** — full TypeScript interfaces for every domain entity
+     in the brief. Every field has a concrete type. If a field's type is
+     genuinely ambiguous from the brief, infer from the strongest signal and
+     add a single-line comment explaining the inference. NEVER \`any\` or
+     \`unknown\`.
+
+     **Section C extension rows** — append to the Symbol Ownership Matrix
+     (from the verbatim appendix) one row for every: domain entity type,
+     domain enum, biome-level component, hook, context, and lib utility the
+     brief implies. Owner must be one of the agents you created. Path
+     conventions follow §D in the appendix. NO symbol claimed by two agents.
+
+     **Section E extension rows** — append to Allow-listed Identifiers:
+       - Domain enums: full TS union types for every enum in the brief
+         (categories, statuses, roles, types) owned by the schema-core /
+         types-owning agent.
+       - Route map: complete \`RootStackParamList\` (or stack equivalent) with
+         every screen, sub-screen, and modal in the brief, typed.
+       - BrandIcon name union: narrow \`BrandIconProps['name']\` to the
+         specific brand glyphs the brief uses (Spotify, Google, etc.).
+
+     **Section G extension — Screen Ownership Matrix table** — for EVERY
+     route in §E's route map, append a row to the table in §G with:
+       - Route name (matches the route map literal)
+       - Owner biome (must exist in mycelium.yaml AND must claim the file as
+         a deliverable in its HYPHA Outputs)
+       - Screen file path (e.g., \`src/screens/auth/WelcomeScreen.tsx\`)
+       - Import statement app-shell will use in \`RootNavigator.tsx\`
+
+     The table is load-bearing — app-shell's RootNavigator MUST import each
+     screen at the listed path. PlaceholderScreen-returns-null is FORBIDDEN
+     (rule §F.9). If the owning biome hasn't shipped the screen yet at
+     cultivation time, the placeholder MUST render the route name visibly
+     (see §F.9 for the pattern).
+
+     **DESIGN_TOKENS** — actual token values: colors (with hex), typography
+     scale, spacing scale, radii, shadows, motion durations. Source from the
+     brief if present; otherwise synthesize a coherent palette aligned with
+     the brand. NO placeholders. The design-system agent must be able to
+     ship \`tokens.ts\` directly from this section.
+
+     **API_CONTRACTS** — one block per endpoint with full request/response
+     shapes as TS interfaces. NO \`METHOD path → shape\` shorthand.
 
 5. **agents/{id}.ts** — for each agent, write a stub matching this shape
    (id, scope, branch, blocked_by, blocks, capabilities + germinate/grow/fruit
@@ -293,7 +605,21 @@ Your job — produce these files using the Write tool:
 
 After writing all files, output a short markdown summary listing what you
 created and any open questions the user should resolve before running
-\`mycelium cultivate\`.
+\`mycelium contracts audit\` and then \`mycelium contracts freeze\`.
 
-Do NOT install dependencies, run builds, or commit. Just write the files.`;
+Do NOT install dependencies, run builds, or commit. Just write the files.
+
+─────────────────────────────────────────────────────────────────────────
+VERBATIM CONTRACT APPENDIX
+Copy the entire block between the START and END markers below into
+NUTRIENTS.md as-is. Do not modify, paraphrase, or omit any part. After
+this block ends in NUTRIENTS.md, append the organism-specific extensions
+described in step 4 above.
+─────────────────────────────────────────────────────────────────────────
+START VERBATIM CONTRACT APPENDIX
+
+${renderedAppendix}
+
+END VERBATIM CONTRACT APPENDIX
+─────────────────────────────────────────────────────────────────────────`;
 }
