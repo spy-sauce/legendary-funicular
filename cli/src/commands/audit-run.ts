@@ -8,6 +8,12 @@
 //
 // Subcommands:
 //   scaffold-tester <biome>  — emit hyphae/HYPHA-TEST-<biome>.md stub from biome HYPHA
+//
+// Exit codes per NUTRIENTS §7:
+//   0: clean (or autofix succeeded — zero criticals at termination)
+//   1: findings present in non-autofix mode
+//   2: autofix exhausted with criticals remaining (max-iter or budget)
+//   3: tester_error count > 0 (operator concern)
 
 import { Command } from "commander";
 import chalk from "chalk";
@@ -16,13 +22,92 @@ import {
   scaffoldTester,
   ScaffoldTesterError,
 } from "../lib/audit/scaffold-tester.js";
+import { runAuditOrchestrator } from "../lib/audit/orchestrator.js";
 
 export function registerAuditRunCommand(program: Command): void {
   const auditRun = program
     .command("audit-run")
     .description(
       "🔬 Automated quality assurance — run testers against a cultivation"
-    );
+    )
+    // ────────────────────────────────────────────────────────────────────────
+    // Flags per NUTRIENTS §7 — frozen CLI surface
+    // ────────────────────────────────────────────────────────────────────────
+    .option(
+      "--autofix",
+      "Enter heal-loop to auto-fix defects (default: off)",
+      false
+    )
+    .option(
+      "--max-iterations <n>",
+      "Maximum autofix iterations (default: 3)",
+      (v) => parseInt(v, 10),
+      3
+    )
+    .option(
+      "--only-tester <tester_id>",
+      "Run only the specified tester (for debugging)"
+    )
+    .option(
+      "--against <ref>",
+      "Baseline findings.jsonl path or git ref for regression diff"
+    )
+    .option(
+      "--concurrency <n>",
+      "Max simultaneous tester sessions (default: from yaml or 30)",
+      (v) => parseInt(v, 10)
+    )
+    .option(
+      "--no-serve",
+      "Skip sporenet state.json writes (sporenet integration disabled)"
+    )
+    .option(
+      "--autofix-branch <name>",
+      "Branch name for autofix commits (sub-organism mode; default: commit-on-top)"
+    )
+    .option(
+      "--max-budget-usd <n>",
+      "Cost cap for the audit run in USD",
+      (v) => parseFloat(v)
+    )
+    .option(
+      "--dry-run",
+      "Print execution plan without spawning sessions",
+      false
+    )
+    .action(async (opts) => {
+      // Map Commander options to orchestrator options
+      // Note: --no-serve inverts to opts.serve = false
+      const cultivationDir = process.cwd();
+      const concurrency = opts.concurrency ?? undefined; // Let orchestrator resolve default
+
+      console.log();
+      console.log(
+        chalk.magentaBright.bold("  🔬 Audit Run ") +
+          chalk.gray("— automated quality assurance")
+      );
+      console.log();
+
+      try {
+        const result = await runAuditOrchestrator({
+          cultivationDir,
+          autofix: opts.autofix,
+          maxIterations: opts.maxIterations,
+          onlyTester: opts.onlyTester,
+          againstRef: opts.against,
+          concurrency: concurrency ?? 30,
+          noServe: !opts.serve, // Commander inverts --no-serve to opts.serve
+          autofixBranch: opts.autofixBranch,
+          maxBudgetUsd: opts.maxBudgetUsd,
+          dryRun: opts.dryRun,
+        });
+
+        process.exit(result.exitCode);
+      } catch (err) {
+        console.error(chalk.red("  ❌ Audit run failed:"), err);
+        process.exit(3); // tester_error exit code
+      }
+    });
 
   // ────────────────────────────────────────────────────────────────────────────
   // audit-run scaffold-tester <biome>
@@ -100,18 +185,4 @@ export function registerAuditRunCommand(program: Command): void {
       }
     });
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // Main audit-run command (placeholder — wired by audit.cli.command leaf)
-  // ────────────────────────────────────────────────────────────────────────────
-  //
-  // The main audit-run action is implemented by the audit.cli.command and
-  // audit.cli.orchestrator leaves. This file provides the subcommand registration
-  // structure; the main action handler will be added by the sibling leaf.
-  //
-  // Per NUTRIENTS §7, the full flag surface is:
-  //   --autofix, --max-iterations, --only-tester, --against, --concurrency,
-  //   --no-serve, --autofix-branch, --max-budget-usd, --dry-run
-
-  // Note: The main audit-run action with all flags will be wired by audit.cli.command.
-  // For now, running `mycelium audit-run` without a subcommand shows help.
 }
