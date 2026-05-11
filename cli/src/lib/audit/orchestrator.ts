@@ -342,9 +342,13 @@ export async function runAuditOrchestrator(
   fs.writeFileSync(briefFixPath, briefFixContent, "utf-8");
 
   // ── Step 11: Write summary.json ─────────────────────────────────────────
+  // Bug 4 fix (2026-05-11): writeSummary is async; without await the orchestrator
+  // returns before the temp/rename completes and the process exits with no
+  // summary.json on disk. Affected only the non-autofix path because autofix's
+  // heal-loop kept the event loop alive long enough for the dangling write.
   const organism = readOrganismName(cultivationDir);
 
-  writeSummary(auditRunDir, {
+  await writeSummary(auditRunDir, {
     audit_run_id: auditRunId,
     organism,
     started_at: startedAt,

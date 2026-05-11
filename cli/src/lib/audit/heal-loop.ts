@@ -29,6 +29,7 @@ import type { Finding } from "./findings.js";
 import { readFindings, findingsPath } from "./findings-writer.js";
 import { aggregate, type AggregatedFindings } from "./aggregator.js";
 import { composeBriefFix } from "./aggregator-brief.js";
+import { resetBiomeLeaves } from "./sporenet-integration.js";
 import {
   type IterationRecord,
   type HealLoopSummary,
@@ -418,6 +419,12 @@ export async function runHealLoop(
 
     // Sequential re-plant (per HYPHA: "single-biome cultivate at a time")
     for (const biome of biomesToReplant) {
+      // Bug 1 fix (2026-05-11): Reset the biome's leaves from `done` → `pending`
+      // before spawnCultivate, otherwise cultivate's F1 skip-already-done path
+      // (cultivate.ts:158-170) sees every leaf as `done` and produces zero files.
+      // Without this, the heal-loop iterates without ever fixing anything.
+      await resetBiomeLeaves(cultivationDir, biome);
+
       const result = await spawnCultivate(cultivationDir, biome);
       lastExitCode = result.exitCode;
       lastCommand = result.command;

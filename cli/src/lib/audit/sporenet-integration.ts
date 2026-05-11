@@ -265,3 +265,100 @@ export function createFailedAuditBlock(
     started_at: startedAt,
   };
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// resetBiomeLeaves — unblock heal-loop's re-cultivation (Bug 1 fix, 2026-05-11)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Cultivate's F1 path (cli/src/commands/cultivate.ts:158-170) reads
+// sporenet/state.json and skips any leaf already marked `done`. That's
+// correct for forward-progress cultivations but blocks the heal-loop's
+// re-plant: every prior-cultivation leaf is `done`, so the spawned
+// `mycelium cultivate --only-biome <biome>` produces zero files.
+//
+// The heal-loop calls this helper BEFORE each `spawnCultivate` to flip
+// the targeted biome's leaves back to `pending`, restoring re-plant
+// semantics without modifying cultivate.ts (framework rule #2).
+//
+// Uses the same atomic temp/rename pattern + promise-chain serialization
+// as writeAuditBlock, so concurrent state writes never lose updates.
+
+/**
+ * Reset the targeted biome's leaves from `done` → `pending` so the next
+ * `mycelium cultivate --only-biome <biome>` actually re-spawns them.
+ *
+ * Matches leaves where `leaf.agent === biomeId` OR `leaf.id === biomeId`
+ * OR `leaf.id` starts with `biomeId + "."`  (sub-leaf naming convention).
+ *
+ * @param stateDir - Directory containing sporenet/state.json
+ * @param biomeId - The biome whose leaves should be reset
+ * @returns Promise<void> that resolves when the write completes
+ */
+export function resetBiomeLeaves(
+  stateDir: string,
+  biomeId: string
+): Promise<void> {
+  const promise = _auditStateChain.then(
+    () =>
+      new Promise<void>((resolve) => {
+        try {
+          const statePath = path.join(stateDir, "sporenet", "state.json");
+
+          if (!fs.existsSync(statePath)) {
+            return resolve();
+          }
+
+          const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+
+          if (!Array.isArray(state.leaves)) {
+            return resolve();
+          }
+
+          let resetCount = 0;
+          state.leaves = state.leaves.map((leaf: any) => {
+            const matches =
+              leaf.agent === biomeId ||
+              leaf.id === biomeId ||
+              (typeof leaf.id === "string" && leaf.id.startsWith(biomeId + "."));
+
+            if (!matches) return leaf;
+
+            resetCount += 1;
+
+            // Preserve identity fields; clear completion fields so F1 re-spawns.
+            const {
+              status: _status,
+              completed_at: _completed,
+              commit: _commit,
+              files_produced: _files,
+              duration_seconds: _duration,
+              started_at: _started,
+              ...identity
+            } = leaf;
+
+            return { ...identity, status: "pending" };
+          });
+
+          // Atomic write
+          const tmpPath = statePath + ".reset.tmp";
+          fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2));
+          fs.renameSync(tmpPath, statePath);
+
+          // Surface what we did so the heal-loop's spawnCultivate output is interpretable.
+          if (resetCount > 0) {
+            console.log(
+              `[heal-loop] Reset ${resetCount} leaf(s) for biome '${biomeId}' (status: done → pending) so cultivate's F1 path will re-spawn them.`
+            );
+          }
+
+          resolve();
+        } catch {
+          // Best-effort — never throw on filesystem error
+          resolve();
+        }
+      })
+  );
+
+  _auditStateChain = promise;
+  return promise;
+}
