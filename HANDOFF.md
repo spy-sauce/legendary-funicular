@@ -4,6 +4,51 @@
 
 ---
 
+## [MYC] 2026-05-10 — ECC adoption analysis → 3 spec docs + rule #5 disambiguation
+
+**Context:** Analyzed `affaan-m/everything-claude-code` (182 skills, 68 commands, ECC2 Rust core) against Mycelium for adoption candidates. Mycelium and ECC are doing overlapping work on different axes: Mycelium = orchestration (many agents, one product), ECC = harness optimization (one agent, many sessions). Mycelium is language-agnostic at the cultivation-output layer; ECC is more harness-portable (CC, Codex, Cursor, Opencode, Gemini). Complementary, not competitors — most of ECC's 130+ stack-specific skills are dead weight from a Mycelium perspective; a small slice is directly load-bearing.
+
+**Strongest direct hits identified:**
+- Ralphinho/RFC-DAG pattern (`autonomous-loops` skill) — validates the worktree-isolation + merge-queue-with-eviction approach already sketched in the 2026-05-09 entry for run8 bug 2.
+- `silent-failure-hunter` agent — would have caught run8 bug 2 in a post-cultivate verification stage.
+- `agent-eval` + `eval-harness` skills — pass@k / pass^3 metrics; Mycelium has zero formal reliability data today.
+- `ai-regression-testing` skill — sandbox-mode contract tests; the AI-blind-spot framing applies directly to harvest's `-t 0.8` heuristic.
+- ECC PreToolUse hooks (config-protection, no-git, fact-force) — would *enforce* CLAUDE.md prose rules instead of relying on the leaf to obey them.
+
+**Shipped (uncommitted, advisor-reviewed):**
+
+1. **`CLAUDE.md` rule #5 disambiguation** — both framework block (line 81) and cultivation block (line 122). Splits "don't write tests" into *tests for the framework repo itself* (still no) vs. *tests inside cultivated apps* (first-class outputs, e2e/contract/smoke/regression). Hard precondition for #2 and #3 below — without this, every leaf hits the rule and rationalizes around it.
+
+2. **`docs/mycelium-eval-spec.md`** (299 lines) — `mycelium eval` command spec with Lane A (full cultivate) / Lane B (single-leaf) / Lane C (Router-only) eval modes; YAML task definitions; pass@1 / pass@3 / pass^3 metrics; `git worktree`-per-trial isolation; 4-phase build plan totaling ~6 days. **Sequencing claim: must ship before Router phase 1 changes `cultivate.ts:480`** — without a baseline, leaf-completion regressions cannot be attributed to Router vs model drift vs prompt drift.
+
+3. **`docs/contract-tests-from-nutrients.md`** (304 lines) — generates contract tests from `NUTRIENTS.md` frozen stubs at harvest time; replaces (or composes with) the `-t 0.8` file-count heuristic. Six initial generators map to NUTRIENTS §1–6 (event_schema, ddp_stages, upgrade_interface, sporenet_state, server_routes, gh_action_io). Would have caught run8 bug 2 (talent-onboarding's missing `leaf_fruited` event) before anyone inspected git history. 3-phase plan, ~3.5 days. Composes cleanly with the eval spec via a `contract` judge type.
+
+4. **`docs/hooks-via-agent-sdk-scoping.md`** (209 lines) — **scoping research only, not build-ready.** Open question: does `@anthropic-ai/claude-agent-sdk` expose hook callbacks rich enough to host ECC's PreToolUse content (especially *blocking* semantics for config-protection, no-git, fact-force)? Includes 4-step investigation plan + decision gate that must clear before any hooks code lands. Identifies escape hatches (custom Bash tool replacement, transformPrompt augmentation, Router Lane B as the multi-harness path).
+
+**State:** Repo on `main` (post `60f5822`); 4 uncommitted file changes (1 modified + 3 new). Advisor reviewed; cross-references between docs resolve correctly; phasing grounded in real line numbers (`harvest.ts:129,169`, `cultivate.ts:480`). Build-readiness: #2 and #3 are build-ready; #4 is scoping-only and gates further work behind evidence.
+
+**Next action:** SPY decides commit shape (likely 4 commits: `MYC: CLAUDE.md rule #5 disambig` + 3 separate `MYC/SPEC` commits matching the 2026-05-06 entry's batched-by-concern pattern). Then choose whether to start build on #2 (eval) immediately, given the Router-phase-1 sequencing constraint.
+
+**Open questions (carried forward):**
+- Hooks scoping decision gate (4 investigation steps in `docs/hooks-via-agent-sdk-scoping.md`). Outcome determines whether hooks adoption is a small EASY-tier port (~5 days) or a re-plumbing project that should defer to post-Router-Lane-B.
+- Operator HYPHA dogfood angle (carried from 2026-05-06 entry): if `mycelium eval` is built via cultivate-via-Mycelium, the eval-harness payload *is* the natural Operator HYPHA first cultivation. Not surfaced inside the eval spec (kept tight to build); revisit if SPY wants to dogfood.
+- Whether contract tests should default-on or opt-in for cultivations *without* tagged NUTRIENTS contracts. Spec leans default-on when tags exist, fully back-compatible when they don't.
+- Does `--contract-threshold` replace `-t 0.8` over time or compose with it indefinitely? Current spec leans compose; could simplify post-confidence.
+
+**Files touched:**
+- `CLAUDE.md` (modified — rule #5 in two places)
+- `docs/mycelium-eval-spec.md` (new)
+- `docs/contract-tests-from-nutrients.md` (new)
+- `docs/hooks-via-agent-sdk-scoping.md` (new)
+
+**Gotchas:**
+- The eval spec's "must land before Router phase 1" is a real constraint, not a preference. Once Router phase 1 changes the chokepoint, attribution of any future leaf-completion regression is permanently lost. Don't let Router phase 1 ship without at least 3 capability tasks + accepted baselines.
+- Rule #5 disambiguation has to merge *first* of the four. If #2 or #3 land without it, leaves working on the contracts/eval will hit the original rule and either skip or rationalize.
+- The hooks scoping doc is explicitly *not* a build plan — its decision gate is the deliverable, not adoption itself. Resist the temptation to start porting hooks before the gate clears; the SDK plumbing question may turn it into a re-plumbing project that's a worse use of cycles than expanding Router Lane B.
+- Five uncommitted artifacts now exist (2 from prior session per the 2026-05-06 entry plus these 4 from this session). Single bad checkout could lose substantial work. Commit early next session.
+
+---
+
 ## [MYC] 2026-05-09 — Two cultivate bugs surfaced by first real-client `mycelium ddp` run (live-grid-run8)
 
 **Context:** First end-to-end test of `mycelium ddp` on a real client workload (LiveGrid v1 demo, 10 biomes, expo-supabase, demo tier, concurrency 30). Run executed staged (plant → audit → freeze → cultivate → harvest) so the Sean Patrick gate could be honored mid-pipeline. Cultivate produced 252 files across 10 leaves over ~4.7 hr wall clock (vs commit `0649686`'s ~70 min estimate — 4x miss). Logs at `/Users/spy/mfautomation/repos/live-grid-run8/logs/2026-05-09T19-58-28-096Z/`.
