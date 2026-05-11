@@ -12,6 +12,9 @@
 
 import { createHash } from "node:crypto";
 
+// Re-export validation for ergonomics — callers can import from findings.ts directly
+export { validateFinding, isFinding, AuditValidationError } from "./findings-validate.js";
+
 /**
  * Severity levels for audit findings.
  *
