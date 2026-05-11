@@ -1,0 +1,100 @@
+# Mycelium Framework CI — DDP stage gate for code changes
+#
+# Runs the same DDP stage scripts the cultivate composite action runs, but
+# triggered on PR/push of FRAMEWORK code (not cultivations from brief.md).
+# Closes the gap: cultivate.yml validates cultivations; ci.yml validates the
+# framework that powers them.
+#
+# Stages: lint → typecheck → test → build (the four reproducible-locally stages).
+# Deploy stages (deploy-stg, smoke, deploy-prod) are deferred — no prod instance
+# yet; will roll up once the cloud target lands.
+
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+      - 'feat/**'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ddp-stages:
+    name: DDP Stages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Install dependencies
+        working-directory: cli
+        run: npm ci
+
+      - name: Stage — lint
+        run: bash .github/scripts/stages/lint.sh
+
+      - name: Stage — typecheck
+        run: bash .github/scripts/stages/typecheck.sh
+
+      - name: Stage — test
+        run: bash .github/scripts/stages/test.sh
+
+      - name: Stage — build
+        run: bash .github/scripts/stages/build.sh
+
+      - name: Verify cultivate dry-run still parses
+        run: |
+          node cli/dist/index.js cultivate --dry-run > /tmp/dry-run.log 2>&1 || {
+            echo "::error::cultivate --dry-run failed"
+            cat /tmp/dry-run.log
+            exit 1
+          }
+          echo "✔ cultivate --dry-run clean"
+
+      - name: Verify audit-run registered
+        run: |
+          node cli/dist/index.js audit-run --help > /tmp/audit-help.log 2>&1 || {
+            echo "::error::audit-run command not registered"
+            cat /tmp/audit-help.log
+            exit 1
+          }
+          grep -q 'Automated quality assurance' /tmp/audit-help.log || {
+            echo "::error::audit-run help text missing expected phrase"
+            cat /tmp/audit-help.log
+            exit 1
+          }
+          echo "✔ audit-run registered with expected surface"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## DDP CI Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stage | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| lint | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| typecheck | (see logs) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| test | (see logs) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| build | (see logs) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy stages (deploy-stg, smoke, deploy-prod) deferred — no prod target yet." >> "$GITHUB_STEP_SUMMARY"
