@@ -1,8 +1,8 @@
 # Mycelium Framework — VibeSpace LLC — The network provides.
 
 organism:
-  name: ddp-integration
-  ship_target: 48 hours
+  name: audit-run
+  ship_target: 7-8 days
   health_pulse_interval: 30
   harvest_threshold: 0.8
   cellular: true
@@ -11,281 +11,231 @@ organism:
   upgrades:
     - hypha-validator
     - depth-3-enforcement
-    - cache-headers
     - routing-map
     - crash-recovery
   routing:
-    telemetry-agent:
-      - cicd-agent
-      - cost-agent
-      - alerting-agent
-      - dashboard-agent
-      - fleet-agent
-    cicd-agent:
-      - telemetry-agent
-    cost-agent:
-      - telemetry-agent
-    alerting-agent:
-      - telemetry-agent
-    dashboard-agent:
-      - telemetry-agent
-      - fleet-agent
-    fleet-agent:
-      - telemetry-agent
-      - dashboard-agent
-    docs-agent:
-      - telemetry-agent
-      - dashboard-agent
-      - cicd-agent
+    audit-findings:
+      - audit-aggregator
+      - audit-heal-loop
+      - audit-sporenet
+      - audit-testers
+      - audit-cli
+    audit-testers:
+      - audit-cli
+      - audit-findings
+    audit-aggregator:
+      - audit-findings
+      - audit-heal-loop
+      - audit-cli
+    audit-cli:
+      - audit-findings
+      - audit-testers
+      - audit-aggregator
+      - audit-heal-loop
+      - audit-sporenet
+    audit-heal-loop:
+      - audit-findings
+      - audit-aggregator
+    audit-sporenet:
+      - audit-findings
+    audit-docs:
+      - audit-cli
+      - audit-findings
+      - audit-testers
+      - audit-aggregator
+      - audit-heal-loop
+      - audit-sporenet
     "*":
-      - telemetry-agent
+      - audit-findings
 contracts:
-  - path: NUTRIENTS.md#1-event-log
+  - path: NUTRIENTS.md#1-finding-schema
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#2-ddp-stage-list
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#2-audit-directory-layout
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#3-upgrade-module-shape
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#3-sporenet-audit-block
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#4-sporenetstatejson
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#4-tester-registry-runner-contract
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#5-sporenet-server-routes
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#5-aggregator-brief-composition-contract
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#6-github-actions
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#6-hypha-test-md-authoring-schema
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#7-alert-payload
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#7-mycelium-audit-run-cli-surface-frozen
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#8-cost-estimation-table
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#8-heal-loop-iteration-contract
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#9-scalehtml-data-binding
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#9-cost-budget-tie-in
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
-  - path: NUTRIENTS.md#10-fleet-query
+    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#10-cultivate-ts-re-use-boundaries
     frozen: true
-    frozenAt: 2026-04-17T04:45:51.974Z
+    frozenAt: 2026-05-11T19:54:58.431Z
 agents:
-  - id: telemetry-agent
-    scope: Event emitter upgrade + JSONL/S3 sinks
-    branch: feat/telemetry
+  - id: audit-findings
+    scope: Finding type + JSONL writer + SHA dedupe + severity validation
+    branch: feat/audit-findings
     blocked_by: []
     blocks:
-      - cicd-agent
-      - cost-agent
-      - alerting-agent
-      - dashboard-agent
-      - fleet-agent
+      - audit-aggregator
+      - audit-heal-loop
+      - audit-sporenet
+      - audit-testers
+      - audit-cli
     capabilities:
       - typescript
-      - node
       - jsonl
     sub_agents:
-      - id: telemetry.emitter
-        scope: telemetry-emitter Upgrade + event payload builders
-        sub_agents:
-          - id: telemetry.emitter.upgrade
-            scope: Upgrade module with beforePlan/beforeSpawn/afterLeaf/onCrash hooks in
-              cli/src/upgrades/telemetry-emitter.ts
-          - id: telemetry.emitter.events
-            scope: Event payload builders for every EventKind in
-              cli/src/lib/telemetry/events.ts
-      - id: telemetry.sink
-        scope: Sinks — JSONL local + optional S3
-        sub_agents:
-          - id: telemetry.sink.jsonl
-            scope: Append-only JSONL writer to .mycelium/events/<run_id>.jsonl with atomic
-              fs ops
-          - id: telemetry.sink.s3
-            scope: S3 sink adapter gated on MYCELIUM_S3_BUCKET env — best-effort, never
-              throws
-  - id: cicd-agent
-    scope: GitHub Actions composite action + DDP stage emitters
-    branch: feat/cicd
-    blocked_by: []
-    blocks: []
-    capabilities:
-      - github-actions
-      - bash
-      - yaml
-    sub_agents:
-      - id: cicd.action
-        scope: Composite action + example workflow
-        sub_agents:
-          - id: cicd.action.composite
-            scope: Author .github/actions/mycelium-run/action.yml per NUTRIENTS.md section 6
-          - id: cicd.action.workflow
-            scope: Author .github/workflows/cultivate.yml using the composite, triggered on
-              workflow_dispatch
-      - id: cicd.ddp
-        scope: DDP stage scripts with event emission
-        sub_agents:
-          - id: cicd.ddp.emit
-            scope: Shared .github/scripts/ddp-emit.sh that writes ddp_stage_started/ended
-              events to the run JSONL
-          - id: cicd.ddp.stages
-            scope: Individual stage scripts for merge-order/lint/typecheck/test under
-              .github/scripts/stages/
-          - id: cicd.ddp.deploy
-            scope: Placeholder deploy-stg/smoke/deploy-prod scripts with override hook
-              points
-  - id: cost-agent
-    scope: Token-cost tracking upgrade
-    branch: feat/cost
-    blocked_by: []
-    blocks: []
-    capabilities:
-      - typescript
-      - telemetry
-    sub_agents:
-      - id: cost.tracker
-        scope: cost-tracker Upgrade module
-        sub_agents:
-          - id: cost.tracker.upgrade
-            scope: Upgrade in cli/src/upgrades/cost-tracker.ts; emits cost_recorded via
-              telemetry on afterLeaf
-          - id: cost.tracker.reconcile
-            scope: Parse SDK usage metadata from leaf result into tokens per category
-      - id: cost.attribution
-        scope: Rollup + harvest integration
-        sub_agents:
-          - id: cost.attribution.rollup
-            scope: Aggregate costs by organism/biome/leaf from event log in
-              cli/src/lib/telemetry/cost-rollup.ts
-          - id: cost.attribution.report
-            scope: Extend mycelium harvest output with cost summary section
-  - id: alerting-agent
-    scope: Alert upgrade with Slack + GitHub issue sinks
-    branch: feat/alerting
-    blocked_by: []
-    blocks: []
-    capabilities:
-      - typescript
-      - webhooks
-    sub_agents:
-      - id: alerting.hook
-        scope: alerting Upgrade + trigger policy
-        sub_agents:
-          - id: alerting.hook.upgrade
-            scope: Upgrade in cli/src/upgrades/alerting.ts with onCrash + afterLeaf handlers
-          - id: alerting.hook.triggers
-            scope: "Trigger policy evaluator: crash, leaf-failure, health-below-threshold,
-              biome-fail-rate"
-      - id: alerting.sinks
-        scope: Slack webhook + GitHub issue
-        sub_agents:
-          - id: alerting.sinks.slack
-            scope: Slack poster via MYCELIUM_SLACK_WEBHOOK env; Block Kit JSON; never throws
-          - id: alerting.sinks.github
-            scope: GitHub issue creator via gh CLI subprocess; feature-detect gh; never
-              throws
-  - id: dashboard-agent
-    scope: Port scale.html to sporenet live dashboard
-    branch: feat/dashboard
+      - id: audit.findings.type
+        scope: Finding interface + Severity union in cli/src/lib/audit/findings.ts per
+          NUTRIENTS §1
+      - id: audit.findings.writer
+        scope: appendFinding + readFindings + dedupe by id (sha256); atomic append;
+          never throw
+      - id: audit.findings.validate
+        scope: validateFinding runtime guard (severity union, id length, ISO-8601 ts)
+  - id: audit-testers
+    scope: Tester registry, HYPHA-TEST-*.md loader, tester runner pool
+    branch: feat/audit-testers
     blocked_by: []
     blocks:
-      - fleet-agent
+      - audit-cli
     capabilities:
-      - html
-      - canvas
-      - sse
       - typescript
+      - markdown-parsing
+      - claude-agent-sdk
     sub_agents:
-      - id: dashboard.template
-        scope: Template port + data-binding slots
-        sub_agents:
-          - id: dashboard.template.port
-            scope: Copy templates/scale.html to
-              cli/src/commands/sporenet/templates/scale.html with the simulation
-              stripped
-          - id: dashboard.template.databind
-            scope: Inject <script id=mycelium-data> slot per NUTRIENTS.md section 9; expose
-              ?demo=1 for simulator mode
-      - id: dashboard.live
-        scope: Server-side data wiring
-        sub_agents:
-          - id: dashboard.live.state
-            scope: Wire /api/state and initial render to sporenet/state.json for phase 1/2
-          - id: dashboard.live.events
-            scope: Wire /api/events + /api/events/stream to JSONL event log for phase 3
-              (DDP)
-          - id: dashboard.live.poll
-            scope: SSE handler that tails JSONL file and streams new events to the dashboard
-  - id: fleet-agent
-    scope: Fleet dashboard + DuckDB query layer
-    branch: feat/fleet
+      - id: audit.testers.types
+        scope: TesterDef interface + TesterResult interface in
+          cli/src/lib/audit/testers.ts per NUTRIENTS §4
+      - id: audit.testers.loader
+        scope: loadTesters scans hyphae/HYPHA-TEST-*.md; parses CACHE HEADER per
+          NUTRIENTS §6; throws on malformed
+      - id: audit.testers.runner
+        scope: runTester spawns Claude Agent SDK session w/ Read+Bash tool budget;
+          buildTesterPrompt mirrors the shape of buildLeafPrompt at
+          cultivate.ts:771 (module-private — do not import)
+      - id: audit.testers.pool
+        scope: testers-pool.ts imports runWithConcurrency from the shared
+          cli/src/lib/concurrency.ts (extracted pre-cultivation; cultivate.ts
+          imports it too). Do NOT modify cultivate.ts.
+      - id: audit.testers.examples
+        scope: examples/hyphae-test/HYPHA-TEST-*.md stubs (tester.types, tester.tokens,
+          tester.flow.talent) for loader validation
+  - id: audit-aggregator
+    scope: Group findings by biome, compose brief-fix.md, write summary.json
+    branch: feat/audit-aggregator
+    blocked_by: []
+    blocks:
+      - audit-heal-loop
+      - audit-cli
+    capabilities:
+      - typescript
+      - markdown-composition
+    sub_agents:
+      - id: audit.aggregator.aggregate
+        scope: aggregate(findings) → AggregatedFindings — pure, deterministic ordering
+          per NUTRIENTS §5
+      - id: audit.aggregator.brief
+        scope: composeBriefFix prepends only_biomes + Active findings + audit_baseline
+          to brief.md
+      - id: audit.aggregator.summary
+        scope: writeSummary emits audit/<ts>/summary.json per NUTRIENTS §2
+  - id: audit-cli
+    scope: Commander wiring for mycelium audit-run + scaffold-tester subcommand
+    branch: feat/audit-cli
     blocked_by: []
     blocks: []
     capabilities:
-      - duckdb
-      - sql
       - typescript
+      - commander
     sub_agents:
-      - id: fleet.query
-        scope: DuckDB-over-JSONL query layer
-        sub_agents:
-          - id: fleet.query.duckdb
-            scope: DuckDB wrapper in cli/src/lib/fleet/duckdb.ts reading
-              .mycelium/events/*.jsonl
-          - id: fleet.query.api
-            scope: "Typed query helpers in cli/src/lib/fleet/queries.ts: listOrganisms,
-              organismRollup, stageDurations"
-      - id: fleet.view
-        scope: Cross-organism dashboard routes
-        sub_agents:
-          - id: fleet.view.route
-            scope: Add /fleet route + /api/fleet/* endpoints to sporenet server
-          - id: fleet.view.render
-            scope: Render fleet overview template with one mini scale.html card per organism
-  - id: docs-agent
-    scope: Developer docs for CI/CD, dashboard, polyglot embedding
-    branch: feat/docs
+      - id: audit.cli.command
+        scope: cli/src/commands/audit-run.ts — Commander entry per NUTRIENTS §7 flag
+          surface; registered in cli/src/index.ts
+      - id: audit.cli.orchestrator
+        scope: Wire loadTesters → runTestersInPool → aggregate → composeBriefFix →
+          writeSummary; respect --only-tester, --concurrency, --against
+      - id: audit.cli.scaffold
+        scope: mycelium audit-run scaffold-tester <biome> subcommand — emits
+          hyphae/HYPHA-TEST-<biome>.md stub from biome HYPHA
+  - id: audit-heal-loop
+    scope: Phase 2 — autofix re-plant cycle, iteration metadata, budget cap
+    branch: feat/audit-heal-loop
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - typescript
+      - subprocess-spawn
+    sub_agents:
+      - id: audit.heal.loop
+        scope: cli/src/lib/audit/heal-loop.ts — iterate spawn `mycelium cultivate
+          --only-biome` per critical biome; terminate per NUTRIENTS §8
+      - id: audit.heal.iteration
+        scope: writeIteration persists IterationRecord under audit/<ts>/iterations/<n>/
+          per NUTRIENTS §8
+      - id: audit.heal.budget
+        scope: Integrate lib/budget.ts — read --max-budget-usd → yaml budget.maxUsd →
+          default; track cumulative_cost_usd
+      - id: audit.heal.autofix-branch
+        scope: --autofix-branch flag — sub-organism mode (default commit-on-top); per
+          §10.5 lean
+  - id: audit-sporenet
+    scope: Phase 3 — sporenet/state.json audit block + serve renderer audit pane
+    branch: feat/audit-sporenet
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - typescript
+      - html
+    sub_agents:
+      - id: audit.sporenet.state
+        scope: cli/src/lib/audit/sporenet-integration.ts — writeAuditBlock atomic
+          temp/rename per NUTRIENTS §3; drainAuditStateWrites
+      - id: audit.sporenet.render
+        scope: Extend sporenet serve / handler — render Audit pane below leaf grid via
+          existing F5 re-read path; preserve all current renderHtml output
+  - id: audit-docs
+    scope: DEVELOPER_GUIDE.md audit-run section + tester HYPHA authoring runbook
+    branch: feat/audit-docs
     blocked_by: []
     blocks: []
     capabilities:
       - documentation
     sub_agents:
-      - id: docs.guide
-        scope: DEVELOPER_GUIDE.md extensions
-        sub_agents:
-          - id: docs.guide.cicd
-            scope: "Append CI/CD section: composite action, inputs/outputs, DDP stages,
-              secrets"
-          - id: docs.guide.dashboard
-            scope: "Append Dashboard section: sporenet routes, phases, fleet view,
-              scale.html slots"
-      - id: docs.polyglot
-        scope: Python + Java embedding guides
-        sub_agents:
-          - id: docs.polyglot.python
-            scope: "Create impl/python/README.md: when to embed (not orchestrate), install,
-              BaseAgent example"
-          - id: docs.polyglot.java
-            scope: "Create impl/java/README.md: when to embed, Spring Boot setup,
-              MyceliumAgent example"
+      - id: audit.docs.guide
+        scope: Append "Audit-Run" section to DEVELOPER_GUIDE.md — command surface,
+          output layout, autofix loop, sporenet integration
+      - id: audit.docs.runbook
+        scope: docs/audit-run-tester-authoring.md — operator runbook for writing
+          HYPHA-TEST-*.md (with scaffold-tester examples)
 merge_order:
-  - telemetry-agent
-  - cicd-agent
-  - cost-agent
-  - alerting-agent
-  - dashboard-agent
-  - fleet-agent
-  - docs-agent
+  - audit-findings
+  - audit-testers
+  - audit-aggregator
+  - audit-heal-loop
+  - audit-sporenet
+  - audit-cli
+  - audit-docs
 timeline:
   parallel_phases:
     - hours: 0-2
       active:
-        - telemetry-agent
-        - cicd-agent
-        - cost-agent
-        - alerting-agent
-        - dashboard-agent
-        - fleet-agent
-        - docs-agent
+        - audit-findings
+        - audit-testers
+        - audit-aggregator
+        - audit-heal-loop
+        - audit-sporenet
+        - audit-cli
+        - audit-docs
       description: All biomes germinate simultaneously under contract-freeze —
-        NUTRIENTS.md is the only cross-agent surface
+        NUTRIENTS.md §§1–10 are the only cross-biome surface.
+budget:
+  maxUsd: 75

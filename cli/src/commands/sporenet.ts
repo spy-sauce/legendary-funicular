@@ -21,6 +21,7 @@ import { execFileSync } from "node:child_process";
 import YAML from "yaml";
 import type { BaseEvent, DDPStageId } from "../lib/telemetry/events.js";
 import { DDP_STAGES } from "../lib/telemetry/ddp-stages.js";
+import type { SporenetAuditBlock } from "../lib/audit/sporenet-integration.js";
 
 interface Leaf {
   id: string;
@@ -48,6 +49,9 @@ interface SporeNetState {
   gating?: string;
   total: number;
   leaves: Leaf[];
+  // Optional audit block per NUTRIENTS §3 — extends state.json when audit-run is active.
+  // Rendered as an Audit pane below the leaf grid when present.
+  audit?: SporenetAuditBlock;
 }
 
 const AGENT_PALETTE = [
@@ -358,6 +362,7 @@ footer { padding:16px 32px; color:var(--muted); font-size:10px; border-top:1px s
 .modal .diff-patch .diff-del  { color:#ef4444; background:#2f0a0a; display:block; }
 .modal .diff-patch .diff-meta { color:var(--muted); }
 .modal .diff-loading { color:var(--muted); font-style:italic; font-size:11px; }
+${AUDIT_PANE_CSS}
 </style></head><body>
 <header>
   <div>${
@@ -407,6 +412,7 @@ footer { padding:16px 32px; color:var(--muted); font-size:10px; border-top:1px s
 <main>
   <div class="grid">
 ${biomeCards}
+${state.audit ? renderAuditPane(state.audit) : ""}
   </div>
   <aside>
     <h2>Recent fruits</h2>
@@ -587,6 +593,150 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Audit Pane Renderer — displays audit-run status below the leaf grid
+// Per NUTRIENTS §3: extends sporenet serve to render Audit pane when state.audit present
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Format ISO-8601 timestamp as relative time (e.g., "2m ago", "1h ago").
+ * Falls back to absolute time for dates older than 24h.
+ */
+function formatRelativeTime(isoTimestamp: string | null): string {
+  if (!isoTimestamp) return "—";
+  try {
+    const date = new Date(isoTimestamp);
+    const now = Date.now();
+    const diff = now - date.getTime();
+
+    if (diff < 0 || isNaN(diff)) return "—";
+    if (diff < 60_000) return "just now";
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+
+    // Older than 24h: show date
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+/**
+ * Render an HTML fragment for the Audit pane.
+ *
+ * Displays audit-run status, severity counts, affected biomes, and timing info.
+ * Uses the same visual language as the existing sporenet dashboard (monospace
+ * fonts, dark palette, status indicators).
+ *
+ * Per HYPHA-AUDIT-SPORENET-AGENT.md:
+ * - Header: `Audit-Run · <status> · iteration <n>`
+ * - One row per severity with the count: `critical · major · minor`
+ * - Affected biomes (chip list)
+ * - `last_run_at` formatted as relative time
+ * - Pulse animation when status === "running"
+ *
+ * @param audit - The SporenetAuditBlock from state.json
+ * @returns HTML string for the audit pane
+ */
+function renderAuditPane(audit: SporenetAuditBlock): string {
+  // Status badge color mapping
+  const statusColors: Record<string, string> = {
+    pending: "var(--muted)",
+    running: "#06b6d4", // cyan/teal for active
+    complete: "#10b981", // green for success
+    failed: "#e11d48", // red for failure
+  };
+  const statusColor = statusColors[audit.status] ?? "var(--muted)";
+
+  // Pulse animation class for running state
+  const pulseClass = audit.status === "running" ? "audit-pulse" : "";
+
+  // Severity chips with color coding
+  const criticalColor =
+    audit.by_severity.critical > 0 ? "#e11d48" : "var(--muted)";
+  const majorColor = audit.by_severity.major > 0 ? "#f59e0b" : "var(--muted)";
+  const minorColor = audit.by_severity.minor > 0 ? "#6b7280" : "var(--muted)";
+
+  // Biome chips
+  const biomesHtml =
+    audit.biomes_affected.length > 0
+      ? audit.biomes_affected
+          .map(
+            (b) =>
+              `<span class="audit-biome-chip">${escapeHtml(b)}</span>`
+          )
+          .join("")
+      : '<span class="audit-none">none</span>';
+
+  // Timing info
+  const relativeTime = formatRelativeTime(audit.last_run_at);
+  const runIdShort = audit.audit_run_id
+    ? audit.audit_run_id.slice(0, 19) // Show just the timestamp portion
+    : "—";
+
+  return `<div class="audit-pane ${pulseClass}">
+  <div class="audit-header">
+    <span class="audit-title">Audit-Run</span>
+    <span class="audit-status" style="color:${statusColor}">${escapeHtml(audit.status)}</span>
+    <span class="audit-iteration">iteration ${audit.iteration}</span>
+  </div>
+  <div class="audit-body">
+    <div class="audit-section">
+      <div class="audit-label">Findings</div>
+      <div class="audit-severity-row">
+        <span class="audit-sev" style="color:${criticalColor}"><span class="audit-sev-count">${audit.by_severity.critical}</span> critical</span>
+        <span class="audit-sev" style="color:${majorColor}"><span class="audit-sev-count">${audit.by_severity.major}</span> major</span>
+        <span class="audit-sev" style="color:${minorColor}"><span class="audit-sev-count">${audit.by_severity.minor}</span> minor</span>
+        <span class="audit-total">${audit.findings_count} total</span>
+      </div>
+    </div>
+    <div class="audit-section">
+      <div class="audit-label">Affected Biomes</div>
+      <div class="audit-biomes">${biomesHtml}</div>
+    </div>
+    <div class="audit-section audit-meta-row">
+      <div><span class="audit-meta-label">Last run:</span> <span class="audit-meta-value">${escapeHtml(relativeTime)}</span></div>
+      <div><span class="audit-meta-label">Run ID:</span> <span class="audit-meta-value audit-mono">${escapeHtml(runIdShort)}</span></div>
+    </div>
+  </div>
+</div>`;
+}
+
+/**
+ * CSS for the Audit pane.
+ *
+ * Uses the same design tokens as the existing dashboard (--bg, --panel, --fg,
+ * --muted, --red). Designed to integrate visually below the leaf grid.
+ */
+const AUDIT_PANE_CSS = `
+.audit-pane { background:var(--panel); border:1px solid #1f1f2a; border-left:3px solid #06b6d4; border-radius:8px; padding:16px; margin-top:16px; }
+.audit-pane.audit-pulse { animation:audit-pulse 1.5s ease-in-out infinite; }
+@keyframes audit-pulse { 0%,100%{border-left-color:#06b6d4;opacity:1} 50%{border-left-color:#0891b2;opacity:.85} }
+.audit-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.audit-title { font-weight:600; font-size:14px; color:var(--fg); }
+.audit-status { font-size:11px; text-transform:uppercase; letter-spacing:0.5px; font-weight:600; }
+.audit-iteration { font-size:10px; color:var(--muted); font-family:ui-monospace,Menlo,monospace; }
+.audit-body { display:flex; flex-direction:column; gap:12px; }
+.audit-section { }
+.audit-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+.audit-severity-row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+.audit-sev { font-size:11px; font-family:ui-monospace,Menlo,monospace; display:inline-flex; align-items:center; gap:4px; }
+.audit-sev-count { font-weight:700; font-size:13px; }
+.audit-total { font-size:10px; color:var(--muted); margin-left:auto; }
+.audit-biomes { display:flex; flex-wrap:wrap; gap:6px; }
+.audit-biome-chip { background:#1f1f2a; padding:3px 8px; border-radius:4px; font-size:10px; font-family:ui-monospace,Menlo,monospace; color:var(--fg); border:1px solid #27272a; }
+.audit-none { font-size:10px; color:var(--muted); font-style:italic; }
+.audit-meta-row { display:flex; gap:24px; flex-wrap:wrap; font-size:11px; }
+.audit-meta-label { color:var(--muted); }
+.audit-meta-value { color:var(--fg); }
+.audit-mono { font-family:ui-monospace,Menlo,monospace; font-size:10px; }
+`;
 
 // Fleet route handlers
 

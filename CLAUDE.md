@@ -78,7 +78,7 @@ See `MANIFESTO.md` for the full Five Laws and conceptual model.
 2. **Don't touch `cli/src/commands/cultivate.ts` public contract** (flags, prompt shape, CommitQueue behavior). Add hooks inside lifecycle extension points only.
 3. **Don't rename existing commands or flags.** Adding is fine; renaming breaks prior organisms.
 4. **Don't install new npm/pip/maven dependencies without strong justification.** Document *why* in your `FRUIT_READY` line if unavoidable.
-5. **Don't write tests.** This repo intentionally has none — `--dry-run` of cultivate + `tsc --noEmit` is the discipline.
+5. **Don't write tests *for this framework repo*.** This repo intentionally has none — `--dry-run` of cultivate + `tsc --noEmit` is the discipline. *Tests inside cultivated apps* (e2e, contract, smoke, regression) are first-class outputs that leaves should generate when the cultivation calls for them; this rule does not restrict that. See `docs/contract-tests-from-nutrients.md` and `docs/mycelium-eval-spec.md` for the framework-side test-generation contracts.
 6. **Don't modify another biome's files.** Use frozen stubs in `NUTRIENTS.md` for cross-biome data.
 7. **Read before write.** Read `NUTRIENTS.md` and your own `hyphae/HYPHA-<BIOME>-AGENT.md` before touching code.
 8. **No secrets in code or commits.** `ANTHROPIC_API_KEY`, Slack webhooks, etc. are env-var only.
@@ -119,7 +119,7 @@ Build/test: `cd cli && npm install && npm run build`. No tests configured — do
 2. **Do not touch `cli/src/commands/cultivate.ts` public contract** (flags, prompt shape, CommitQueue behavior). You may add hooks inside existing lifecycle extension points only.
 3. **Do not rename existing commands or flags.** Adding is fine; renaming breaks prior organisms.
 4. **Do not install new npm/pip/maven dependencies without strong justification.** Prefer Node stdlib, fs/http. If a new dep is unavoidable, document *why* in your FRUIT_READY line.
-5. **Do not write tests** unless your HYPHA explicitly asks for them. This repo has none today.
+5. **Do not write tests *for the framework repo itself*** unless your HYPHA explicitly asks for them. The framework has none today; `--dry-run` + `tsc --noEmit` is the discipline. (Tests *inside cultivated apps* — e2e, contract, smoke, regression — are first-class deliverables when a HYPHA produces an app. This rule does not restrict that.)
 6. **Do not modify another biome's files.** Your HYPHA lists your scope. If you need something from another biome, use the frozen stubs in `NUTRIENTS.md`.
 7. **Read before write.** Every leaf must read `NUTRIENTS.md` and its own `hyphae/HYPHA-<BIOME>-AGENT.md` before writing code.
 8. **No secrets in code or commits.** `ANTHROPIC_API_KEY`, Slack webhook URLs, etc. come from env vars only.

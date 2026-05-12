@@ -627,6 +627,161 @@ The canvas renderers (`drawTree`, `drawPool`) and phase state machine are vanill
 
 ---
 
+## 15. Audit-Run
+
+Post-cultivation inspection layer. `cultivate` plants code; `audit-run` inspects the running organism against the behaviors declared in NUTRIENTS. Think symmetric test cultivation: for every production biome you cultivated, you can run a tester biome that exercises the output and emits structured findings.
+
+### 15.1 When to use it
+
+- **After every cultivate** of a real-client workload — surfaces silent behavior bugs that `FRUIT_READY` status alone can't catch.
+- **Before merging a heal-loop autofix** — verify the re-cultivated biomes actually fixed the finding.
+- **For regression triage** — compare against a prior run with `--against <ref>` and report only regressions.
+
+### 15.2 Command surface
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| (none) | — | Baseline run; writes findings + brief; no autofix |
+| `--autofix` | — | Enable heal loop; re-cultivates affected biomes until clean or capped |
+| `--max-iterations <n>` | 3 | Maximum autofix iterations before bailing |
+| `--only-tester <id>` | — | Run a single tester (useful for debugging audit-run itself) |
+| `--against <ref>` | — | Baseline diff mode; report only regressions vs. a prior run |
+| `--concurrency <n>` | organism's cultivate concurrency | Cap on simultaneous tester sessions |
+| `--no-serve` | — | Skip sporenet integration (no live dashboard updates) |
+| `--autofix-branch <name>` | — | Sub-organism mode: commits to a separate branch instead of on top |
+| `--max-budget-usd <n>` | lib/budget.ts default | Cost cap for the entire audit run (testers + re-plants) |
+| `--dry-run` | — | Print execution plan; spawn no sessions |
+| `scaffold-tester <biome>` | — | Subcommand: emit a stub `hyphae/HYPHA-TEST-<biome>.md` from the biome's HYPHA |
+
+**Exit codes:** `0` clean, `1` findings present (non-autofix mode), `2` autofix exhausted with criticals remaining, `3` tester error count > 0 (operator concern, not cultivation defect).
+
+Source: `cli/src/commands/audit-run.ts`.
+
+### 15.3 Output layout
+
+Every audit-run produces a timestamped directory under `audit/`:
+
+```
+audit/<ISO-timestamp>/
+  findings.jsonl                    # one Finding per line (§15.4)
+  summary.json                      # counts, severity buckets, biomes affected
+  brief-fix.md                      # aggregator-composed re-plant brief
+  testers/<tester_id>/stdout.log    # per-tester stdout
+  testers/<tester_id>/stderr.log    # per-tester stderr
+  testers/<tester_id>/finding.json  # the single finding the tester emitted (empty if clean)
+  iterations/<n>/                   # autofix iterations (0 = baseline)
+    findings.jsonl
+    summary.json
+    brief-fix.md
+    testers/...
+```
+
+**Gitignore + breadcrumb pattern:** `audit/` is gitignored in cultivated apps. Only `audit/<ts>/summary.json` is committed as a lightweight breadcrumb — explicit `git add audit/<ts>/summary.json` after each run.
+
+See NUTRIENTS.md §2 for the frozen path conventions.
+
+### 15.4 The Finding shape
+
+Testers emit findings as JSONL. The schema (from `cli/src/lib/audit/findings.ts`):
+
+```ts
+type Severity = "critical" | "major" | "minor";
+//   critical → blocks contract-freeze on re-plant
+//   major    → blocks harvest threshold
+//   minor    → informational; included in brief but non-blocking
+
+interface Finding {
+  id: string;            // sha256(tester_id + biome + summary + file_path + line_range)
+  tester_id: string;     // e.g., "tester.flow.talent"
+  biome: string;         // production biome this finding maps to
+  severity: Severity;
+  file_path?: string;
+  line_range?: [number, number];
+  summary: string;       // one-line headline
+  detail: string;        // multi-line root-cause explanation
+  repro_steps: string[]; // ordered commands or actions to reproduce
+  suggested_fix: string; // free-text; the re-plant leaf consumes this as acceptance criterion
+  observed_at: string;   // ISO-8601 with ms
+  iteration: number;     // which autofix iteration produced this (0 = baseline)
+}
+```
+
+**Worked example** — the run8 talent-onboarding bug as a finding:
+
+```json
+{
+  "id": "9f3a...",
+  "tester_id": "tester.flow.talent",
+  "biome": "talent-onboarding",
+  "severity": "critical",
+  "file_path": "src/screens/onboarding/talent/TalentNameScreen.tsx",
+  "line_range": [12, 24],
+  "summary": "talent_profiles row not persisted after onboarding wizard completes",
+  "detail": "Headless run of the 8-step wizard with synthetic input completes. saveTalentProfile() is invoked but the resulting talent_profiles row is empty (all fields NULL). Root cause: each step screen owns its own useState; state is lost on navigation.",
+  "repro_steps": [
+    "maestro test e2e/talent-onboarding-full.yaml",
+    "psql $SUPABASE_DB -c \"select * from talent_profiles order by created_at desc limit 1;\""
+  ],
+  "suggested_fix": "Lift onboarding state to a Context Provider. Each step screen reads/writes via useTalentOnboarding() instead of local useState.",
+  "observed_at": "2026-05-11T14:32:11.000Z",
+  "iteration": 0
+}
+```
+
+**ID determinism:** `id = sha256(tester_id + "|" + biome + "|" + summary + "|" + (file_path || "") + "|" + (line_range ? line_range.join("-") : ""))`. The same defect across autofix iterations produces the same id, so dedupe is automatic.
+
+### 15.5 Autofix loop
+
+With `--autofix`, audit-run enters a heal loop that re-cultivates affected biomes until clean:
+
+1. **Baseline run** — spawn all testers, collect findings.
+2. **Compose brief-fix.md** — the aggregator prepends `only_biomes: [<critical + major biomes>]` and promotes each finding to an acceptance criterion ("MUST persist all 8 wizard fields…").
+3. **Re-plant** — invoke `mycelium cultivate --only-biome <id>` for each affected biome. F1 skip-already-done filters out clean biomes automatically.
+4. **Re-audit** — run testers again; if criticals remain and iterations < max, loop back to step 2.
+
+**Termination conditions** (any one ends the loop):
+- Zero critical findings (success).
+- `iteration === maxIterations` (capped at 3 by default).
+- Cumulative cost >= `--max-budget-usd` (budget exhausted).
+- Findings count didn't decrease on a non-zero-criticals iteration (no progress — bail early).
+
+Per-iteration metadata is persisted under `audit/<ts>/iterations/<n>/`. A final `heal-loop-summary.json` records all iterations.
+
+See NUTRIENTS.md §8 for the `IterationRecord` schema.
+
+### 15.6 Sporenet integration
+
+Audit-run extends `sporenet/state.json` with an optional `audit` block:
+
+```ts
+interface SporenetAuditBlock {
+  status: "pending" | "running" | "complete" | "failed";
+  audit_run_id: string | null;
+  iteration: number;
+  findings_count: number;
+  by_severity: { critical: number; major: number; minor: number };
+  biomes_affected: string[];
+  last_run_at: string | null;
+  started_at: string | null;
+}
+```
+
+The `sporenet serve` dashboard renders an **Audit pane** below the leaf grid when `state.audit` is present. The pane shows current status, finding counts by severity, and affected biomes — same auto-refresh path that surfaces cultivate in-flight state.
+
+During long heal loops, audit progress is visible in real time. Reference: `cli/src/commands/sporenet.ts` F5 handler, `cli/src/lib/audit/sporenet-integration.ts`.
+
+### 15.7 Authoring testers
+
+Testers are operator-authored as `hyphae/HYPHA-TEST-<id>.md` files in your cultivation. Use the scaffold helper to generate a stub:
+
+```bash
+mycelium audit-run scaffold-tester <biome>
+```
+
+For the full authoring guide — CACHE HEADER fields, assertion patterns, repro recipes, tool budgets — see `docs/audit-run-tester-authoring.md`.
+
+---
+
 That's the full surface area. A new dev should be able to read `cli/src/commands/cultivate.ts` + this guide and ship their own organism.
 
 *The network provides.* 🍄
