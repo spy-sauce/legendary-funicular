@@ -6,7 +6,7 @@
 <title>mycelium dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Infant:ital,wght@0,500;0,600;1,500;1,600&family=Geist:wght@200;300;400;500&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════════════════════════════════
    DASHBOARD SCAFFOLD — base layout + canvas chrome
@@ -106,18 +106,241 @@ body::after {
    dashboard-console owns: titlebar, metrics, body (rails), feedbar, feed
    ══════════════════════════════════════════════════════════════════════════════ */
 
-/* titlebar — dashboard-console.titlebar */
+/* ══════════════════════════════════════════════════════════════════════════════
+   TITLEBAR — dashboard.console.titlebar
+   Scope: heartbeat dot at theme pulse rate, uptime counter, brand seal from theme.brand
+   Consumes: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 .titlebar {
-  /* placeholder: dashboard.console.titlebar will implement */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
   min-height: 32px;
-  background: var(--ink-2);
+  background: linear-gradient(180deg, var(--ink-2), var(--ink));
   border-bottom: 0.5px solid var(--rule);
+  flex-shrink: 0;
+  min-width: 0;
+  gap: 12px;
 }
 
-/* metrics strip — dashboard-console.metric-strip */
+/* ── Brand Seal (left side) ── */
+.titlebar .brand {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.titlebar .brand .seal {
+  font-family: 'Cormorant Infant', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 21px;
+  letter-spacing: 0.005em;
+  color: var(--ice);
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+/* Logo char (Ψ) — cryo-colored, before title */
+.titlebar .brand .logo-char {
+  color: var(--cryo);
+  font-weight: 600;
+  font-style: italic;
+  text-shadow: 0 0 16px rgba(122, 229, 255, 0.6);
+  margin-right: 4px;
+}
+
+/* Title text */
+.titlebar .brand .title {
+  color: var(--ice);
+}
+
+/* Cryo dot separator after seal */
+.titlebar .brand .seal::after {
+  content: '·';
+  color: var(--cryo);
+  margin-left: 5px;
+  animation: titlebarCryoBreath 3.6s ease-in-out infinite;
+}
+
+@keyframes titlebarCryoBreath {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* Tagline/stamp — Geist Mono uppercase, per v9.4 HUD treatment */
+.titlebar .brand .tagline {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  padding-left: 12px;
+  border-left: 0.5px solid var(--rule);
+  display: flex;
+  align-items: center;
+  height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Titlebar Right (heartbeat + uptime) ── */
+.titlebar .titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+}
+
+.titlebar .heartbeat-wrap {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Heartbeat dot — pulses at theme.modulator.active_pulse_hz */
+.titlebar .heartbeat {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cryo);
+  box-shadow: 0 0 10px var(--cryo);
+  /* animation-duration set inline from JS based on theme.modulator.active_pulse_hz */
+  animation: titlebarHeartbeat ease-in-out infinite;
+  animation-duration: 1.6s; /* fallback; overwritten by JS */
+}
+
+@keyframes titlebarHeartbeat {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50%      { opacity: 1; transform: scale(1.15); }
+}
+
+/* Uptime counter — Geist Mono, ice_2 */
+.titlebar .uptime {
+  color: var(--ice-2);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   METRIC STRIP — dashboard.console.metric-strip
+   Scope: 5 core cells + 2 cache cells — reads from window.__DASHBOARD_STATE__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 .metrics {
-  /* placeholder: dashboard.console.metric-strip will implement */
-  display: none;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 0.5px solid var(--rule);
+  background: var(--ink-2);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.metric {
+  padding: 4px 10px 5px;
+  border-right: 0.5px solid var(--rule);
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.metric:last-child {
+  border-right: none;
+}
+
+/* Label — Geist Mono 10px, ice_2 per HYPHA spec (changed from 7px for readability) */
+.metric .ml {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Value — Geist 300 (weight 200 for light), ice */
+.metric .mv {
+  font-family: 'Geist', sans-serif;
+  font-weight: 200;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+}
+
+/* Cryo accent for cache cells */
+.metric .mv.cryo {
+  color: var(--cryo);
+  text-shadow: 0 0 22px rgba(122, 229, 255, 0.18);
+}
+
+/* Severity color modifiers */
+.metric .mv.warn { color: var(--sev-warn, #D9B85A); }
+.metric .mv.alert { color: var(--sev-alert, #E08A5C); }
+.metric .mv.crit { color: var(--sev-crit, #DB5C6E); }
+
+/* Health dot indicator */
+.metric .health-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.metric .health-dot.healthy { background: var(--life-grow, #7BC9C0); color: var(--life-grow, #7BC9C0); }
+.metric .health-dot.warn { background: var(--sev-warn, #D9B85A); color: var(--sev-warn, #D9B85A); }
+.metric .health-dot.alert { background: var(--sev-alert, #E08A5C); color: var(--sev-alert, #E08A5C); }
+.metric .health-dot.crit { background: var(--sev-crit, #DB5C6E); color: var(--sev-crit, #DB5C6E); }
+
+/* Breath underline on metric values when they update */
+.metric .mv::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  height: 1px;
+  width: 0%;
+  background: var(--cryo);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.metric.pulse .mv::after {
+  width: 100%;
+  opacity: 0.75;
+  transition: width 0.18s ease-out, opacity 1.2s ease-out 0.18s;
+}
+
+/* Responsive scaling — match v9.4 breakpoints */
+@media (max-height: 760px) {
+  .metric .mv { font-size: 14px; }
+  .metric { padding: 5px 10px 6px; }
+}
+@media (max-height: 640px) {
+  .metric { padding: 4px 8px 5px; }
+  .metric .mv { font-size: 13px; }
+  .metric .ml { font-size: 9px; letter-spacing: 0.10em; }
 }
 
 /* body grid (stage + rails) — dashboard-console handles rails */
@@ -1754,12 +1977,99 @@ window.__DASHBOARD_CANVAS__.triggerScanBeam = triggerScanBeam;
 window.__DASHBOARD_CANVAS__.updateDepthHud = updateDepthHud;
 window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgress;
 
+// ════════════════════════════════════════════════════════════════════════════════
+// TITLEBAR — heartbeat dot, uptime counter, brand seal
+// Scope: dashboard.console.titlebar
+// Consumes: STATE.organism.started_at, THEME.brand, THEME.modulator.active_pulse_hz
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Titlebar DOM Initialization ──────────
+(function initTitlebar() {
+  const titlebarEl = document.getElementById('titlebar');
+  if (!titlebarEl) return;
+
+  // ── Brand values from theme ──
+  const brand = THEME.brand || {};
+  const logoChar = brand.logo_char || 'Ψ';
+  const title = brand.title || 'mycelium';
+  const tagline = brand.tagline || 'decentralized · live';
+
+  // ── Pulse rate from theme modulator ──
+  // Clamp to slow-pulse discipline: minimum animation duration is 1/(1.5Hz) ≈ 0.667s
+  // But we enforce ≥1.5s duration for any animation, so max Hz is ~0.667Hz
+  // Per HYPHA: theme.modulator.active_pulse_hz capped at 1.5, but animation-duration must be ≥1.5s
+  const pulseHz = Math.min(THEME.modulator?.active_pulse_hz || 0.9, 1.5);
+  // Convert Hz to seconds for one full cycle (animation-duration)
+  // animation-duration = 1 / pulseHz, but enforce minimum 1.5s
+  const pulseDuration = Math.max(1.5, 1 / pulseHz);
+
+  // ── Build titlebar DOM ──
+  titlebarEl.innerHTML = `
+    <div class="brand">
+      <span class="seal">
+        <span class="logo-char">${logoChar}</span>
+        <span class="title">${title}</span>
+      </span>
+      <span class="tagline">${tagline}</span>
+    </div>
+    <div class="titlebar-right">
+      <div class="heartbeat-wrap">
+        <div class="heartbeat" id="titlebar-heartbeat"></div>
+        <span class="uptime" id="titlebar-uptime">00:00:00</span>
+      </div>
+    </div>
+  `;
+
+  // ── Set heartbeat animation-duration from theme ──
+  const heartbeatEl = document.getElementById('titlebar-heartbeat');
+  if (heartbeatEl) {
+    heartbeatEl.style.animationDuration = pulseDuration.toFixed(2) + 's';
+  }
+
+  // ── Uptime counter ──
+  // Computes HH:MM:SS from STATE.organism.started_at
+  const uptimeEl = document.getElementById('titlebar-uptime');
+  const startedAt = STATE.organism?.started_at
+    ? new Date(STATE.organism.started_at).getTime()
+    : Date.now();
+
+  function updateUptime() {
+    if (!uptimeEl) return;
+    const now = Date.now();
+    const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+    uptimeEl.textContent =
+      String(h).padStart(2, '0') + ':' +
+      String(m).padStart(2, '0') + ':' +
+      String(s).padStart(2, '0');
+  }
+
+  // Initial update + 1-second interval
+  updateUptime();
+  const uptimeInterval = setInterval(updateUptime, 1000);
+
+  // ── Export titlebar state for other console leaves ──
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.titlebar = {
+    uptimeInterval,
+    startedAt,
+    pulseDuration,
+    pulseHz
+  };
+})();
+
 // ────────── Cleanup on page unload ──────────
 window.addEventListener('beforeunload', () => {
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId);
   }
   renderer.dispose();
+  // Clear titlebar uptime interval (dashboard.console.titlebar)
+  if (window.__DASHBOARD_CONSOLE__?.titlebar?.uptimeInterval) {
+    clearInterval(window.__DASHBOARD_CONSOLE__.titlebar.uptimeInterval);
+  }
 });
 
 </script>
