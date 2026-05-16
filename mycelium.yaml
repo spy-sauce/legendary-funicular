@@ -49,19 +49,26 @@ organism:
       - dashboard-theme
 contracts:
   - path: NUTRIENTS.md#1-theme-schema-per-cultivation-themeyaml
-    frozen: false
+    frozen: true
+    frozenAt: 2026-05-16T08:40:49.410Z
   - path: NUTRIENTS.md#2-dashboardstate-unified-shape-consumed-by-canvas-console
-    frozen: false
+    frozen: true
+    frozenAt: 2026-05-16T08:40:49.410Z
   - path: NUTRIENTS.md#3-event-schema-new-cache-events
-    frozen: false
+    frozen: true
+    frozenAt: 2026-05-16T08:40:49.410Z
   - path: NUTRIENTS.md#4-cache-network-runtime-cachestore-microagent-integration
-    frozen: false
+    frozen: true
+    frozenAt: 2026-05-16T08:40:49.410Z
   - path: NUTRIENTS.md#5-sporenet-statejson-additive-cache-block
-    frozen: false
+    frozen: true
+    frozenAt: 2026-05-16T08:40:49.410Z
   - path: NUTRIENTS.md#6-dashboard-cli-surface-mycelium-dashboard-initserverender
-    frozen: false
+    frozen: true
+    frozenAt: 2026-05-16T08:40:49.410Z
   - path: NUTRIENTS.md#7-frozen-vocab-additions
-    frozen: false
+    frozen: true
+    frozenAt: 2026-05-16T08:40:49.410Z
 agents:
   - id: dashboard-theme
     scope: theme.yaml schema + loader + default theme (NUTRIENTS §1)
@@ -77,13 +84,16 @@ agents:
       - yaml
     sub_agents:
       - id: dashboard.theme.types
-        scope: DashboardTheme + ThemeValidationError + DEFAULT_THEME_PATH in cli/src/lib/dashboard/theme.ts per NUTRIENTS §1
+        scope: DashboardTheme + ThemeValidationError + DEFAULT_THEME_PATH in
+          cli/src/lib/dashboard/theme.ts per NUTRIENTS §1
       - id: dashboard.theme.loader
-        scope: loadTheme(cwd) reads theme.yaml, deep-merges over templates/theme.default.yaml, validates hex + modulator bounds
+        scope: loadTheme(cwd) reads theme.yaml, deep-merges over
+          templates/theme.default.yaml, validates hex + modulator bounds
       - id: dashboard.theme.default
         scope: templates/theme.default.yaml — verbatim from NUTRIENTS §1 example block
   - id: dashboard-data
-    scope: sporenet/state.json reader + JSONL event tailer + DashboardState builder (NUTRIENTS §2, §3, §5)
+    scope: sporenet/state.json reader + JSONL event tailer + DashboardState builder
+      (NUTRIENTS §2, §3, §5)
     branch: feat/dashboard-data
     blocked_by:
       - dashboard-theme
@@ -96,13 +106,18 @@ agents:
       - jsonl
     sub_agents:
       - id: dashboard.data.types
-        scope: DashboardState + AgentState + LeafState + MicroState + CacheState + EventEntry + AlertEntry + ProviderState + AgentSnapshot interfaces per NUTRIENTS §2
+        scope: DashboardState + AgentState + LeafState + MicroState + CacheState +
+          EventEntry + AlertEntry + ProviderState + AgentSnapshot interfaces per
+          NUTRIENTS §2
       - id: dashboard.data.state-builder
-        scope: buildDashboardState(cwd) reads sporenet/state.json, maps existing fields, defaults cache to zeros, tolerates missing files
+        scope: buildDashboardState(cwd) reads sporenet/state.json, maps existing fields,
+          defaults cache to zeros, tolerates missing files
       - id: dashboard.data.events-tailer
-        scope: tailEvents(eventsPath, sinceTs, maxLines) reads JSONL newest-first, filters by ts, drops malformed lines silently
+        scope: tailEvents(eventsPath, sinceTs, maxLines) reads JSONL newest-first,
+          filters by ts, drops malformed lines silently
   - id: dashboard-canvas
-    scope: Three.js canvas in templates/dashboard.html — agent globe + leaves + micros + cache relays + slow pulses + multiverse + HUD
+    scope: Three.js canvas in templates/dashboard.html — agent globe + leaves +
+      micros + cache relays + slow pulses + multiverse + HUD
     branch: feat/dashboard-canvas
     blocked_by:
       - dashboard-theme
@@ -115,23 +130,32 @@ agents:
       - webgl
     sub_agents:
       - id: dashboard.canvas.scaffold
-        scope: base HTML structure, canvas element, Three.js CDN import, scene/camera/renderer setup, resize handler
+        scope: base HTML structure, canvas element, Three.js CDN import,
+          scene/camera/renderer setup, resize handler
       - id: dashboard.canvas.agent-globe
-        scope: fibonacci-sphere placement at radius 4.6, wireframe Bloch rings, identity hue from theme, brightness modulated by lifecycle
+        scope: fibonacci-sphere placement at radius 4.6, wireframe Bloch rings, identity
+          hue from theme, brightness modulated by lifecycle
       - id: dashboard.canvas.leaves-and-micros
-        scope: leaves orbit agents at r=1.3, micros (2-4) orbit leaves at r=0.4 with cheap/full color split, focus-conditional visibility
+        scope: leaves orbit agents at r=1.3, micros (2-4) orbit leaves at r=0.4 with
+          cheap/full color split, focus-conditional visibility
       - id: dashboard.canvas.cache-relays
-        scope: 4-6 octahedron relay nodes at inner radius 2.6, cyan-teal, each agent edges to nearest relay, 2-neighbor relay mesh, slow breath
+        scope: 4-6 octahedron relay nodes at inner radius 2.6, cyan-teal, each agent
+          edges to nearest relay, 2-neighbor relay mesh, slow breath
       - id: dashboard.canvas.pulses
-        scope: routing packets (6s), cache-query pulses agent→relay (3s cyan hit / gold miss with relay dim), dashflow 4s, all ≥1.5s
+        scope: routing packets (6s), cache-query pulses agent→relay (3s cyan hit / gold
+          miss with relay dim), dashflow 4s, all ≥1.5s
       - id: dashboard.canvas.adaptive-zoom
-        scope: three presets (globe d=14, agents d=7.5, leaves d=2.8) with 0.07 lerp, wheel rebound to custom handler
+        scope: three presets (globe d=14, agents d=7.5, leaves d=2.8) with 0.07 lerp,
+          wheel rebound to custom handler
       - id: dashboard.canvas.multiverse
-        scope: outer-layer mini-globes per product, click to enter product view, view state in state.organism.view
+        scope: outer-layer mini-globes per product, click to enter product view, view
+          state in state.organism.view
       - id: dashboard.canvas.hud-overlays
-        scope: targeting reticle (4 brackets), scan beam, depth HUD readout — all focus-conditional
+        scope: targeting reticle (4 brackets), scan beam, depth HUD readout — all
+          focus-conditional
   - id: dashboard-console
-    scope: DOM operator chrome in templates/dashboard.html — titlebar, metric strip, rails, feedbar, event feed, alert ribbon, inspect panel
+    scope: DOM operator chrome in templates/dashboard.html — titlebar, metric strip,
+      rails, feedbar, event feed, alert ribbon, inspect panel
     branch: feat/dashboard-console
     blocked_by:
       - dashboard-theme
@@ -144,23 +168,32 @@ agents:
       - dom
     sub_agents:
       - id: dashboard.console.titlebar
-        scope: heartbeat dot at theme pulse rate, uptime counter, brand seal from theme.brand
+        scope: heartbeat dot at theme pulse rate, uptime counter, brand seal from
+          theme.brand
       - id: dashboard.console.metric-strip
-        scope: 5 cells (Health / Agents·Leaves / Spend / Events / Alerts) + 2 cache cells (Cache hit % / Calls saved)
+        scope: 5 cells (Health / Agents·Leaves / Spend / Events / Alerts) + 2 cache
+          cells (Cache hit % / Calls saved)
       - id: dashboard.console.providers-rail
-        scope: top right rail, providers list with up/down dot + latency_ms from state.providers
+        scope: top right rail, providers list with up/down dot + latency_ms from
+          state.providers
       - id: dashboard.console.agents-rail
-        scope: bottom right rail, agents list with state pill + identity color border, click fires selectAgent
+        scope: bottom right rail, agents list with state pill + identity color border,
+          click fires selectAgent
       - id: dashboard.console.feedbar
-        scope: filter chips (all/lifecycle/nutrient/cost/health/anomaly/cache); cache chip pivots canvas via CustomEvent
+        scope: filter chips (all/lifecycle/nutrient/cost/health/anomaly/cache); cache
+          chip pivots canvas via CustomEvent
       - id: dashboard.console.event-feed
-        scope: 60-90px scrollable feed of state.events filtered by state.feedFilter, severity-colored left border
+        scope: 60-90px scrollable feed of state.events filtered by state.feedFilter,
+          severity-colored left border
       - id: dashboard.console.alert-ribbon
-        scope: absolute-positioned top banner sliding in when alerts arrive, auto-dismiss 15s
+        scope: absolute-positioned top banner sliding in when alerts arrive,
+          auto-dismiss 15s
       - id: dashboard.console.inspect-panel
-        scope: 300-420px slide-in, header + synopsis + ops actions + identity + focus + leaf queue with subagent mini-diagram + flow + files + cost
+        scope: 300-420px slide-in, header + synopsis + ops actions + identity + focus +
+          leaf queue with subagent mini-diagram + flow + files + cost
   - id: dashboard-cli
-    scope: mycelium dashboard {init,serve,render} Commander wiring + HTTP/SSE serve loop (NUTRIENTS §6)
+    scope: mycelium dashboard {init,serve,render} Commander wiring + HTTP/SSE serve
+      loop (NUTRIENTS §6)
     branch: feat/dashboard-cli
     blocked_by:
       - dashboard-theme
@@ -175,17 +208,22 @@ agents:
       - http
     sub_agents:
       - id: dashboard.cli.scaffold
-        scope: cli/src/commands/dashboard/index.ts — registerDashboardCommand wires 3 subcommands
+        scope: cli/src/commands/dashboard/index.ts — registerDashboardCommand wires 3
+          subcommands
       - id: dashboard.cli.init
         scope: writes theme.yaml from default + static dashboard.html snapshot
       - id: dashboard.cli.render
-        scope: one-shot static render to sporenet/dashboard.html via renderDashboard helper
+        scope: one-shot static render to sporenet/dashboard.html via renderDashboard
+          helper
       - id: dashboard.cli.serve
-        scope: HTTP server on port 3334, GET / live-renders, GET /events/stream SSE, SIGINT clean shutdown
+        scope: HTTP server on port 3334, GET / live-renders, GET /events/stream SSE,
+          SIGINT clean shutdown
       - id: dashboard.cli.render-helper
-        scope: cli/src/lib/dashboard/render.ts — pure renderDashboard(state, theme, templatePath) returns HTML string with state+theme inlined
+        scope: cli/src/lib/dashboard/render.ts — pure renderDashboard(state, theme,
+          templatePath) returns HTML string with state+theme inlined
   - id: dashboard-docs
-    scope: DEVELOPER_GUIDE.md Dashboard section + docs/dashboard-theming.md worked example
+    scope: DEVELOPER_GUIDE.md Dashboard section + docs/dashboard-theming.md worked
+      example
     branch: feat/dashboard-docs
     blocked_by:
       - dashboard-cli
@@ -196,9 +234,11 @@ agents:
       - id: dashboard.docs.developer-guide
         scope: append-only Dashboard section to DEVELOPER_GUIDE.md
       - id: dashboard.docs.theming
-        scope: docs/dashboard-theming.md — theme.yaml worked example, per-cultivation customization, lifecycle modulator curves
+        scope: docs/dashboard-theming.md — theme.yaml worked example, per-cultivation
+          customization, lifecycle modulator curves
   - id: cache-network-store
-    scope: LRU CacheStore + cacheKey + accounting + pulse aggregator (NUTRIENTS §3, §4, §5)
+    scope: LRU CacheStore + cacheKey + accounting + pulse aggregator (NUTRIENTS §3,
+      §4, §5)
     branch: feat/cache-network-store
     blocked_by: []
     blocks:
@@ -211,17 +251,22 @@ agents:
       - crypto
     sub_agents:
       - id: cache.store.types
-        scope: CacheStore + CacheEntry + CacheEvent interfaces in cli/src/lib/cache-network/store.ts
+        scope: CacheStore + CacheEntry + CacheEvent interfaces in
+          cli/src/lib/cache-network/store.ts
       - id: cache.store.lru
-        scope: makeCacheStore(opts) — Map-backed LRU, invalidateLeaf/invalidateIter, stats, emits cache.hit on get
+        scope: makeCacheStore(opts) — Map-backed LRU, invalidateLeaf/invalidateIter,
+          stats, emits cache.hit on get
       - id: cache.store.keys
-        scope: cacheKey({tool_name, args, contract_hash}) — sha256 hex, stable JSON.stringify with sorted keys
+        scope: cacheKey({tool_name, args, contract_hash}) — sha256 hex, stable
+          JSON.stringify with sorted keys
       - id: cache.store.accounting
-        scope: emitCacheEvent + writeCachePulse atomic temp/rename + 1.4s pulse aggregator + UNIT_COST constant
+        scope: emitCacheEvent + writeCachePulse atomic temp/rename + 1.4s pulse
+          aggregator + UNIT_COST constant
       - id: cache.store.index
         scope: cli/src/lib/cache-network/index.ts re-exports
   - id: cache-network-integration
-    scope: Wrap cultivate.ts SDK chokepoint + --no-cache flag + iter invalidate hook + state.json pulse writer
+    scope: Wrap cultivate.ts SDK chokepoint + --no-cache flag + iter invalidate hook
+      + state.json pulse writer
     branch: feat/cache-network-integration
     blocked_by:
       - cache-network-store
@@ -233,15 +278,19 @@ agents:
       - cultivate-surgery
     sub_agents:
       - id: cache.integration.chokepoint-locate
-        scope: grep cli/src/commands/cultivate.ts for query() chokepoint; document line in FRUIT_READY
+        scope: grep cli/src/commands/cultivate.ts for query() chokepoint; document line
+          in FRUIT_READY
       - id: cache.integration.wrap-sdk-call
-        scope: at located chokepoint, wrap with cacheKey lookup → store.get hit return / store.set miss; preserve public contract
+        scope: at located chokepoint, wrap with cacheKey lookup → store.get hit return /
+          store.set miss; preserve public contract
       - id: cache.integration.no-cache-flag
-        scope: cultivate Commander gets --no-cache flag (default OFF i.e. cache ON); pure passthrough when set
+        scope: cultivate Commander gets --no-cache flag (default OFF i.e. cache ON);
+          pure passthrough when set
       - id: cache.integration.iter-invalidate
         scope: hook store.invalidateIter(prevIter) into heal-loop iter-advance code path
       - id: cache.integration.state-json-pulse
-        scope: schedule writeCachePulse(stateDir, store.stats()) every 1.4s + clean teardown on cultivate exit
+        scope: schedule writeCachePulse(stateDir, store.stats()) every 1.4s + clean
+          teardown on cultivate exit
   - id: cache-network-micros
     scope: Deterministic micro-agent fan-out per leaf (NUTRIENTS §4 micros section)
     branch: feat/cache-network-micros
@@ -255,13 +304,16 @@ agents:
       - crypto
     sub_agents:
       - id: cache.micros.spawn
-        scope: spawnMicros({leafId, severity?}) — seeded xorshift PRNG from sha256(leafId), 2-4 micros with cheap/full split
+        scope: spawnMicros({leafId, severity?}) — seeded xorshift PRNG from
+          sha256(leafId), 2-4 micros with cheap/full split
       - id: cache.micros.registry
-        scope: MicroRegistry class — registerLeaf, getMicros, clear; consumed by sporenet state writers
+        scope: MicroRegistry class — registerLeaf, getMicros, clear; consumed by
+          sporenet state writers
       - id: cache.micros.index
         scope: cli/src/lib/micro-agents/index.ts re-exports
   - id: cache-network-docs
-    scope: DEVELOPER_GUIDE.md Cache-Network section — MICRO + CACHE_NET vocab, --no-cache, events, state.cache, cost accounting
+    scope: DEVELOPER_GUIDE.md Cache-Network section — MICRO + CACHE_NET vocab,
+      --no-cache, events, state.cache, cost accounting
     branch: feat/cache-network-docs
     blocked_by:
       - cache-network-integration
@@ -270,7 +322,8 @@ agents:
       - documentation
     sub_agents:
       - id: cache.docs.developer-guide
-        scope: append-only Cache-Network section to DEVELOPER_GUIDE.md, cross-links docs/cache-network-micro-agents.md
+        scope: append-only Cache-Network section to DEVELOPER_GUIDE.md, cross-links
+          docs/cache-network-micro-agents.md
 merge_order:
   - dashboard-theme
   - cache-network-store
@@ -289,19 +342,22 @@ timeline:
         - dashboard-theme
         - cache-network-store
         - cache-network-micros
-      description: Wave 1 — foundational types + store + micros. No cross-biome deps inside this wave.
+      description: Wave 1 — foundational types + store + micros. No cross-biome deps
+        inside this wave.
     - hours: 1-3
       active:
         - dashboard-data
         - dashboard-canvas
         - dashboard-console
         - cache-network-integration
-      description: Wave 2 — data layer + canvas + console + cultivate.ts integration. Each consumes wave 1's frozen exports via NUTRIENTS.
+      description: Wave 2 — data layer + canvas + console + cultivate.ts integration.
+        Each consumes wave 1's frozen exports via NUTRIENTS.
     - hours: 3-4
       active:
         - dashboard-cli
         - dashboard-docs
         - cache-network-docs
-      description: Wave 3 — CLI wiring (depends on canvas + console + data + theme) and docs (describe shipped behavior).
+      description: Wave 3 — CLI wiring (depends on canvas + console + data + theme)
+        and docs (describe shipped behavior).
 budget:
   maxUsd: 100
