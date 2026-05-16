@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mycelium dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════════════
+   DASHBOARD SCAFFOLD — base layout + canvas chrome
+   Consumes: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* fallback values — overridden at runtime from theme */
+  --ink: #060912;
+  --ink-2: #0A0E18;
+  --ice: #E8EEF5;
+  --ice-2: #A8B4C5;
+  --cryo: #7AE5FF;
+  --rule: #1A2030;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: var(--ink);
+  color: var(--ice);
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Geist', sans-serif;
+  font-size: 12px;
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.005em;
+  position: relative;
+}
+
+/* ── Main frame layout ── */
+.frame {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ── Stage: canvas container ── */
+.stage {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink);
+  min-height: 0;
+}
+
+#webgl {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Vignette overlay ── */
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9997;
+  background: radial-gradient(ellipse at center, transparent 38%, rgba(6,9,18,0.7) 100%);
+}
+
+/* ── CRT scanlines (subtle) ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.045;
+  background: repeating-linear-gradient(0deg, rgba(122,229,255,0.6) 0px, rgba(122,229,255,0.6) 1px, transparent 1px, transparent 3px);
+}
+
+/* ── Accent line (top-right diagonal) ── */
+.accent-line {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px;
+  height: 1px;
+  z-index: 9996;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--cryo) 60%, var(--cryo));
+  opacity: 0.4;
+  transform-origin: right;
+  transform: rotate(-22deg) translate(0, 14px);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   PLACEHOLDER SECTIONS — other biomes will fill these in
+   dashboard-console owns: titlebar, metrics, body (rails), feedbar, feed
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* titlebar — dashboard-console.titlebar */
+.titlebar {
+  /* placeholder: dashboard.console.titlebar will implement */
+  min-height: 32px;
+  background: var(--ink-2);
+  border-bottom: 0.5px solid var(--rule);
+}
+
+/* metrics strip — dashboard-console.metric-strip */
+.metrics {
+  /* placeholder: dashboard.console.metric-strip will implement */
+  display: none;
+}
+
+/* body grid (stage + rails) — dashboard-console handles rails */
+.body {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* feedbar — dashboard-console.feedbar */
+.feedbar {
+  /* placeholder: dashboard.console.feedbar will implement */
+  min-height: 24px;
+  background: var(--ink-2);
+  border-top: 0.5px solid var(--rule);
+}
+
+/* feed — dashboard-console.event-feed */
+.feed {
+  /* placeholder: dashboard.console.event-feed will implement */
+  display: none;
+}
+
+</style>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     THREE.JS CDN IMPORT — ES module, version 0.161.0 (per NUTRIENTS §6)
+     ══════════════════════════════════════════════════════════════════════════════ -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="accent-line"></div>
+
+<div class="frame">
+  <!-- titlebar: dashboard-console.titlebar will populate -->
+  <div class="titlebar" id="titlebar"></div>
+
+  <!-- body: stage (canvas) + rails (dashboard-console) -->
+  <div class="body">
+    <div class="stage" id="stage">
+      <canvas id="webgl"></canvas>
+      <!-- HUD overlays, inspect panel, etc. — dashboard-console + dashboard.canvas.hud-overlays -->
+    </div>
+    <!-- rails: dashboard-console.providers-rail, dashboard-console.agents-rail will add -->
+  </div>
+
+  <!-- feedbar: dashboard-console.feedbar will populate -->
+  <div class="feedbar" id="feedbar"></div>
+
+  <!-- feed: dashboard-console.event-feed will populate -->
+  <div class="feed" id="feed"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     CANVAS SCAFFOLD — scene, camera, renderer, resize handler
+     Reads: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+     ══════════════════════════════════════════════════════════════════════════════ -->
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ────────── State + Theme from server-rendered globals ──────────
+// These are inlined by cli/src/lib/dashboard/render.ts before </body>
+const STATE = window.__DASHBOARD_STATE__ || {
+  organism: { name: 'dashboard-cache', started_at: new Date().toISOString(), iter: 0, view: 'multiverse' },
+  agents: [],
+  cache: { hits: 0, misses: 0, entries: 0, capacity: 0, recent_keys: [] },
+  events: [],
+  alerts: [],
+  providers: []
+};
+
+const THEME = window.__DASHBOARD_THEME__ || {
+  brand: { title: 'mycelium', tagline: 'decentralized', logo_char: 'Psi' },
+  palette: { ink: '#060912', ink_2: '#0A0E18', ice: '#E8EEF5', ice_2: '#A8B4C5', cryo: '#7AE5FF', rule: '#1A2030' },
+  lifecycle: { germ: '#B7A8E8', grow: '#7BC9C0', flow: '#8BB8E0', fruit: '#D9C390', dorm: '#5A6471' },
+  severity: { warn: '#D9B85A', alert: '#E08A5C', crit: '#DB5C6E' },
+  identity: {},
+  modulator: { pending_brightness: 0.3, active_brightness: 1.0, fruit_brightness: 0.9, failed_brightness: 0.45, active_pulse_hz: 0.9 }
+};
+
+// Apply theme to CSS custom properties
+function applyThemeToCss(theme) {
+  const root = document.documentElement;
+  root.style.setProperty('--ink', theme.palette.ink);
+  root.style.setProperty('--ink-2', theme.palette.ink_2);
+  root.style.setProperty('--ice', theme.palette.ice);
+  root.style.setProperty('--ice-2', theme.palette.ice_2);
+  root.style.setProperty('--cryo', theme.palette.cryo);
+  root.style.setProperty('--rule', theme.palette.rule);
+}
+applyThemeToCss(THEME);
+
+// ────────── Three.js Core Setup ──────────
+const stage = document.getElementById('stage');
+const canvas = document.getElementById('webgl');
+
+// Scene — transparent background (ink shows through from CSS)
+const scene = new THREE.Scene();
+scene.background = null;
+
+// Fog — subtle depth cue, color from theme ink
+const inkColor = parseInt(THEME.palette.ink.replace('#', ''), 16);
+scene.fog = new THREE.FogExp2(inkColor, 0.025);
+
+// Camera — perspective, 42 FOV (matches v9.4 prototype)
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+const initialCamPos = new THREE.Vector3(0, 2.5, 16);
+camera.position.copy(initialCamPos);
+
+// Renderer — antialiased, alpha, DPR capped at 2
+const renderer = new THREE.WebGLRenderer({
+  canvas: canvas,
+  antialias: true,
+  alpha: true
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// ────────── Resize Handler ──────────
+function fitRenderer() {
+  const rect = stage.getBoundingClientRect();
+  const width = rect.width;
+  const height = rect.height;
+
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+}
+
+window.addEventListener('resize', fitRenderer);
+fitRenderer();
+
+// ────────── OrbitControls (basic setup) ──────────
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enableZoom = false;   // custom zoom handler in dashboard.canvas.adaptive-zoom
+controls.enablePan = false;
+controls.minDistance = 1.5;
+controls.maxDistance = 30;
+controls.minPolarAngle = 0.02;
+controls.maxPolarAngle = Math.PI - 0.02;
+controls.target.set(0, 0, 0);
+
+// ────────── Main Group (wraps all product-specific objects) ──────────
+// Other canvas leaves (agent-globe, leaves-and-micros, cache-relays, etc.)
+// will add their objects to this group or directly to scene.
+const mainGroup = new THREE.Group();
+scene.add(mainGroup);
+
+// ────────── Globe Wireframe (faint orientation rings) ──────────
+const GLOBE_R = 4.6;
+{
+  const ringGeo = new THREE.TorusGeometry(GLOBE_R, 0.006, 6, 128);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0x1F2A3D,
+    transparent: true,
+    opacity: 0.42
+  });
+
+  // Equator ring
+  const equator = new THREE.Mesh(ringGeo, ringMat);
+  equator.rotation.x = Math.PI / 2;
+  mainGroup.add(equator);
+
+  // Two meridian rings
+  const meridian1 = new THREE.Mesh(ringGeo, ringMat.clone());
+  mainGroup.add(meridian1);
+
+  const meridian2 = new THREE.Mesh(ringGeo, ringMat.clone());
+  meridian2.rotation.y = Math.PI / 2;
+  mainGroup.add(meridian2);
+}
+
+// ────────── Animation Loop ──────────
+let animationFrameId = null;
+
+function animate(time) {
+  animationFrameId = requestAnimationFrame(animate);
+
+  // Time in seconds for animation calculations
+  const t = time * 0.001;
+
+  // Update controls damping
+  controls.update();
+
+  // Render scene
+  renderer.render(scene, camera);
+}
+
+// Start animation
+animate(0);
+
+// ────────── Exports for other canvas leaves ──────────
+// Other dashboard.canvas.* leaves will import/access these via window
+window.__DASHBOARD_CANVAS__ = {
+  scene,
+  camera,
+  renderer,
+  controls,
+  mainGroup,
+  GLOBE_R,
+  STATE,
+  THEME,
+  THREE
+};
+
+// ────────── Cleanup on page unload ──────────
+window.addEventListener('beforeunload', () => {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+  }
+  renderer.dispose();
+});
+
+</script>
+</body>
+</html>
