@@ -79,6 +79,25 @@ export function registerDashboardServeCommand(parent: Command): void {
           return;
         }
 
+        // ─── GET /state.json → live state poll target for the canvas/console ───
+        if (pathname === "/state.json" && req.method === "GET") {
+          try {
+            const state = buildDashboardState(cwd);
+            res.writeHead(200, {
+              "Content-Type": "application/json; charset=utf-8",
+              "Cache-Control": "no-store",
+            });
+            res.end(JSON.stringify(state));
+            logRequest(req.method!, pathname, 200, startTime);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            res.writeHead(500, { "Content-Type": "text/plain" });
+            res.end(`state.json error: ${message}`);
+            logRequest(req.method!, pathname, 500, startTime);
+          }
+          return;
+        }
+
         // ─── GET /events/stream → SSE ───
         if (pathname === "/events/stream" && req.method === "GET") {
           res.writeHead(200, {

@@ -1900,6 +1900,40 @@ const THEME = window.__DASHBOARD_THEME__ || {
   modulator: { pending_brightness: 0.3, active_brightness: 1.0, fruit_brightness: 0.9, failed_brightness: 0.45, active_pulse_hz: 0.9 }
 };
 
+// ────────── Live state polling ──────────
+// During cultivate, the framework writes sporenet/state.json incrementally via
+// writeLeafState (atomic temp/rename) and the cache-network pulse writer extends
+// state.cache every 1.4s. We poll /state.json on that same cadence and mutate
+// the existing STATE object in place so all renderers that captured `STATE`
+// (canvas, console rails, metric strip, inspect panel) re-read fresh data on
+// their next animation/timer tick. window.__DASHBOARD_STATE__ also tracks
+// because we Object.assign through the same reference.
+(function startLiveStatePoll() {
+  let inFlight = false;
+  async function pollOnce() {
+    if (inFlight) return;
+    inFlight = true;
+    try {
+      const res = await fetch('/state.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const fresh = await res.json();
+      // Remove keys that vanished from server state so renderers don't see stale data
+      for (const k of Object.keys(STATE)) {
+        if (!(k in fresh)) delete STATE[k];
+      }
+      Object.assign(STATE, fresh);
+      window.dispatchEvent(new CustomEvent('dashboard:state-updated', { detail: { ts: Date.now() } }));
+    } catch {
+      // Best-effort; never break the canvas if the server hiccups
+    } finally {
+      inFlight = false;
+    }
+  }
+  // Initial nudge then 1.4s cadence matching NUTRIENTS §3 cache.pulse aggregation
+  pollOnce();
+  setInterval(pollOnce, 1400);
+})();
+
 // Apply theme to CSS custom properties
 function applyThemeToCss(theme) {
   const root = document.documentElement;
