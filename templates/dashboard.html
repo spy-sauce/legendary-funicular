@@ -718,6 +718,350 @@ function animateCacheRelays(t) {
 // Register cache relay animation hook
 animationHooks.push(animateCacheRelays);
 
+// ════════════════════════════════════════════════════════════════════════════════
+// PULSES — slow directional packets on mesh edges
+// Scope: dashboard.canvas.pulses
+// Three pulse families: routing (agent→agent, 6s), cache-query (leaf→relay, 3s),
+// dashflow (agent→leaf, 4s). All ≥ 1.5s traversal per slow-pulse discipline.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Pulse Duration Constants (all ≥ 1.5s per slow-pulse discipline) ──────────
+const ROUTING_PACKET_DURATION = 6.0;   // seconds, agent→agent traversal
+const CACHE_PULSE_DURATION = 3.0;      // seconds, leaf→relay traversal
+const DASHFLOW_DURATION = 4.0;         // seconds, agent→leaf traversal
+const RELAY_DIM_DURATION = 1.6;        // seconds, miss-triggered relay dim decay
+const TRAIL_COUNT = 6;                 // trail segments per packet
+
+// ────────── Routing Mesh — edges between agents ──────────
+// Build edges for routing packets: each agent connects to 2-3 nearest neighbors
+const routingEdges = [];
+
+function buildRoutingEdges() {
+  const agents = Array.from(agentGlobeData.values());
+  if (agents.length < 2) return;
+
+  // Each agent connects to its 2 nearest neighbors (undirected mesh)
+  const edgeSet = new Set();
+  agents.forEach((a, ai) => {
+    const dists = agents
+      .map((b, bi) => ({ b, bi, d: a.position.distanceTo(b.position) }))
+      .filter(x => x.bi !== ai)
+      .sort((x, y) => x.d - y.d);
+
+    // Connect to 2 nearest
+    dists.slice(0, 2).forEach(({ b, bi }) => {
+      const key = ai < bi ? `${ai}-${bi}` : `${bi}-${ai}`;
+      if (edgeSet.has(key)) return;
+      edgeSet.add(key);
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute([
+        a.position.x, a.position.y, a.position.z,
+        b.position.x, b.position.y, b.position.z
+      ], 3));
+      const mat = new THREE.LineBasicMaterial({
+        color: 0x232B3D,
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.AdditiveBlending
+      });
+      const line = new THREE.Line(geo, mat);
+      mainGroup.add(line);
+      routingEdges.push({ from: a, to: b, line, mat, geo });
+    });
+  });
+}
+
+buildRoutingEdges();
+
+// ────────── Active Packet Pool ──────────
+// All pulse types (routing, cache-query, dashflow) share this array
+const activePackets = [];
+
+// ────────── Packet Spawn Helper ──────────
+// Creates a trailed particle that travels from startPos to endPos
+function spawnPacket(opts) {
+  // opts: { type, startPos, endPos, duration, color, onComplete? }
+  const trailGroup = new THREE.Group();
+  const trail = [];
+
+  for (let i = 0; i < TRAIL_COUNT; i++) {
+    const radius = 0.06 - i * 0.007;
+    const geo = new THREE.SphereGeometry(radius, 8, 8);
+    const mat = new THREE.MeshBasicMaterial({
+      color: opts.color,
+      transparent: true,
+      opacity: 0.95 - i * 0.13,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(opts.startPos);
+    trail.push({ mesh, mat, baseOpacity: 0.95 - i * 0.13 });
+    trailGroup.add(mesh);
+  }
+
+  mainGroup.add(trailGroup);
+
+  activePackets.push({
+    type: opts.type,
+    trail,
+    trailGroup,
+    startPos: opts.startPos.clone(),
+    endPos: opts.endPos.clone(),
+    t: 0,
+    duration: opts.duration,
+    color: opts.color,
+    onComplete: opts.onComplete
+  });
+}
+
+// ────────── Event Tracking ──────────
+// Track processed events to avoid re-spawning packets
+const seenEventTs = new Set();       // lifecycle events
+const seenCacheEventTs = new Set();  // cache events
+
+// Track relay dim states (relay index → expiry timestamp in seconds)
+const relayDimUntil = new Map();
+
+// Track leaf state transitions for dashflow
+const prevLeafStates = new Map();
+
+// ────────── Routing Packets — agent→agent, 6s ──────────
+// Triggered by lifecycle events in STATE.events
+function checkAndSpawnRoutingPackets() {
+  if (routingEdges.length === 0) return;
+
+  // Look for recent lifecycle events
+  const lifecycleEvents = (STATE.events || []).filter(e => e.category === 'lifecycle');
+
+  lifecycleEvents.forEach(evt => {
+    if (seenEventTs.has(evt.ts)) return;
+    seenEventTs.add(evt.ts);
+
+    // Pick a random edge to animate (lifecycle events don't specify source/target)
+    const edge = routingEdges[Math.floor(Math.random() * routingEdges.length)];
+    if (!edge) return;
+
+    // Determine direction randomly
+    const reverse = Math.random() < 0.5;
+    const start = reverse ? edge.to.position : edge.from.position;
+    const end = reverse ? edge.from.position : edge.to.position;
+
+    spawnPacket({
+      type: 'routing',
+      startPos: start,
+      endPos: end,
+      duration: ROUTING_PACKET_DURATION,
+      color: parseInt(THEME.palette.cryo.replace('#', ''), 16)
+    });
+  });
+}
+
+// ────────── Cache Query Pulses — leaf→relay, 3s ──────────
+// Cyan (cryo) for hit, gold (warn) for miss; miss triggers brief relay dim
+function checkAndSpawnCachePulses() {
+  // Need both cache relays and leaf data
+  if (cacheRelays.length === 0) return;
+
+  const cacheEvents = (STATE.events || []).filter(
+    e => e.category === 'cache' &&
+      (e.short_type === 'cache · hit' || e.short_type === 'cache · miss')
+  );
+
+  cacheEvents.forEach(evt => {
+    if (seenCacheEventTs.has(evt.ts)) return;
+    seenCacheEventTs.add(evt.ts);
+
+    const isHit = evt.short_type === 'cache · hit';
+    const color = isHit
+      ? parseInt(THEME.palette.cryo.replace('#', ''), 16)
+      : parseInt(THEME.severity.warn.replace('#', ''), 16);
+
+    // Find a leaf to spawn from (ideally from evt.source biome)
+    let startPos = null;
+    const sourceBiomeId = evt.source;
+
+    // Try to find leaf position from leafMeshData (set by leaves-and-micros leaf)
+    const leafData = window.__DASHBOARD_CANVAS__?.leafMeshData;
+
+    if (leafData) {
+      // Try to find leaf from source biome
+      for (const [leafId, lData] of leafData.entries()) {
+        if (lData.parentAgentId === sourceBiomeId && lData.state === 'active') {
+          const agentData = agentGlobeData.get(sourceBiomeId);
+          if (agentData) {
+            startPos = lData.position.clone().add(agentData.position);
+            break;
+          }
+        }
+      }
+
+      // Fallback: pick any active leaf
+      if (!startPos) {
+        for (const [leafId, lData] of leafData.entries()) {
+          if (lData.state === 'active') {
+            const agentData = agentGlobeData.get(lData.parentAgentId);
+            if (agentData) {
+              startPos = lData.position.clone().add(agentData.position);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Fallback: use random agent position
+    if (!startPos && agentGlobeData.size > 0) {
+      const agents = Array.from(agentGlobeData.values());
+      startPos = agents[Math.floor(Math.random() * agents.length)].position.clone();
+    }
+
+    if (!startPos) return;
+
+    // Find nearest relay
+    let nearestRelay = null;
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    cacheRelays.forEach((relay, idx) => {
+      const d = startPos.distanceTo(relay.basePos);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearestRelay = relay;
+        nearestIdx = idx;
+      }
+    });
+
+    if (!nearestRelay) return;
+
+    // Spawn the pulse
+    const relayIdx = nearestIdx;
+    spawnPacket({
+      type: 'cache',
+      startPos: startPos,
+      endPos: nearestRelay.basePos.clone(),
+      duration: CACHE_PULSE_DURATION,
+      color: color,
+      onComplete: !isHit ? () => {
+        // On miss, trigger relay dim (1.6s decay)
+        const now = performance.now() / 1000;
+        relayDimUntil.set(relayIdx, now + RELAY_DIM_DURATION);
+      } : undefined
+    });
+  });
+}
+
+// ────────── Dashflow Pulses — agent→leaf, 4s ──────────
+// Triggered when leaf transitions to 'active' state
+function checkAndSpawnDashflowPulses() {
+  const leafData = window.__DASHBOARD_CANVAS__?.leafMeshData;
+  if (!leafData) return;
+
+  // Check each leaf for active transition
+  for (const [leafId, lData] of leafData.entries()) {
+    const prevState = prevLeafStates.get(leafId);
+    const currState = lData.state;
+
+    if (currState === 'active' && prevState !== 'active') {
+      // Leaf just became active — spawn dashflow pulse from parent agent to leaf
+      const agentData = agentGlobeData.get(lData.parentAgentId);
+      if (agentData) {
+        const startPos = agentData.position.clone();
+        const endPos = lData.position.clone().add(agentData.position);
+
+        // Color: use parent agent's identity color
+        const colorHex = THEME.identity[lData.parentAgentId] || THEME.palette.cryo;
+        const color = parseInt(colorHex.replace('#', ''), 16);
+
+        spawnPacket({
+          type: 'dashflow',
+          startPos: startPos,
+          endPos: endPos,
+          duration: DASHFLOW_DURATION,
+          color: color
+        });
+      }
+    }
+
+    prevLeafStates.set(leafId, currState);
+  }
+}
+
+// ────────── Apply Relay Dim on Cache Miss ──────────
+// Called each frame to modulate relay opacity during miss dim window
+function applyRelayDimEffects(t) {
+  const nowSec = performance.now() / 1000;
+
+  cacheRelays.forEach((relay, idx) => {
+    const dimUntil = relayDimUntil.get(idx);
+    if (dimUntil && nowSec < dimUntil) {
+      // Calculate remaining dim factor (1.0 at miss arrival → 0.0 at expiry)
+      const remaining = (dimUntil - nowSec) / RELAY_DIM_DURATION;
+      const dimFactor = 0.5 + remaining * 0.5; // 0.5 to 1.0 (inverted: more dim at start)
+      relay.wireMat.opacity *= dimFactor;
+      relay.fillMat.opacity *= dimFactor;
+    }
+  });
+}
+
+// ────────── Pulse Animation Loop ──────────
+let lastPulseTime = 0;
+
+function animatePulses(t) {
+  // Calculate delta time
+  const dt = lastPulseTime > 0 ? t - lastPulseTime : 0.016;
+  lastPulseTime = t;
+
+  // Check for new packets to spawn
+  checkAndSpawnRoutingPackets();
+  checkAndSpawnCachePulses();
+  checkAndSpawnDashflowPulses();
+
+  // Animate active packets
+  for (let i = activePackets.length - 1; i >= 0; i--) {
+    const p = activePackets[i];
+    p.t += dt / p.duration;
+
+    if (p.t >= 1) {
+      // Packet completed
+      if (p.onComplete) p.onComplete();
+      mainGroup.remove(p.trailGroup);
+      activePackets.splice(i, 1);
+      continue;
+    }
+
+    // Interpolate trail positions along the path
+    const tt = p.t;
+    p.trail.forEach((seg, idx) => {
+      // Stagger trail segments slightly behind the head
+      const segT = Math.max(0, tt - idx * 0.012);
+      seg.mesh.position.set(
+        p.startPos.x * (1 - segT) + p.endPos.x * segT,
+        p.startPos.y * (1 - segT) + p.endPos.y * segT,
+        p.startPos.z * (1 - segT) + p.endPos.z * segT
+      );
+      // Fade in then out (sin curve for smooth opacity)
+      seg.mat.opacity = seg.baseOpacity * Math.sin(tt * Math.PI);
+    });
+  }
+
+  // Apply relay dim effects (after cache-relays animation has run)
+  applyRelayDimEffects(t);
+
+  // Clean up old seen events (keep last 200 to prevent memory growth)
+  if (seenEventTs.size > 300) {
+    const arr = Array.from(seenEventTs);
+    arr.slice(0, 100).forEach(ts => seenEventTs.delete(ts));
+  }
+  if (seenCacheEventTs.size > 300) {
+    const arr = Array.from(seenCacheEventTs);
+    arr.slice(0, 100).forEach(ts => seenCacheEventTs.delete(ts));
+  }
+}
+
+// Register pulse animation hook
+animationHooks.push(animatePulses);
+
 // ────────── Export Agent Globe Data for Other Leaves ──────────
 // Other leaves (leaves-and-micros, adaptive-zoom, etc.) need agent positions
 
@@ -750,7 +1094,16 @@ window.__DASHBOARD_CANVAS__ = {
   cacheRelayMesh,
   CACHE_RELAY_RADIUS,
   CACHE_RELAY_COLOR_HEX,
-  CACHE_RELAY_COLOR
+  CACHE_RELAY_COLOR,
+  // Pulse exports (dashboard.canvas.pulses)
+  routingEdges,
+  activePackets,
+  spawnPacket,
+  relayDimUntil,
+  ROUTING_PACKET_DURATION,
+  CACHE_PULSE_DURATION,
+  DASHFLOW_DURATION,
+  RELAY_DIM_DURATION
 };
 
 // ────────── Cleanup on page unload ──────────
