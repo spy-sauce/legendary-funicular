@@ -160,6 +160,24 @@ function stopCachePulseTimer(): void {
   _cacheStateDir = null;
 }
 
+/**
+ * Invalidate all cache entries from a specific heal-loop iteration.
+ *
+ * Called by heal-loop iter-advance handler per NUTRIENTS §4:
+ * "when heal-loop advances iter, call `invalidateIter(prevIter)` from the
+ * cultivate iter-advance handler."
+ *
+ * This function operates on the module-level _cacheStore if it exists.
+ * No-op if cache is disabled or store not initialized.
+ *
+ * @param iter - The iteration number whose entries should be evicted
+ */
+export function invalidateCacheStoreIter(iter: number): void {
+  if (_cacheStore) {
+    _cacheStore.invalidateIter(iter);
+  }
+}
+
 export function registerCultivateCommand(program: Command): void {
   program
     .command("cultivate")
