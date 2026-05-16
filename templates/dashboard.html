@@ -714,10 +714,178 @@ body::after {
   flex-shrink: 0;
 }
 
-/* feed — dashboard-console.event-feed */
+/* ══════════════════════════════════════════════════════════════════════════════
+   EVENT FEED — dashboard.console.event-feed
+   Scope: 60-90px scrollable feed of state.events filtered by feedFilter,
+          severity-colored left border
+   Consumes: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 .feed {
-  /* placeholder: dashboard.console.event-feed will implement */
-  display: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 60px;
+  max-height: 90px;
+  height: clamp(60px, 10vh, 90px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--ink);
+  border-top: 0.5px solid var(--rule);
+  flex-shrink: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ice-2) var(--ink-2);
+}
+
+.feed::-webkit-scrollbar {
+  width: 4px;
+}
+
+.feed::-webkit-scrollbar-track {
+  background: var(--ink-2);
+}
+
+.feed::-webkit-scrollbar-thumb {
+  background: var(--ice-2);
+  border-radius: 2px;
+}
+
+.feed::-webkit-scrollbar-thumb:hover {
+  background: var(--ice);
+}
+
+/* ── Event Row ── */
+.feed-row {
+  display: grid;
+  grid-template-columns: 16px 58px minmax(80px, 120px) minmax(80px, 140px) 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 0;
+  min-height: 22px;
+  border-left: 2px solid var(--ice-2);
+  border-bottom: 0.5px solid var(--rule);
+  background: var(--ink);
+  transition: background 1.5s ease;
+}
+
+.feed-row:last-child {
+  border-bottom: none;
+}
+
+.feed-row:hover {
+  background: var(--ink-2);
+}
+
+/* Severity border colors — per NUTRIENTS §2 EventEntry.severity */
+.feed-row.sev-info    { border-left-color: var(--ice-2); }
+.feed-row.sev-warn    { border-left-color: var(--sev-warn); }
+.feed-row.sev-alert   { border-left-color: var(--sev-alert); }
+.feed-row.sev-crit    { border-left-color: var(--sev-crit); }
+
+/* ── Category Icon (12px glyph) ── */
+.feed-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.feed-icon svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+/* Icon color matches severity */
+.feed-row.sev-info .feed-icon  { color: var(--ice-2); }
+.feed-row.sev-warn .feed-icon  { color: var(--sev-warn); }
+.feed-row.sev-alert .feed-icon { color: var(--sev-alert); }
+.feed-row.sev-crit .feed-icon  { color: var(--sev-crit); }
+
+/* ── Timestamp (HH:MM:SS) ── */
+.feed-ts {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: var(--ice-2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Source biome (truncated to 14ch) ── */
+.feed-source {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  font-weight: 300;
+  color: var(--ice-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+/* ── short_type — Geist Mono ── */
+.feed-type {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+/* ── Message — Geist 300, ellipsis on overflow ── */
+.feed-msg {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  font-weight: 300;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ── Empty State ── */
+.feed-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 12px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  opacity: 0.6;
+}
+
+/* ── Responsive scaling ── */
+@media (max-width: 900px) {
+  .feed-row {
+    grid-template-columns: 16px 52px minmax(60px, 100px) minmax(60px, 100px) 1fr;
+    gap: 6px;
+  }
+  .feed-source { max-width: 100px; }
+  .feed-type   { max-width: 100px; }
+}
+
+@media (max-width: 640px) {
+  .feed-row {
+    grid-template-columns: 14px 48px 1fr;
+    gap: 4px;
+  }
+  .feed-source,
+  .feed-type { display: none; }
+  .feed-msg { grid-column: span 1; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -866,6 +1034,179 @@ body::after {
 @keyframes cryoBreath {
   0%, 100% { opacity: 0.5; transform: scale(0.9); }
   50%      { opacity: 1;   transform: scale(1.1); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ALERT RIBBON — dashboard.console.alert-ribbon
+   Scope: absolute-positioned top banner sliding in when alerts arrive, auto-dismiss 15s
+   Consumes: window.__DASHBOARD_STATE__.alerts, window.__DASHBOARD_THEME__.severity
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.alert-ribbon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  pointer-events: auto;
+  transform: translateY(-100%);
+  transition: transform 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.alert-ribbon.visible {
+  transform: translateY(0);
+}
+
+/* Slide-out uses the same 1.5s timing per slow-pulse discipline */
+.alert-ribbon.dismissing {
+  transform: translateY(-100%);
+  transition: transform 1.5s ease;
+}
+
+/* Alert container — holds multiple alerts in a stack */
+.alert-ribbon-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Individual alert item */
+.alert-ribbon-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  min-height: 40px;
+  cursor: pointer;
+  border-bottom: 0.5px solid rgba(6, 9, 18, 0.4);
+  position: relative;
+  overflow: hidden;
+  transition: opacity 1.5s ease, transform 1.5s ease;
+}
+
+.alert-ribbon-item.dismissing {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+/* Severity backgrounds — linear-gradient from severity color → transparent */
+.alert-ribbon-item.crit {
+  background: linear-gradient(90deg, var(--sev-crit, #DB5C6E) 0%, rgba(219, 92, 110, 0.6) 40%, transparent 100%);
+}
+
+.alert-ribbon-item.alert {
+  background: linear-gradient(90deg, var(--sev-alert, #E08A5C) 0%, rgba(224, 138, 92, 0.6) 40%, transparent 100%);
+}
+
+.alert-ribbon-item.warn {
+  background: linear-gradient(90deg, var(--sev-warn, #D9B85A) 0%, rgba(217, 184, 90, 0.6) 40%, transparent 100%);
+}
+
+/* Alert content layout */
+.alert-ribbon-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Severity icon (pulsing dot) */
+.alert-ribbon-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px currentColor;
+  animation: alertPulse 1.8s ease-in-out infinite;
+}
+
+.alert-ribbon-item.crit .alert-ribbon-icon {
+  background: var(--ice, #E8EEF5);
+  color: var(--sev-crit, #DB5C6E);
+}
+
+.alert-ribbon-item.alert .alert-ribbon-icon {
+  background: var(--ice, #E8EEF5);
+  color: var(--sev-alert, #E08A5C);
+}
+
+.alert-ribbon-item.warn .alert-ribbon-icon {
+  background: var(--ice, #E8EEF5);
+  color: var(--sev-warn, #D9B85A);
+}
+
+@keyframes alertPulse {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); }
+  50%      { opacity: 1;   transform: scale(1.1); }
+}
+
+/* Timestamp — Geist Mono, subtle */
+.alert-ribbon-ts {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--ice, #E8EEF5);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* Message text — ice color, truncate on overflow */
+.alert-ribbon-message {
+  font-family: 'Geist', sans-serif;
+  font-size: 12px;
+  font-weight: 300;
+  color: var(--ice, #E8EEF5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  text-shadow: 0 1px 3px rgba(6, 9, 18, 0.5);
+}
+
+/* Dismiss hint (×) — appears on hover */
+.alert-ribbon-dismiss {
+  font-family: 'Geist', sans-serif;
+  font-size: 16px;
+  font-weight: 200;
+  color: var(--ice, #E8EEF5);
+  opacity: 0.4;
+  flex-shrink: 0;
+  padding: 0 4px;
+  transition: opacity 1.5s ease;
+}
+
+.alert-ribbon-item:hover .alert-ribbon-dismiss {
+  opacity: 0.9;
+}
+
+/* Auto-dismiss progress bar (thin line at bottom) */
+.alert-ribbon-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--ice, #E8EEF5);
+  opacity: 0.3;
+  animation: alertProgressShrink 15s linear forwards;
+}
+
+@keyframes alertProgressShrink {
+  0%   { width: 100%; }
+  100% { width: 0%; }
+}
+
+/* Responsive scaling */
+@media (max-height: 640px) {
+  .alert-ribbon-item {
+    padding: 8px 14px;
+    min-height: 34px;
+  }
+  .alert-ribbon-message {
+    font-size: 11px;
+  }
 }
 
 </style>
@@ -3599,6 +3940,129 @@ window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgres
     getCurrentFilter: () => currentFilter,
     setFilter: selectFilter,
     FILTER_CATEGORIES
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// EVENT FEED — dashboard.console.event-feed
+// Scope: 60-90px scrollable feed of state.events filtered by feedFilter,
+//        severity-colored left border
+// Consumes: STATE, THEME
+// Listens: dashboard:feedbar-filter custom event from feedbar
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initEventFeed() {
+  const feedEl = document.getElementById('feed');
+  if (!feedEl) return;
+
+  // ────────── Category Icons (12px SVG glyphs) ──────────
+  // Per HYPHA: "category icon (12px glyph, identity from theme.severity[event.severity])"
+  const CATEGORY_ICONS = {
+    lifecycle: `<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6 3v3l2 2" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`,
+    nutrient:  `<svg viewBox="0 0 12 12"><path d="M6 1v10M3 4l3-3 3 3M3 8l3 3 3-3" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    cost:      `<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6 3v6M4 4.5h4M4 7.5h4" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round"/></svg>`,
+    health:    `<svg viewBox="0 0 12 12"><path d="M6 2.5C3 0.5 0 3 0 5.5c0 3 6 5.5 6 5.5s6-2.5 6-5.5c0-2.5-3-5-6-3z" fill="currentColor"/></svg>`,
+    anomaly:   `<svg viewBox="0 0 12 12"><path d="M6 1L11 10H1L6 1z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="6" cy="8" r="0.7" fill="currentColor"/><path d="M6 4v2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+    cache:     `<svg viewBox="0 0 12 12"><rect x="1.5" y="3" width="9" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round"/></svg>`
+  };
+
+  // ────────── Module-scope state ──────────
+  let currentFilter = 'all';
+  let lastScrollTime = 0;
+  let userHasScrolled = false;
+
+  // ────────── Format timestamp as HH:MM:SS ──────────
+  function formatTs(isoStr) {
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '--:--:--';
+      return d.toTimeString().slice(0, 8);
+    } catch {
+      return '--:--:--';
+    }
+  }
+
+  // ────────── Truncate source biome to 14 chars ──────────
+  function truncateSource(source) {
+    if (!source) return 'unknown';
+    return source.length > 14 ? source.slice(0, 14) : source;
+  }
+
+  // ────────── Render a single event row ──────────
+  function renderEventRow(event) {
+    const severity = event.severity || 'info';
+    const category = event.category || 'lifecycle';
+    const icon = CATEGORY_ICONS[category] || CATEGORY_ICONS.lifecycle;
+
+    return `
+      <div class="feed-row sev-${severity}">
+        <span class="feed-icon">${icon}</span>
+        <span class="feed-ts">${formatTs(event.ts)}</span>
+        <span class="feed-source">${truncateSource(event.source)}</span>
+        <span class="feed-type">${event.short_type || ''}</span>
+        <span class="feed-msg">${event.message || ''}</span>
+      </div>
+    `;
+  }
+
+  // ────────── Filter events by category ──────────
+  function filterEvents(events, filter) {
+    if (!events || !Array.isArray(events)) return [];
+    if (filter === 'all') return events;
+    return events.filter(e => e.category === filter);
+  }
+
+  // ────────── Render entire feed ──────────
+  function renderFeed() {
+    const events = STATE.events || [];
+    const filtered = filterEvents(events, currentFilter);
+
+    if (filtered.length === 0) {
+      feedEl.innerHTML = `<div class="feed-empty">no events${currentFilter !== 'all' ? ` (${currentFilter})` : ''}</div>`;
+      return;
+    }
+
+    // Events are already newest-first per NUTRIENTS §2
+    feedEl.innerHTML = filtered.map(renderEventRow).join('');
+
+    // Per HYPHA: "No auto-scroll if operator has manually scrolled away from top within the last 4s"
+    const now = Date.now();
+    if (!userHasScrolled || (now - lastScrollTime > 4000)) {
+      feedEl.scrollTop = 0;
+      userHasScrolled = false;
+    }
+  }
+
+  // ────────── Track manual scrolling ──────────
+  feedEl.addEventListener('scroll', () => {
+    // If scrolled away from top, mark as user-scrolled
+    if (feedEl.scrollTop > 5) {
+      userHasScrolled = true;
+      lastScrollTime = Date.now();
+    } else {
+      // User scrolled back to top
+      userHasScrolled = false;
+    }
+  });
+
+  // ────────── Listen for filter changes from feedbar ──────────
+  document.addEventListener('dashboard:feedbar-filter', (e) => {
+    const newFilter = e.detail?.filter || 'all';
+    if (newFilter !== currentFilter) {
+      currentFilter = newFilter;
+      renderFeed();
+    }
+  });
+
+  // ────────── Initial render ──────────
+  renderFeed();
+
+  // ────────── Export event feed functions for other console leaves ──────────
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.eventFeed = {
+    renderFeed,
+    getCurrentFilter: () => currentFilter,
+    getFilteredEvents: () => filterEvents(STATE.events || [], currentFilter)
   };
 })();
 
