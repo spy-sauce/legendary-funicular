@@ -1228,6 +1228,17 @@ body::after {
 <div class="vignette"></div>
 <div class="accent-line"></div>
 
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     ALERT RIBBON — dashboard.console.alert-ribbon
+     Scope: absolute-positioned top banner sliding in when alerts arrive, auto-dismiss 15s
+     Starts hidden (translateY -100%); slides in when alerts[] gains new entries
+     ══════════════════════════════════════════════════════════════════════════════ -->
+<div class="alert-ribbon" id="alert-ribbon">
+  <div class="alert-ribbon-stack" id="alert-ribbon-stack">
+    <!-- Alert items will be dynamically inserted here by initAlertRibbon() -->
+  </div>
+</div>
+
 <div class="frame">
   <!-- titlebar: dashboard-console.titlebar will populate -->
   <div class="titlebar" id="titlebar"></div>
@@ -4066,6 +4077,170 @@ window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgres
   };
 })();
 
+// ════════════════════════════════════════════════════════════════════════════════
+// ALERT RIBBON — dashboard.console.alert-ribbon
+// Scope: absolute-positioned top banner sliding in when alerts arrive, auto-dismiss 15s
+// Consumes: STATE.alerts, THEME.severity
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initAlertRibbon() {
+  const ribbonEl = document.getElementById('alert-ribbon');
+  const stackEl = document.getElementById('alert-ribbon-stack');
+  if (!ribbonEl || !stackEl) return;
+
+  // ────────── Module state ──────────
+  // Track which alerts we've already shown (by ts + message tuple)
+  // Per HYPHA: "Slides in when state.alerts[] gains a new entry since last render
+  // (compare by ts + message tuple)"
+  const shownAlertKeys = new Set();
+  const dismissTimers = new Map(); // alertKey → timeoutId
+  const AUTO_DISMISS_MS = 15000; // 15s auto-dismiss per HYPHA spec
+
+  // ────────── Helper: create alert key from entry ──────────
+  function alertKey(alert) {
+    return `${alert.ts}|${alert.message}`;
+  }
+
+  // ────────── Helper: format timestamp as HH:MM:SS ──────────
+  function formatTime(isoString) {
+    try {
+      const d = new Date(isoString);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${hh}:${mm}:${ss}`;
+    } catch {
+      return '—';
+    }
+  }
+
+  // ────────── Dismiss a single alert ──────────
+  function dismissAlert(key, itemEl) {
+    // Clear any pending auto-dismiss timer
+    if (dismissTimers.has(key)) {
+      clearTimeout(dismissTimers.get(key));
+      dismissTimers.delete(key);
+    }
+
+    // Add dismissing class for slide-out animation (1.5s per slow-pulse discipline)
+    itemEl.classList.add('dismissing');
+
+    // Remove from DOM after animation completes
+    setTimeout(() => {
+      if (itemEl.parentNode) {
+        itemEl.parentNode.removeChild(itemEl);
+      }
+      shownAlertKeys.delete(key);
+
+      // If no more alerts, slide ribbon out
+      if (stackEl.children.length === 0) {
+        ribbonEl.classList.remove('visible');
+        ribbonEl.classList.add('dismissing');
+        // Remove dismissing class after animation
+        setTimeout(() => {
+          ribbonEl.classList.remove('dismissing');
+        }, 1500);
+      }
+    }, 1500);
+  }
+
+  // ────────── Render a single alert item ──────────
+  function renderAlertItem(alert) {
+    const key = alertKey(alert);
+    const severity = alert.severity || 'warn';
+
+    const itemEl = document.createElement('div');
+    itemEl.className = `alert-ribbon-item ${severity}`;
+    itemEl.dataset.alertKey = key;
+
+    itemEl.innerHTML = `
+      <div class="alert-ribbon-content">
+        <span class="alert-ribbon-icon"></span>
+        <span class="alert-ribbon-ts">${formatTime(alert.ts)}</span>
+        <span class="alert-ribbon-message">${escapeHtml(alert.message)}</span>
+      </div>
+      <span class="alert-ribbon-dismiss">×</span>
+      <div class="alert-ribbon-progress"></div>
+    `;
+
+    // Click to dismiss (per HYPHA: "Auto-dismiss after 15s ... OR on click")
+    itemEl.addEventListener('click', () => {
+      dismissAlert(key, itemEl);
+    });
+
+    // Auto-dismiss after 15s (per HYPHA spec)
+    const timerId = setTimeout(() => {
+      dismissAlert(key, itemEl);
+    }, AUTO_DISMISS_MS);
+    dismissTimers.set(key, timerId);
+
+    return itemEl;
+  }
+
+  // ────────── Helper: escape HTML to prevent XSS ──────────
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ────────── Check for new alerts and render ──────────
+  function checkAndRenderAlerts() {
+    const alerts = STATE.alerts || [];
+
+    // Per HYPHA: empty alerts[] → ribbon stays hidden
+    if (alerts.length === 0) {
+      // Clear any existing shown alerts
+      stackEl.innerHTML = '';
+      shownAlertKeys.clear();
+      ribbonEl.classList.remove('visible');
+      return;
+    }
+
+    // Find new alerts (not yet shown)
+    const newAlerts = alerts.filter(a => !shownAlertKeys.has(alertKey(a)));
+
+    if (newAlerts.length > 0) {
+      // Sort new alerts by timestamp (newest first for display at top)
+      newAlerts.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
+      // Render each new alert
+      newAlerts.forEach(alert => {
+        const key = alertKey(alert);
+        shownAlertKeys.add(key);
+        const itemEl = renderAlertItem(alert);
+        // Insert at top of stack (newest first)
+        stackEl.insertBefore(itemEl, stackEl.firstChild);
+      });
+
+      // Slide ribbon in
+      ribbonEl.classList.remove('dismissing');
+      ribbonEl.classList.add('visible');
+    }
+  }
+
+  // ────────── Initial render ──────────
+  checkAndRenderAlerts();
+
+  // ────────── Periodic check (every 1.4s to match dashboard cadence) ──────────
+  const alertCheckInterval = setInterval(checkAndRenderAlerts, 1400);
+
+  // ────────── Export for cleanup and other leaves ──────────
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.alertRibbon = {
+    checkAndRenderAlerts,
+    dismissAll: () => {
+      // Dismiss all visible alerts
+      stackEl.querySelectorAll('.alert-ribbon-item').forEach(itemEl => {
+        const key = itemEl.dataset.alertKey;
+        if (key) dismissAlert(key, itemEl);
+      });
+    },
+    alertCheckInterval,
+    getShownCount: () => shownAlertKeys.size
+  };
+})();
+
 // ────────── Cleanup on page unload ──────────
 window.addEventListener('beforeunload', () => {
   if (animationFrameId) {
@@ -4079,6 +4254,10 @@ window.addEventListener('beforeunload', () => {
   // Clear metric strip refresh interval (dashboard.console.metric-strip)
   if (window.__DASHBOARD_CONSOLE__?.metricStrip?.metricRefreshInterval) {
     clearInterval(window.__DASHBOARD_CONSOLE__.metricStrip.metricRefreshInterval);
+  }
+  // Clear alert ribbon check interval (dashboard.console.alert-ribbon)
+  if (window.__DASHBOARD_CONSOLE__?.alertRibbon?.alertCheckInterval) {
+    clearInterval(window.__DASHBOARD_CONSOLE__.alertRibbon.alertCheckInterval);
   }
 });
 
