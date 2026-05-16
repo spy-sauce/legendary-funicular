@@ -1209,6 +1209,527 @@ body::after {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   INSPECT PANEL — dashboard.console.inspect-panel
+   Scope: 300-420px slide-in from left edge, opens on dashboard:agent-select
+   Sections: header + synopsis + ops actions + identity + focus + leaf queue
+             + subagent mini-diagram + flow + files + cost
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.inspect-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 8;
+  width: clamp(300px, 30vw, 420px);
+  max-height: 100%;
+  background: var(--ink-2);
+  border-right: 0.5px solid var(--rule);
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 1.5s ease, transform 1.5s ease;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  overflow: hidden;
+}
+
+.inspect-panel.open {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.inspect-panel.pinned::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cryo);
+  box-shadow: 0 0 8px var(--cryo);
+}
+
+/* ── Inspect Header ── */
+.inspect-head {
+  padding: 10px 14px;
+  border-bottom: 0.5px solid var(--rule);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.inspect-head .h-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.inspect-head .h-eyebrow {
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 3px;
+}
+
+.inspect-head .h-title {
+  font-family: 'Geist', sans-serif;
+  font-weight: 300;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inspect-head .h-tag {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  color: var(--ice-2);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+.inspect-head .h-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.inspect-head .h-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 0.5px solid;
+  border-radius: 2px;
+}
+
+.inspect-head .x-close {
+  background: transparent;
+  border: 0.5px solid var(--rule);
+  color: var(--ice-2);
+  cursor: pointer;
+  padding: 4px 10px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: color 1.5s ease, border-color 1.5s ease;
+}
+
+.inspect-head .x-close:hover {
+  color: var(--sev-warn);
+  border-color: var(--sev-warn);
+}
+
+/* ── Inspect Body (scrollable) ── */
+.inspect-body {
+  padding: 10px 14px 14px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.inspect-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.inspect-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.inspect-body::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 2px;
+}
+
+.inspect-body::-webkit-scrollbar-thumb:hover {
+  background: var(--ice-2);
+}
+
+/* ── Section styling ── */
+.i-section {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 0.5px dashed var(--rule);
+}
+
+.i-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.i-section h5 {
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 6px;
+  font-weight: 400;
+}
+
+/* ── Key-value rows ── */
+.i-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  padding: 2px 0;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+}
+
+.i-row .k {
+  color: var(--ice-2);
+  letter-spacing: 0.05em;
+}
+
+.i-row .v {
+  color: var(--ice);
+  text-align: right;
+}
+
+.i-row .v.dim {
+  color: var(--ice-2);
+}
+
+/* ── Prose (synopsis, etc) ── */
+.i-prose {
+  font-family: 'Geist', sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--ice-2);
+  padding: 2px 0;
+}
+
+/* ── Provider tag (identity dot + name) ── */
+.i-provider-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.i-provider-tag .p-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.i-provider-tag .p-name {
+  color: var(--ice-2);
+}
+
+/* ── Operator actions ── */
+.op-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.op-btn {
+  background: transparent;
+  border: 0.5px solid var(--rule);
+  color: var(--ice-2);
+  cursor: pointer;
+  padding: 5px 8px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 1.5s ease;
+  white-space: nowrap;
+}
+
+.op-btn:hover {
+  background: rgba(122, 229, 255, 0.06);
+  color: var(--cryo);
+  border-color: var(--cryo);
+}
+
+.op-btn.danger:hover {
+  color: var(--sev-crit);
+  border-color: var(--sev-crit);
+  background: rgba(219, 92, 110, 0.06);
+}
+
+.op-btn.go:hover {
+  color: var(--life-grow);
+  border-color: var(--life-grow);
+  background: rgba(123, 201, 192, 0.06);
+}
+
+.op-btn:disabled {
+  color: var(--ice-2);
+  opacity: 0.4;
+  border-color: var(--rule);
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.op-btn:disabled:hover {
+  background: transparent;
+  color: var(--ice-2);
+  border-color: var(--rule);
+}
+
+/* ── Leaf queue list ── */
+.leaf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.leaf-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  gap: 6px;
+  padding: 4px 0 4px 8px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: background 1.5s ease;
+}
+
+.leaf-row:hover {
+  background: rgba(122, 229, 255, 0.04);
+}
+
+.leaf-row.current {
+  background: rgba(122, 229, 255, 0.08);
+  border-left-color: var(--cryo);
+}
+
+.leaf-row.s-done {
+  border-left-color: var(--life-fruit);
+}
+
+.leaf-row.s-active {
+  border-left-color: var(--life-flow);
+}
+
+.leaf-row.s-pending {
+  border-left-color: var(--life-germ);
+}
+
+.leaf-row.s-failed {
+  border-left-color: var(--sev-crit);
+}
+
+.leaf-row .dot {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.leaf-row .name {
+  color: var(--ice);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaf-row .name .scope {
+  display: block;
+  font-size: 8px;
+  color: var(--ice-2);
+  margin-top: 2px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaf-row .dur {
+  color: var(--ice-2);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.leaf-row .files-count {
+  color: var(--ice-2);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+/* ── Subagent mini-diagram (SVG) ── */
+.subagent-map {
+  width: 100%;
+  height: auto;
+  margin: 4px 0 6px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 0.5px dashed var(--rule);
+  border-radius: 2px;
+}
+
+.subagent-map .agent-core {
+  fill: var(--cryo);
+}
+
+.subagent-map .agent-ring {
+  fill: none;
+  stroke: var(--cryo);
+  stroke-width: 0.6;
+  opacity: 0.6;
+}
+
+.subagent-map .leaf-circle {
+  stroke-width: 0.5;
+}
+
+.subagent-map .leaf-line {
+  stroke: var(--rule);
+  stroke-width: 0.4;
+  opacity: 0.5;
+}
+
+.subagent-map .cache-glyph {
+  fill: var(--cryo);
+  opacity: 0.85;
+}
+
+.subagent-map .micro-circle {
+  stroke-width: 0.4;
+}
+
+.subagent-map .micro-circle.cheap {
+  fill: var(--life-germ);
+  stroke: var(--life-germ);
+}
+
+.subagent-map .micro-circle.full {
+  fill: var(--cryo);
+  stroke: var(--cryo);
+}
+
+/* Flow arrows with 4s dashoffset animation (per HYPHA: No animation under 1.5s) */
+.subagent-map .flow-out {
+  stroke: var(--cryo);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+  animation: dashflow 4s linear infinite;
+}
+
+.subagent-map .flow-in {
+  stroke: var(--life-germ);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+  animation: dashflow 4s linear infinite reverse;
+}
+
+@keyframes dashflow {
+  to { stroke-dashoffset: -8; }
+}
+
+.submap-legend {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Geist Mono', monospace;
+  font-size: 7px;
+  color: var(--ice-2);
+  letter-spacing: 0.05em;
+  padding: 2px 2px 0;
+  opacity: 0.7;
+}
+
+/* ── Recent nutrient flow list ── */
+.io-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.io-row {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  padding: 2px 0;
+  color: var(--ice-2);
+  display: flex;
+  gap: 6px;
+}
+
+.io-row .arrow {
+  color: var(--cryo);
+  flex-shrink: 0;
+}
+
+.io-row .type {
+  color: var(--ice);
+}
+
+.io-row .msg {
+  color: var(--ice-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Files produced list ── */
+.file-list {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  color: var(--ice-2);
+}
+
+.file-row {
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+}
+
+.file-row::before {
+  content: '·';
+  color: var(--ice-2);
+  margin-right: 6px;
+  opacity: 0.6;
+}
+
+.file-more {
+  font-style: italic;
+  color: var(--ice-2);
+  opacity: 0.7;
+  padding: 2px 0;
+}
+
+/* ── Empty states ── */
+.i-empty {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  color: var(--ice-2);
+  opacity: 0.6;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* ── Responsive: narrower panel on small screens ── */
+@media (max-width: 900px) {
+  .inspect-panel {
+    width: clamp(280px, 40vw, 340px);
+  }
+}
+
 </style>
 
 <!-- ══════════════════════════════════════════════════════════════════════════════
@@ -1305,7 +1826,20 @@ body::after {
         <div class="lock-badge" id="depth-lock">—</div>
       </div>
 
-      <!-- Other HUD overlays, inspect panel, etc. — dashboard-console -->
+      <!-- ══════════════════════════════════════════════════════════════════════════════
+           INSPECT PANEL — dashboard.console.inspect-panel
+           Scope: 300-420px slide-in from left edge, opens on dashboard:agent-select
+           Sections: header + synopsis + ops actions + identity + focus + leaf queue
+                     + subagent mini-diagram + flow + files + cost
+           ══════════════════════════════════════════════════════════════════════════════ -->
+      <div class="inspect-panel" id="inspect-panel">
+        <div class="inspect-head" id="inspect-head">
+          <!-- Populated by JS: h-info (eyebrow + title + tag) + h-actions (close + state pill) -->
+        </div>
+        <div class="inspect-body" id="inspect-body">
+          <!-- Populated by JS: sections for synopsis, ops, identity, focus, leaves, micros, flow, files, cost -->
+        </div>
+      </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════════════
@@ -4241,6 +4775,494 @@ window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgres
   };
 })();
 
+// ════════════════════════════════════════════════════════════════════════════════
+// INSPECT PANEL — dashboard.console.inspect-panel
+// Scope: 300-420px slide-in from left edge, opens on dashboard:agent-select
+// Sections: header + synopsis + ops actions + identity + focus + leaf queue
+//           + subagent mini-diagram + flow + files + cost
+// Consumes: STATE, THEME
+// Listens: dashboard:agent-select, dashboard:agent-close custom events
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initInspectPanel() {
+  const panelEl = document.getElementById('inspect-panel');
+  const headEl = document.getElementById('inspect-head');
+  const bodyEl = document.getElementById('inspect-body');
+
+  if (!panelEl || !headEl || !bodyEl) return;
+
+  // ────────── Module-scope state ──────────
+  let currentAgentId = null;
+  let isPinned = false;
+
+  // ────────── Lifecycle colors (from NUTRIENTS §2 state → lifecycle mapping) ──────────
+  const LIFECYCLE_MAP = {
+    pending: { label: 'pending', css: 'germ' },
+    active:  { label: 'active',  css: 'flow' },
+    fruit:   { label: 'fruit',   css: 'fruit' },
+    failed:  { label: 'failed',  css: 'crit' },
+    dorm:    { label: 'dorm',    css: 'dorm' }
+  };
+
+  // ────────── Leaf state → display mapping ──────────
+  const LEAF_STATE_MAP = {
+    pending: { dot: '○', css: 's-pending', color: 'germ' },
+    active:  { dot: '◐', css: 's-active',  color: 'flow' },
+    done:    { dot: '●', css: 's-done',    color: 'fruit' },
+    failed:  { dot: '✕', css: 's-failed',  color: 'crit' }
+  };
+
+  // ────────── Get lifecycle CSS color ──────────
+  function getLifecycleColor(state) {
+    const map = LIFECYCLE_MAP[state] || LIFECYCLE_MAP.dorm;
+    const cssVar = map.css === 'crit' ? `--sev-${map.css}` : `--life-${map.css}`;
+    return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() ||
+           (THEME.lifecycle?.[map.css]) ||
+           (THEME.severity?.[map.css]) ||
+           '#5A6471';
+  }
+
+  // ────────── Find agent by ID ──────────
+  function findAgent(agentId) {
+    return (STATE.agents || []).find(a => a.id === agentId);
+  }
+
+  // ────────── Format currency ──────────
+  function formatUsd(val) {
+    if (val == null || isNaN(val)) return '$0.00';
+    return '$' + val.toFixed(2);
+  }
+
+  // ────────── Format number with commas ──────────
+  function formatNumber(val) {
+    if (val == null || isNaN(val)) return '0';
+    return val.toLocaleString();
+  }
+
+  // ────────── Format duration ──────────
+  function formatDuration(seconds) {
+    if (seconds == null || isNaN(seconds) || seconds === 0) return '—';
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}m ${secs}s`;
+  }
+
+  // ────────── Get provider color ──────────
+  function getProviderColor(providerId) {
+    return THEME.identity?.[providerId] || THEME.palette?.cryo || '#7AE5FF';
+  }
+
+  // ────────── Get identity color ──────────
+  function getIdentityColor(agentId) {
+    return THEME.identity?.[agentId] || THEME.palette?.cryo || '#7AE5FF';
+  }
+
+  // ────────── Open panel ──────────
+  function openPanel(agentId) {
+    currentAgentId = agentId;
+    renderPanel(agentId);
+    panelEl.classList.add('open');
+    if (isPinned) {
+      panelEl.classList.add('pinned');
+    }
+  }
+
+  // ────────── Close panel ──────────
+  function closePanel() {
+    panelEl.classList.remove('open', 'pinned');
+    currentAgentId = null;
+    isPinned = false;
+  }
+
+  // ────────── Pin panel ──────────
+  function pinPanel() {
+    isPinned = true;
+    panelEl.classList.add('pinned');
+  }
+
+  // ────────── Unpin panel ──────────
+  function unpinPanel() {
+    isPinned = false;
+    panelEl.classList.remove('pinned');
+  }
+
+  // ────────── Render Header ──────────
+  function renderHeader(agent) {
+    const identityColor = getIdentityColor(agent.id);
+    const stateInfo = LIFECYCLE_MAP[agent.state] || LIFECYCLE_MAP.dorm;
+    const stateColor = getLifecycleColor(agent.state);
+
+    headEl.innerHTML = `
+      <div class="h-info">
+        <div class="h-eyebrow" style="color: ${identityColor}">agent · ${isPinned ? 'pinned' : 'selected'}</div>
+        <div class="h-title" style="color: ${identityColor}">${agent.id}</div>
+        <div class="h-tag">${(agent.contracts || []).slice(0, 2).join(' · ') || 'no contracts'}</div>
+      </div>
+      <div class="h-actions">
+        <button class="x-close" id="inspect-close">esc</button>
+        <div class="h-state" style="color: ${stateColor}; border-color: ${stateColor};">${stateInfo.label}</div>
+      </div>
+    `;
+
+    // Close button handler
+    document.getElementById('inspect-close')?.addEventListener('click', closePanel);
+  }
+
+  // ────────── Render Synopsis Section ──────────
+  function renderSynopsis(agent) {
+    const contracts = (agent.contracts || []).join(' · ') || 'no contracts';
+    const providerColor = getProviderColor(agent.provider);
+
+    return `
+      <div class="i-section">
+        <h5>synopsis</h5>
+        <div class="i-prose">${contracts}</div>
+        <div class="i-provider-tag">
+          <span class="p-dot" style="background: ${providerColor}; box-shadow: 0 0 6px ${providerColor};"></span>
+          <span class="p-name">${agent.provider || 'unknown'}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Operator Actions Section ──────────
+  function renderOperatorActions(agent) {
+    // v1: stubs that emit CustomEvent("dashboard:operator-action", { detail: { agent_id, action } })
+    const pauseLabel = agent.paused ? 'resume' : 'pause';
+
+    return `
+      <div class="i-section">
+        <h5>operator actions</h5>
+        <div class="op-actions">
+          <button class="op-btn" data-action="${pauseLabel}" data-agent="${agent.id}">${pauseLabel}</button>
+          <button class="op-btn danger" data-action="kill" data-agent="${agent.id}">kill</button>
+          <button class="op-btn go" data-action="respawn" data-agent="${agent.id}">respawn</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Identity Section ──────────
+  function renderIdentity(agent) {
+    const leaves = agent.leaves || [];
+    const leavesCount = leaves.length;
+    const failedCount = leaves.filter(l => l.state === 'failed').length;
+
+    return `
+      <div class="i-section">
+        <h5>identity</h5>
+        <div class="i-row"><span class="k">contracts</span><span class="v dim">${(agent.contracts || []).length}</span></div>
+        <div class="i-row"><span class="k">leaves</span><span class="v">${leavesCount}</span></div>
+        <div class="i-row"><span class="k">provider</span><span class="v">${agent.provider || 'unknown'}</span></div>
+        <div class="i-row"><span class="k">cost</span><span class="v">${formatUsd(agent.cost_usd)}</span></div>
+        <div class="i-row"><span class="k">tokens</span><span class="v">${formatNumber(agent.tokens)}</span></div>
+        ${failedCount > 0 ? `<div class="i-row"><span class="k">failed</span><span class="v" style="color: var(--sev-crit);">${failedCount}</span></div>` : ''}
+      </div>
+    `;
+  }
+
+  // ────────── Render Current Focus Section ──────────
+  function renderCurrentFocus(agent) {
+    const leaves = agent.leaves || [];
+    const activeLeaf = leaves.find(l => l.state === 'active');
+
+    if (!activeLeaf) {
+      return `
+        <div class="i-section">
+          <h5>current focus</h5>
+          <div class="i-empty">no active leaf</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="i-section">
+        <h5>current focus</h5>
+        <div class="i-row"><span class="k">leaf</span><span class="v">${activeLeaf.id}</span></div>
+        <div class="i-row"><span class="k">scope</span><span class="v dim">${activeLeaf.scope || '—'}</span></div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Leaf Queue Section (with subagent mini-diagram per leaf) ──────────
+  function renderLeafQueue(agent) {
+    const leaves = agent.leaves || [];
+
+    if (leaves.length === 0) {
+      return `
+        <div class="i-section">
+          <h5>leaf queue</h5>
+          <div class="i-empty">no leaves</div>
+        </div>
+      `;
+    }
+
+    const leafRows = leaves.map(leaf => {
+      const stateInfo = LEAF_STATE_MAP[leaf.state] || LEAF_STATE_MAP.pending;
+      const dotColor = stateInfo.color === 'crit'
+        ? 'var(--sev-crit)'
+        : `var(--life-${stateInfo.color})`;
+      const isCurrent = leaf.state === 'active';
+      const dur = formatDuration(leaf.duration_seconds);
+      const filesCount = (leaf.files || []).length;
+
+      // Subagent mini-diagram SVG for this leaf
+      const microsSvg = renderMicroDiagram(leaf);
+
+      return `
+        <div class="leaf-row ${stateInfo.css}${isCurrent ? ' current' : ''}" data-leaf-id="${leaf.id}">
+          <span class="dot" style="color: ${dotColor};">${stateInfo.dot}</span>
+          <span class="name">
+            ${leaf.id}
+            <span class="scope">${leaf.failure_reason || leaf.scope || '—'}</span>
+          </span>
+          <span class="dur">${dur}</span>
+          <span class="files-count">${filesCount} file${filesCount !== 1 ? 's' : ''}</span>
+        </div>
+        ${microsSvg}
+      `;
+    }).join('');
+
+    return `
+      <div class="i-section">
+        <h5>leaf queue</h5>
+        <div class="leaf-list">${leafRows}</div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Micro Diagram (per leaf) ──────────
+  // Per HYPHA: 2-4 small circles per MicroState, colored by routing (cheap → theme.lifecycle.germ, full → cryo)
+  // Each circle has flow-out arrow toward central "cache" glyph and flow-in arrow back
+  // 4s dashoffset animation (no animation under 1.5s)
+  function renderMicroDiagram(leaf) {
+    const micros = leaf.micros || [];
+    if (micros.length === 0) return '';
+
+    const W = 200, H = 50;
+    const cx = W / 2, cy = H / 2;
+    const cacheX = cx, cacheY = cy;
+    const microRadius = 12;
+
+    let svg = `<svg class="subagent-map" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arrow-out-${leaf.id}" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="3" markerHeight="3" orient="auto">
+          <path d="M0 0 L6 3 L0 6 Z" fill="var(--cryo)"/>
+        </marker>
+        <marker id="arrow-in-${leaf.id}" viewBox="0 0 6 6" refX="1" refY="3" markerWidth="3" markerHeight="3" orient="auto">
+          <path d="M6 0 L0 3 L6 6 Z" fill="var(--life-germ)"/>
+        </marker>
+      </defs>`;
+
+    // Central cache glyph (octagon-ish)
+    svg += `<rect class="cache-glyph" x="${cacheX - 6}" y="${cacheY - 6}" width="12" height="12" rx="2"/>`;
+
+    // Place micros in a row
+    const spacing = W / (micros.length + 1);
+    micros.forEach((micro, i) => {
+      const mx = spacing * (i + 1);
+      const my = cy - 16;
+      const isHit = micro.last_call_was_hit;
+      const routing = micro.routing || 'cheap';
+      const colorClass = routing === 'full' ? 'full' : 'cheap';
+
+      // Flow-out line (micro → cache)
+      svg += `<line class="flow-out" x1="${mx}" y1="${my + 4}" x2="${cacheX}" y2="${cacheY - 6}" marker-end="url(#arrow-out-${leaf.id})"/>`;
+
+      // Flow-in line (cache → micro)
+      svg += `<line class="flow-in" x1="${cacheX}" y1="${cacheY + 6}" x2="${mx}" y2="${my + 20}" marker-end="url(#arrow-in-${leaf.id})"/>`;
+
+      // Micro circle
+      svg += `<circle class="micro-circle ${colorClass}" cx="${mx}" cy="${my}" r="4"/>`;
+
+      // Fire count label
+      svg += `<text x="${mx}" y="${my + 28}" text-anchor="middle" fill="var(--ice-2)" font-size="6" font-family="Geist Mono, monospace">${micro.fire_count || 0}</text>`;
+    });
+
+    svg += `</svg>
+    <div class="submap-legend">
+      <span>→ query cache</span>
+      <span>← response</span>
+    </div>`;
+
+    return svg;
+  }
+
+  // ────────── Render Recent Nutrient Flow Section ──────────
+  function renderRecentFlow(agent) {
+    const events = STATE.events || [];
+    // Filter to last 4 events where source === agent.id
+    const agentEvents = events.filter(e => e.source === agent.id).slice(0, 4);
+
+    if (agentEvents.length === 0) {
+      return `
+        <div class="i-section">
+          <h5>recent flow</h5>
+          <div class="i-empty">no events yet</div>
+        </div>
+      `;
+    }
+
+    const rows = agentEvents.map(e => `
+      <div class="io-row">
+        <span class="arrow">·</span>
+        <span class="type">${e.short_type || e.category}</span>
+        <span class="msg">${(e.message || '').slice(0, 60)}${(e.message || '').length > 60 ? '…' : ''}</span>
+      </div>
+    `).join('');
+
+    return `
+      <div class="i-section">
+        <h5>recent flow</h5>
+        <div class="io-list">${rows}</div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Files Produced Section ──────────
+  function renderFilesProduced(agent) {
+    const leaves = agent.leaves || [];
+    // Aggregate all files, de-dupe
+    const allFiles = [...new Set(leaves.flatMap(l => l.files || []))];
+
+    if (allFiles.length === 0) {
+      return `
+        <div class="i-section">
+          <h5>files produced</h5>
+          <div class="i-empty">none yet</div>
+        </div>
+      `;
+    }
+
+    // Truncate to 12, "+N more" if over
+    const displayFiles = allFiles.slice(0, 12);
+    const moreCount = allFiles.length - 12;
+
+    const rows = displayFiles.map(f => `<div class="file-row">${f}</div>`).join('');
+    const moreEl = moreCount > 0 ? `<div class="file-more">+${moreCount} more</div>` : '';
+
+    return `
+      <div class="i-section">
+        <h5>files produced</h5>
+        <div class="file-list">${rows}${moreEl}</div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Cost Section ──────────
+  function renderCost(agent) {
+    const leaves = agent.leaves || [];
+
+    // Per-leaf breakdown (first 4 leaves)
+    const leafBreakdown = leaves.slice(0, 4).map(l => `
+      <div class="i-row"><span class="k">${l.id}</span><span class="v dim">${formatNumber(l.tokens || 0)} tok</span></div>
+    `).join('');
+
+    return `
+      <div class="i-section">
+        <h5>cost</h5>
+        <div class="i-row"><span class="k">total usd</span><span class="v">${formatUsd(agent.cost_usd)}</span></div>
+        <div class="i-row"><span class="k">total tokens</span><span class="v">${formatNumber(agent.tokens)}</span></div>
+        ${leafBreakdown}
+      </div>
+    `;
+  }
+
+  // ────────── Render Full Panel ──────────
+  function renderPanel(agentId) {
+    const agent = findAgent(agentId);
+    if (!agent) {
+      headEl.innerHTML = '<div class="h-info"><div class="h-title">Agent not found</div></div>';
+      bodyEl.innerHTML = '<div class="i-section"><div class="i-empty">No data available</div></div>';
+      return;
+    }
+
+    renderHeader(agent);
+
+    bodyEl.innerHTML = [
+      renderSynopsis(agent),
+      renderOperatorActions(agent),
+      renderIdentity(agent),
+      renderCurrentFocus(agent),
+      renderLeafQueue(agent),
+      renderRecentFlow(agent),
+      renderFilesProduced(agent),
+      renderCost(agent)
+    ].join('');
+
+    // Attach operator action button handlers
+    bodyEl.querySelectorAll('.op-btn[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        const agentId = btn.dataset.agent;
+        // v1: stub — emit CustomEvent("dashboard:operator-action", { detail: { agent_id, action } })
+        window.dispatchEvent(new CustomEvent('dashboard:operator-action', {
+          detail: { agent_id: agentId, action: action }
+        }));
+        // No-op handler attached — future implementation will handle actual pause/kill/respawn
+        console.log(`[inspect-panel] Operator action: ${action} on ${agentId}`);
+      });
+    });
+  }
+
+  // ────────── Event Listeners ──────────
+
+  // Listen for agent-select event (from agents-rail)
+  window.addEventListener('dashboard:agent-select', (e) => {
+    const agentId = e.detail;
+    if (!agentId) return;
+
+    // If clicking same agent while open → pin (handled by agents-rail click logic)
+    // Here we just open/update the panel
+    if (currentAgentId === agentId && panelEl.classList.contains('open')) {
+      // Toggle pin
+      if (!isPinned) {
+        pinPanel();
+      }
+      // Re-render to update pinned state in header
+      renderPanel(agentId);
+    } else {
+      // New agent or panel was closed
+      isPinned = false;
+      openPanel(agentId);
+    }
+  });
+
+  // Listen for agent-close event
+  window.addEventListener('dashboard:agent-close', () => {
+    closePanel();
+  });
+
+  // Keyboard handler: Esc closes (and unpins)
+  // Already handled by agents-rail, but also handle here for robustness
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panelEl.classList.contains('open')) {
+      closePanel();
+    }
+  });
+
+  // ────────── Periodic refresh (if pinned, keep data fresh) ──────────
+  const inspectRefreshInterval = setInterval(() => {
+    if (currentAgentId && panelEl.classList.contains('open')) {
+      renderPanel(currentAgentId);
+    }
+  }, 1400); // Match cache.pulse cadence
+
+  // ────────── Export inspect panel functions for other console leaves ──────────
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.inspectPanel = {
+    openPanel,
+    closePanel,
+    pinPanel,
+    unpinPanel,
+    renderPanel,
+    getCurrentAgentId: () => currentAgentId,
+    isPinned: () => isPinned,
+    inspectRefreshInterval
+  };
+})();
+
 // ────────── Cleanup on page unload ──────────
 window.addEventListener('beforeunload', () => {
   if (animationFrameId) {
@@ -4258,6 +5280,10 @@ window.addEventListener('beforeunload', () => {
   // Clear alert ribbon check interval (dashboard.console.alert-ribbon)
   if (window.__DASHBOARD_CONSOLE__?.alertRibbon?.alertCheckInterval) {
     clearInterval(window.__DASHBOARD_CONSOLE__.alertRibbon.alertCheckInterval);
+  }
+  // Clear inspect panel refresh interval (dashboard.console.inspect-panel)
+  if (window.__DASHBOARD_CONSOLE__?.inspectPanel?.inspectRefreshInterval) {
+    clearInterval(window.__DASHBOARD_CONSOLE__.inspectPanel.inspectRefreshInterval);
   }
 });
 
