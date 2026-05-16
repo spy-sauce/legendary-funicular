@@ -142,6 +142,154 @@ body::after {
   display: none;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   HUD OVERLAYS — targeting reticle, scan beam, depth readout (focus-conditional)
+   Scope: dashboard.canvas.hud-overlays
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Targeting Reticle: 4 corner brackets converging on focused agent ── */
+.target-reticle {
+  position: absolute;
+  pointer-events: none;
+  z-index: 7;
+  width: 180px;
+  height: 180px;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 1.6s cubic-bezier(0.22, 1, 0.36, 1),
+              width 1.6s cubic-bezier(0.22, 1, 0.36, 1),
+              height 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.target-reticle.lock {
+  opacity: 1;
+}
+
+/* Corner brackets via pseudo-elements + spans */
+.target-reticle::before,
+.target-reticle::after,
+.target-reticle .c1,
+.target-reticle .c2 {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--cryo);
+  border-style: solid;
+  border-width: 0;
+  transition: border-color 0.3s ease;
+}
+
+.target-reticle::before { top: 0; left: 0; border-top-width: 1px; border-left-width: 1px; }
+.target-reticle::after  { top: 0; right: 0; border-top-width: 1px; border-right-width: 1px; }
+.target-reticle .c1     { bottom: 0; left: 0; border-bottom-width: 1px; border-left-width: 1px; }
+.target-reticle .c2     { bottom: 0; right: 0; border-bottom-width: 1px; border-right-width: 1px; }
+
+.target-reticle .lbl {
+  position: absolute;
+  top: -20px;
+  left: 0;
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  color: var(--cryo);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(122, 229, 255, 0.5);
+  white-space: nowrap;
+}
+
+/* ── Scan Beam: vertical sweep during dive transitions ── */
+.scanbeam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent 5%, var(--cryo) 30%, var(--cryo) 70%, transparent 95%);
+  box-shadow: 0 0 14px var(--cryo), 0 0 30px rgba(122, 229, 255, 0.4);
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  top: 0;
+}
+
+.scanbeam.run {
+  animation: scanSweep 1.8s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+@keyframes scanSweep {
+  0%   { top: 0%;   opacity: 0; }
+  8%   { opacity: 0.95; }
+  92%  { opacity: 0.95; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* ── Depth HUD Readout: agent.id + state + iter ── */
+.depth-hud {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  z-index: 5;
+  pointer-events: none;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  color: var(--ice-2);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.8;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 0.35s ease 0.2s, transform 0.35s ease 0.2s;
+}
+
+.depth-hud.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.depth-hud .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.depth-hud .row .k {
+  color: var(--ice-2);
+  opacity: 0.7;
+}
+
+.depth-hud .row .v {
+  color: var(--cryo);
+  text-shadow: 0 0 8px rgba(122, 229, 255, 0.5);
+}
+
+.depth-hud .lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 0.5px solid var(--cryo);
+  background: rgba(122, 229, 255, 0.08);
+  color: var(--cryo);
+  text-shadow: 0 0 8px rgba(122, 229, 255, 0.5);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.depth-hud .lock-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cryo);
+  box-shadow: 0 0 8px var(--cryo);
+  animation: cryoBreath 1.4s ease-in-out infinite;
+}
+
+@keyframes cryoBreath {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50%      { opacity: 1;   transform: scale(1.1); }
+}
+
 </style>
 
 <!-- ══════════════════════════════════════════════════════════════════════════════
@@ -169,7 +317,30 @@ body::after {
   <div class="body">
     <div class="stage" id="stage">
       <canvas id="webgl"></canvas>
-      <!-- HUD overlays, inspect panel, etc. — dashboard-console + dashboard.canvas.hud-overlays -->
+
+      <!-- ══════════════════════════════════════════════════════════════════════════════
+           HUD OVERLAYS — focus-conditional targeting + depth readout
+           Scope: dashboard.canvas.hud-overlays
+           ══════════════════════════════════════════════════════════════════════════════ -->
+
+      <!-- Targeting reticle: 4 corner brackets, follows focused agent in screen space -->
+      <div class="target-reticle" id="target-reticle">
+        <span class="c1"></span><span class="c2"></span>
+        <span class="lbl" id="reticle-lbl">lock · target</span>
+      </div>
+
+      <!-- Scan beam: vertical sweep during dive (zoom preset transitions) -->
+      <div class="scanbeam" id="scanbeam"></div>
+
+      <!-- Depth HUD: agent.id + state + iter readout while focused -->
+      <div class="depth-hud" id="depth-hud">
+        <div class="row"><span class="k">target</span><span class="v" id="depth-target">—</span></div>
+        <div class="row"><span class="k">state</span><span class="v" id="depth-state">—</span></div>
+        <div class="row"><span class="k">iter</span><span class="v" id="depth-iter">—</span></div>
+        <div class="lock-badge" id="depth-lock">—</div>
+      </div>
+
+      <!-- Other HUD overlays, inspect panel, etc. — dashboard-console -->
     </div>
     <!-- rails: dashboard-console.providers-rail, dashboard-console.agents-rail will add -->
   </div>
@@ -1389,6 +1560,199 @@ window.__DASHBOARD_CANVAS__ = {
   getAgentHitTargets,
   getLeafHitTargets
 };
+
+// ════════════════════════════════════════════════════════════════════════════════
+// HUD OVERLAYS — targeting reticle, scan beam, depth readout (focus-conditional)
+// Scope: dashboard.canvas.hud-overlays
+// Consumes: camera, renderer, agentGlobeData, focusTarget, currentZoomPreset
+//
+// Targeting reticle: 4 corner brackets that converge on the focused agent.
+// Scan beam: vertical sweep during dive transitions (zoom preset changes).
+// Depth HUD: agent.id + state + iter readout — updates on focus change only.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── HUD DOM Elements ──────────
+const hudReticle = document.getElementById('target-reticle');
+const hudReticleLbl = document.getElementById('reticle-lbl');
+const hudScanbeam = document.getElementById('scanbeam');
+const hudDepth = document.getElementById('depth-hud');
+const hudDepthTarget = document.getElementById('depth-target');
+const hudDepthState = document.getElementById('depth-state');
+const hudDepthIter = document.getElementById('depth-iter');
+const hudDepthLock = document.getElementById('depth-lock');
+
+// ────────── HUD State ──────────
+let hudPrevZoomPreset = currentZoomPreset;
+let hudFocusEngageProgress = 0;  // 0 = unfocused, 1 = fully locked
+const HUD_ENGAGE_RATE = 0.0104;  // progress per frame (1.6s to fully engage at 60fps: 1/(60*1.6)≈0.0104)
+
+// ────────── Scan Beam Trigger ──────────
+// Triggered on dive transitions (zoom preset change from globe→agents or agents→leaves)
+function triggerScanBeam() {
+  if (!hudScanbeam) return;
+  // Reset and restart animation (reflow trick to restart CSS animation)
+  hudScanbeam.classList.remove('run');
+  void hudScanbeam.offsetWidth; // Force reflow
+  hudScanbeam.classList.add('run');
+}
+
+// Listen for zoom preset changes dispatched by adaptive-zoom
+document.addEventListener('dashboard:zoom-change', (e) => {
+  const newPreset = e.detail?.preset;
+  if (!newPreset) return;
+
+  // Trigger scan beam on dive transitions (zooming in)
+  const isDive = (
+    (hudPrevZoomPreset === 'globe' && newPreset === 'agents') ||
+    (hudPrevZoomPreset === 'agents' && newPreset === 'leaves') ||
+    (hudPrevZoomPreset === 'globe' && newPreset === 'leaves')
+  );
+
+  if (isDive && !e.detail?.interim) {
+    triggerScanBeam();
+  }
+
+  hudPrevZoomPreset = newPreset;
+});
+
+// ────────── Depth HUD Update ──────────
+// Called when focus target changes — updates the depth readout (not per-frame)
+function updateDepthHud(target) {
+  if (!hudDepth) return;
+
+  if (!target) {
+    // No focus: hide depth HUD
+    hudDepth.classList.remove('show');
+    return;
+  }
+
+  // Find agent data
+  let agentId = null;
+  let agentState = '—';
+  let iter = STATE.organism?.iter || 0;
+
+  if (target.type === 'agent') {
+    agentId = target.id;
+    // Find agent state from STATE.agents
+    const agent = STATE.agents?.find(a => a.id === agentId);
+    if (agent) {
+      agentState = agent.state || 'pending';
+    }
+  } else if (target.type === 'leaf') {
+    agentId = target.agentId || target.id;
+    // Find leaf state
+    const parentAgent = STATE.agents?.find(a => a.id === target.agentId);
+    if (parentAgent) {
+      const leaf = parentAgent.leaves?.find(l => l.id === target.id);
+      if (leaf) {
+        agentState = leaf.state || 'pending';
+      }
+    }
+  }
+
+  // Update depth HUD elements
+  if (hudDepthTarget) hudDepthTarget.textContent = agentId || '—';
+  if (hudDepthState) hudDepthState.textContent = agentState;
+  if (hudDepthIter) hudDepthIter.textContent = iter;
+  if (hudDepthLock) hudDepthLock.textContent = agentId || '—';
+
+  // Show depth HUD
+  hudDepth.classList.add('show');
+}
+
+// Listen for focus changes dispatched by adaptive-zoom
+document.addEventListener('dashboard:focus-change', (e) => {
+  const target = e.detail?.target;
+  updateDepthHud(target);
+
+  // Reset engage progress when focus changes
+  if (!target) {
+    hudFocusEngageProgress = 0;
+  }
+});
+
+// ────────── Targeting Reticle Animation ──────────
+// Per-frame update: projects focused agent to screen space, positions reticle
+function animateHudOverlays(t) {
+  const ft = focusTarget;  // Current focus target
+
+  if (!ft || !hudReticle) {
+    // No focus: hide reticle, reset progress
+    if (hudReticle) hudReticle.classList.remove('lock');
+    hudFocusEngageProgress = Math.max(0, hudFocusEngageProgress - HUD_ENGAGE_RATE * 2);
+    return;
+  }
+
+  // Advance engage progress (smoothly approaches 1.0)
+  hudFocusEngageProgress = Math.min(1, hudFocusEngageProgress + HUD_ENGAGE_RATE);
+
+  // Get 3D position of focused target
+  let worldPos = null;
+
+  if (ft.type === 'agent') {
+    const agentData = agentGlobeData.get(ft.id);
+    if (agentData) {
+      worldPos = agentData.position.clone();
+    }
+  } else if (ft.type === 'leaf') {
+    // Leaf position: try leafMeshData first, then fall back to parent agent
+    const leafData = window.__DASHBOARD_CANVAS__?.leafMeshData?.get(ft.id);
+    if (leafData) {
+      const parentAgent = agentGlobeData.get(leafData.parentAgentId);
+      if (parentAgent) {
+        worldPos = leafData.position.clone().add(parentAgent.position);
+      }
+    }
+    if (!worldPos && ft.agentId) {
+      const parentAgent = agentGlobeData.get(ft.agentId);
+      if (parentAgent) {
+        worldPos = parentAgent.position.clone();
+      }
+    }
+  }
+
+  if (!worldPos) {
+    hudReticle.classList.remove('lock');
+    return;
+  }
+
+  // Project 3D position to screen space
+  const projected = worldPos.clone();
+  projected.project(camera);
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  const screenX = (projected.x * 0.5 + 0.5) * rect.width;
+  const screenY = (-projected.y * 0.5 + 0.5) * rect.height;
+
+  // Reticle size: converges from 220px to 80px as engage progress increases (1.6s animation)
+  const maxSize = 220;
+  const minSize = 80;
+  const size = maxSize - (maxSize - minSize) * hudFocusEngageProgress;
+
+  // Position reticle centered on projected point
+  hudReticle.style.left = (screenX - size / 2) + 'px';
+  hudReticle.style.top = (screenY - size / 2) + 'px';
+  hudReticle.style.width = size + 'px';
+  hudReticle.style.height = size + 'px';
+
+  // Show reticle (lock class) when engage progress > 0.15
+  hudReticle.classList.toggle('lock', hudFocusEngageProgress > 0.15);
+
+  // Update reticle label
+  if (hudReticleLbl) {
+    const targetLabel = ft.type === 'agent' ? ft.id : (ft.agentId || ft.id);
+    hudReticleLbl.textContent = `lock · ${targetLabel}`;
+  }
+}
+
+// Register HUD overlay animation hook
+animationHooks.push(animateHudOverlays);
+
+// ────────── Export HUD Overlay Functions ──────────
+// Add to the existing __DASHBOARD_CANVAS__ exports
+window.__DASHBOARD_CANVAS__.triggerScanBeam = triggerScanBeam;
+window.__DASHBOARD_CANVAS__.updateDepthHud = updateDepthHud;
+window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgress;
 
 // ────────── Cleanup on page unload ──────────
 window.addEventListener('beforeunload', () => {
