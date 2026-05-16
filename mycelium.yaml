@@ -1,8 +1,8 @@
 # Mycelium Framework — VibeSpace LLC — The network provides.
 
 organism:
-  name: audit-run
-  ship_target: 7-8 days
+  name: dashboard-cache
+  ship_target: 7-10 days
   health_pulse_interval: 30
   harvest_threshold: 0.8
   cellular: true
@@ -14,228 +14,294 @@ organism:
     - routing-map
     - crash-recovery
   routing:
-    audit-findings:
-      - audit-aggregator
-      - audit-heal-loop
-      - audit-sporenet
-      - audit-testers
-      - audit-cli
-    audit-testers:
-      - audit-cli
-      - audit-findings
-    audit-aggregator:
-      - audit-findings
-      - audit-heal-loop
-      - audit-cli
-    audit-cli:
-      - audit-findings
-      - audit-testers
-      - audit-aggregator
-      - audit-heal-loop
-      - audit-sporenet
-    audit-heal-loop:
-      - audit-findings
-      - audit-aggregator
-    audit-sporenet:
-      - audit-findings
-    audit-docs:
-      - audit-cli
-      - audit-findings
-      - audit-testers
-      - audit-aggregator
-      - audit-heal-loop
-      - audit-sporenet
+    dashboard-theme:
+      - dashboard-data
+      - dashboard-canvas
+      - dashboard-console
+      - dashboard-cli
+    dashboard-data:
+      - dashboard-canvas
+      - dashboard-console
+      - dashboard-cli
+    dashboard-canvas:
+      - dashboard-cli
+      - dashboard-console
+    dashboard-console:
+      - dashboard-cli
+      - dashboard-canvas
+    dashboard-cli:
+      - dashboard-docs
+    dashboard-docs:
+      - dashboard-cli
+    cache-network-store:
+      - cache-network-integration
+      - cache-network-micros
+      - dashboard-data
+    cache-network-integration:
+      - cache-network-docs
+      - dashboard-data
+    cache-network-micros:
+      - cache-network-integration
+      - dashboard-data
+    cache-network-docs:
+      - cache-network-integration
     "*":
-      - audit-findings
+      - dashboard-theme
 contracts:
-  - path: NUTRIENTS.md#1-finding-schema
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#2-audit-directory-layout
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#3-sporenet-audit-block
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#4-tester-registry-runner-contract
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#5-aggregator-brief-composition-contract
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#6-hypha-test-md-authoring-schema
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#7-mycelium-audit-run-cli-surface-frozen
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#8-heal-loop-iteration-contract
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#9-cost-budget-tie-in
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
-  - path: NUTRIENTS.md#10-cultivate-ts-re-use-boundaries
-    frozen: true
-    frozenAt: 2026-05-11T19:54:58.431Z
+  - path: NUTRIENTS.md#1-theme-schema-per-cultivation-themeyaml
+    frozen: false
+  - path: NUTRIENTS.md#2-dashboardstate-unified-shape-consumed-by-canvas-console
+    frozen: false
+  - path: NUTRIENTS.md#3-event-schema-new-cache-events
+    frozen: false
+  - path: NUTRIENTS.md#4-cache-network-runtime-cachestore-microagent-integration
+    frozen: false
+  - path: NUTRIENTS.md#5-sporenet-statejson-additive-cache-block
+    frozen: false
+  - path: NUTRIENTS.md#6-dashboard-cli-surface-mycelium-dashboard-initserverender
+    frozen: false
+  - path: NUTRIENTS.md#7-frozen-vocab-additions
+    frozen: false
 agents:
-  - id: audit-findings
-    scope: Finding type + JSONL writer + SHA dedupe + severity validation
-    branch: feat/audit-findings
+  - id: dashboard-theme
+    scope: theme.yaml schema + loader + default theme (NUTRIENTS §1)
+    branch: feat/dashboard-theme
     blocked_by: []
     blocks:
-      - audit-aggregator
-      - audit-heal-loop
-      - audit-sporenet
-      - audit-testers
-      - audit-cli
+      - dashboard-data
+      - dashboard-canvas
+      - dashboard-console
+      - dashboard-cli
+    capabilities:
+      - typescript
+      - yaml
+    sub_agents:
+      - id: dashboard.theme.types
+        scope: DashboardTheme + ThemeValidationError + DEFAULT_THEME_PATH in cli/src/lib/dashboard/theme.ts per NUTRIENTS §1
+      - id: dashboard.theme.loader
+        scope: loadTheme(cwd) reads theme.yaml, deep-merges over templates/theme.default.yaml, validates hex + modulator bounds
+      - id: dashboard.theme.default
+        scope: templates/theme.default.yaml — verbatim from NUTRIENTS §1 example block
+  - id: dashboard-data
+    scope: sporenet/state.json reader + JSONL event tailer + DashboardState builder (NUTRIENTS §2, §3, §5)
+    branch: feat/dashboard-data
+    blocked_by:
+      - dashboard-theme
+    blocks:
+      - dashboard-canvas
+      - dashboard-console
+      - dashboard-cli
     capabilities:
       - typescript
       - jsonl
     sub_agents:
-      - id: audit.findings.type
-        scope: Finding interface + Severity union in cli/src/lib/audit/findings.ts per
-          NUTRIENTS §1
-      - id: audit.findings.writer
-        scope: appendFinding + readFindings + dedupe by id (sha256); atomic append;
-          never throw
-      - id: audit.findings.validate
-        scope: validateFinding runtime guard (severity union, id length, ISO-8601 ts)
-  - id: audit-testers
-    scope: Tester registry, HYPHA-TEST-*.md loader, tester runner pool
-    branch: feat/audit-testers
-    blocked_by: []
+      - id: dashboard.data.types
+        scope: DashboardState + AgentState + LeafState + MicroState + CacheState + EventEntry + AlertEntry + ProviderState + AgentSnapshot interfaces per NUTRIENTS §2
+      - id: dashboard.data.state-builder
+        scope: buildDashboardState(cwd) reads sporenet/state.json, maps existing fields, defaults cache to zeros, tolerates missing files
+      - id: dashboard.data.events-tailer
+        scope: tailEvents(eventsPath, sinceTs, maxLines) reads JSONL newest-first, filters by ts, drops malformed lines silently
+  - id: dashboard-canvas
+    scope: Three.js canvas in templates/dashboard.html — agent globe + leaves + micros + cache relays + slow pulses + multiverse + HUD
+    branch: feat/dashboard-canvas
+    blocked_by:
+      - dashboard-theme
+      - dashboard-data
     blocks:
-      - audit-cli
+      - dashboard-cli
     capabilities:
-      - typescript
-      - markdown-parsing
-      - claude-agent-sdk
+      - html
+      - threejs
+      - webgl
     sub_agents:
-      - id: audit.testers.types
-        scope: TesterDef interface + TesterResult interface in
-          cli/src/lib/audit/testers.ts per NUTRIENTS §4
-      - id: audit.testers.loader
-        scope: loadTesters scans hyphae/HYPHA-TEST-*.md; parses CACHE HEADER per
-          NUTRIENTS §6; throws on malformed
-      - id: audit.testers.runner
-        scope: runTester spawns Claude Agent SDK session w/ Read+Bash tool budget;
-          buildTesterPrompt mirrors the shape of buildLeafPrompt at
-          cultivate.ts:771 (module-private — do not import)
-      - id: audit.testers.pool
-        scope: testers-pool.ts imports runWithConcurrency from the shared
-          cli/src/lib/concurrency.ts (extracted pre-cultivation; cultivate.ts
-          imports it too). Do NOT modify cultivate.ts.
-      - id: audit.testers.examples
-        scope: examples/hyphae-test/HYPHA-TEST-*.md stubs (tester.types, tester.tokens,
-          tester.flow.talent) for loader validation
-  - id: audit-aggregator
-    scope: Group findings by biome, compose brief-fix.md, write summary.json
-    branch: feat/audit-aggregator
-    blocked_by: []
+      - id: dashboard.canvas.scaffold
+        scope: base HTML structure, canvas element, Three.js CDN import, scene/camera/renderer setup, resize handler
+      - id: dashboard.canvas.agent-globe
+        scope: fibonacci-sphere placement at radius 4.6, wireframe Bloch rings, identity hue from theme, brightness modulated by lifecycle
+      - id: dashboard.canvas.leaves-and-micros
+        scope: leaves orbit agents at r=1.3, micros (2-4) orbit leaves at r=0.4 with cheap/full color split, focus-conditional visibility
+      - id: dashboard.canvas.cache-relays
+        scope: 4-6 octahedron relay nodes at inner radius 2.6, cyan-teal, each agent edges to nearest relay, 2-neighbor relay mesh, slow breath
+      - id: dashboard.canvas.pulses
+        scope: routing packets (6s), cache-query pulses agent→relay (3s cyan hit / gold miss with relay dim), dashflow 4s, all ≥1.5s
+      - id: dashboard.canvas.adaptive-zoom
+        scope: three presets (globe d=14, agents d=7.5, leaves d=2.8) with 0.07 lerp, wheel rebound to custom handler
+      - id: dashboard.canvas.multiverse
+        scope: outer-layer mini-globes per product, click to enter product view, view state in state.organism.view
+      - id: dashboard.canvas.hud-overlays
+        scope: targeting reticle (4 brackets), scan beam, depth HUD readout — all focus-conditional
+  - id: dashboard-console
+    scope: DOM operator chrome in templates/dashboard.html — titlebar, metric strip, rails, feedbar, event feed, alert ribbon, inspect panel
+    branch: feat/dashboard-console
+    blocked_by:
+      - dashboard-theme
+      - dashboard-data
     blocks:
-      - audit-heal-loop
-      - audit-cli
+      - dashboard-cli
     capabilities:
-      - typescript
-      - markdown-composition
+      - html
+      - css
+      - dom
     sub_agents:
-      - id: audit.aggregator.aggregate
-        scope: aggregate(findings) → AggregatedFindings — pure, deterministic ordering
-          per NUTRIENTS §5
-      - id: audit.aggregator.brief
-        scope: composeBriefFix prepends only_biomes + Active findings + audit_baseline
-          to brief.md
-      - id: audit.aggregator.summary
-        scope: writeSummary emits audit/<ts>/summary.json per NUTRIENTS §2
-  - id: audit-cli
-    scope: Commander wiring for mycelium audit-run + scaffold-tester subcommand
-    branch: feat/audit-cli
-    blocked_by: []
-    blocks: []
+      - id: dashboard.console.titlebar
+        scope: heartbeat dot at theme pulse rate, uptime counter, brand seal from theme.brand
+      - id: dashboard.console.metric-strip
+        scope: 5 cells (Health / Agents·Leaves / Spend / Events / Alerts) + 2 cache cells (Cache hit % / Calls saved)
+      - id: dashboard.console.providers-rail
+        scope: top right rail, providers list with up/down dot + latency_ms from state.providers
+      - id: dashboard.console.agents-rail
+        scope: bottom right rail, agents list with state pill + identity color border, click fires selectAgent
+      - id: dashboard.console.feedbar
+        scope: filter chips (all/lifecycle/nutrient/cost/health/anomaly/cache); cache chip pivots canvas via CustomEvent
+      - id: dashboard.console.event-feed
+        scope: 60-90px scrollable feed of state.events filtered by state.feedFilter, severity-colored left border
+      - id: dashboard.console.alert-ribbon
+        scope: absolute-positioned top banner sliding in when alerts arrive, auto-dismiss 15s
+      - id: dashboard.console.inspect-panel
+        scope: 300-420px slide-in, header + synopsis + ops actions + identity + focus + leaf queue with subagent mini-diagram + flow + files + cost
+  - id: dashboard-cli
+    scope: mycelium dashboard {init,serve,render} Commander wiring + HTTP/SSE serve loop (NUTRIENTS §6)
+    branch: feat/dashboard-cli
+    blocked_by:
+      - dashboard-theme
+      - dashboard-data
+      - dashboard-canvas
+      - dashboard-console
+    blocks:
+      - dashboard-docs
     capabilities:
       - typescript
       - commander
+      - http
     sub_agents:
-      - id: audit.cli.command
-        scope: cli/src/commands/audit-run.ts — Commander entry per NUTRIENTS §7 flag
-          surface; registered in cli/src/index.ts
-      - id: audit.cli.orchestrator
-        scope: Wire loadTesters → runTestersInPool → aggregate → composeBriefFix →
-          writeSummary; respect --only-tester, --concurrency, --against
-      - id: audit.cli.scaffold
-        scope: mycelium audit-run scaffold-tester <biome> subcommand — emits
-          hyphae/HYPHA-TEST-<biome>.md stub from biome HYPHA
-  - id: audit-heal-loop
-    scope: Phase 2 — autofix re-plant cycle, iteration metadata, budget cap
-    branch: feat/audit-heal-loop
-    blocked_by: []
-    blocks: []
-    capabilities:
-      - typescript
-      - subprocess-spawn
-    sub_agents:
-      - id: audit.heal.loop
-        scope: cli/src/lib/audit/heal-loop.ts — iterate spawn `mycelium cultivate
-          --only-biome` per critical biome; terminate per NUTRIENTS §8
-      - id: audit.heal.iteration
-        scope: writeIteration persists IterationRecord under audit/<ts>/iterations/<n>/
-          per NUTRIENTS §8
-      - id: audit.heal.budget
-        scope: Integrate lib/budget.ts — read --max-budget-usd → yaml budget.maxUsd →
-          default; track cumulative_cost_usd
-      - id: audit.heal.autofix-branch
-        scope: --autofix-branch flag — sub-organism mode (default commit-on-top); per
-          §10.5 lean
-  - id: audit-sporenet
-    scope: Phase 3 — sporenet/state.json audit block + serve renderer audit pane
-    branch: feat/audit-sporenet
-    blocked_by: []
-    blocks: []
-    capabilities:
-      - typescript
-      - html
-    sub_agents:
-      - id: audit.sporenet.state
-        scope: cli/src/lib/audit/sporenet-integration.ts — writeAuditBlock atomic
-          temp/rename per NUTRIENTS §3; drainAuditStateWrites
-      - id: audit.sporenet.render
-        scope: Extend sporenet serve / handler — render Audit pane below leaf grid via
-          existing F5 re-read path; preserve all current renderHtml output
-  - id: audit-docs
-    scope: DEVELOPER_GUIDE.md audit-run section + tester HYPHA authoring runbook
-    branch: feat/audit-docs
-    blocked_by: []
+      - id: dashboard.cli.scaffold
+        scope: cli/src/commands/dashboard/index.ts — registerDashboardCommand wires 3 subcommands
+      - id: dashboard.cli.init
+        scope: writes theme.yaml from default + static dashboard.html snapshot
+      - id: dashboard.cli.render
+        scope: one-shot static render to sporenet/dashboard.html via renderDashboard helper
+      - id: dashboard.cli.serve
+        scope: HTTP server on port 3334, GET / live-renders, GET /events/stream SSE, SIGINT clean shutdown
+      - id: dashboard.cli.render-helper
+        scope: cli/src/lib/dashboard/render.ts — pure renderDashboard(state, theme, templatePath) returns HTML string with state+theme inlined
+  - id: dashboard-docs
+    scope: DEVELOPER_GUIDE.md Dashboard section + docs/dashboard-theming.md worked example
+    branch: feat/dashboard-docs
+    blocked_by:
+      - dashboard-cli
     blocks: []
     capabilities:
       - documentation
     sub_agents:
-      - id: audit.docs.guide
-        scope: Append "Audit-Run" section to DEVELOPER_GUIDE.md — command surface,
-          output layout, autofix loop, sporenet integration
-      - id: audit.docs.runbook
-        scope: docs/audit-run-tester-authoring.md — operator runbook for writing
-          HYPHA-TEST-*.md (with scaffold-tester examples)
+      - id: dashboard.docs.developer-guide
+        scope: append-only Dashboard section to DEVELOPER_GUIDE.md
+      - id: dashboard.docs.theming
+        scope: docs/dashboard-theming.md — theme.yaml worked example, per-cultivation customization, lifecycle modulator curves
+  - id: cache-network-store
+    scope: LRU CacheStore + cacheKey + accounting + pulse aggregator (NUTRIENTS §3, §4, §5)
+    branch: feat/cache-network-store
+    blocked_by: []
+    blocks:
+      - cache-network-integration
+      - cache-network-micros
+      - dashboard-data
+    capabilities:
+      - typescript
+      - jsonl
+      - crypto
+    sub_agents:
+      - id: cache.store.types
+        scope: CacheStore + CacheEntry + CacheEvent interfaces in cli/src/lib/cache-network/store.ts
+      - id: cache.store.lru
+        scope: makeCacheStore(opts) — Map-backed LRU, invalidateLeaf/invalidateIter, stats, emits cache.hit on get
+      - id: cache.store.keys
+        scope: cacheKey({tool_name, args, contract_hash}) — sha256 hex, stable JSON.stringify with sorted keys
+      - id: cache.store.accounting
+        scope: emitCacheEvent + writeCachePulse atomic temp/rename + 1.4s pulse aggregator + UNIT_COST constant
+      - id: cache.store.index
+        scope: cli/src/lib/cache-network/index.ts re-exports
+  - id: cache-network-integration
+    scope: Wrap cultivate.ts SDK chokepoint + --no-cache flag + iter invalidate hook + state.json pulse writer
+    branch: feat/cache-network-integration
+    blocked_by:
+      - cache-network-store
+    blocks:
+      - cache-network-docs
+      - dashboard-data
+    capabilities:
+      - typescript
+      - cultivate-surgery
+    sub_agents:
+      - id: cache.integration.chokepoint-locate
+        scope: grep cli/src/commands/cultivate.ts for query() chokepoint; document line in FRUIT_READY
+      - id: cache.integration.wrap-sdk-call
+        scope: at located chokepoint, wrap with cacheKey lookup → store.get hit return / store.set miss; preserve public contract
+      - id: cache.integration.no-cache-flag
+        scope: cultivate Commander gets --no-cache flag (default OFF i.e. cache ON); pure passthrough when set
+      - id: cache.integration.iter-invalidate
+        scope: hook store.invalidateIter(prevIter) into heal-loop iter-advance code path
+      - id: cache.integration.state-json-pulse
+        scope: schedule writeCachePulse(stateDir, store.stats()) every 1.4s + clean teardown on cultivate exit
+  - id: cache-network-micros
+    scope: Deterministic micro-agent fan-out per leaf (NUTRIENTS §4 micros section)
+    branch: feat/cache-network-micros
+    blocked_by:
+      - cache-network-store
+    blocks:
+      - cache-network-integration
+      - dashboard-data
+    capabilities:
+      - typescript
+      - crypto
+    sub_agents:
+      - id: cache.micros.spawn
+        scope: spawnMicros({leafId, severity?}) — seeded xorshift PRNG from sha256(leafId), 2-4 micros with cheap/full split
+      - id: cache.micros.registry
+        scope: MicroRegistry class — registerLeaf, getMicros, clear; consumed by sporenet state writers
+      - id: cache.micros.index
+        scope: cli/src/lib/micro-agents/index.ts re-exports
+  - id: cache-network-docs
+    scope: DEVELOPER_GUIDE.md Cache-Network section — MICRO + CACHE_NET vocab, --no-cache, events, state.cache, cost accounting
+    branch: feat/cache-network-docs
+    blocked_by:
+      - cache-network-integration
+    blocks: []
+    capabilities:
+      - documentation
+    sub_agents:
+      - id: cache.docs.developer-guide
+        scope: append-only Cache-Network section to DEVELOPER_GUIDE.md, cross-links docs/cache-network-micro-agents.md
 merge_order:
-  - audit-findings
-  - audit-testers
-  - audit-aggregator
-  - audit-heal-loop
-  - audit-sporenet
-  - audit-cli
-  - audit-docs
+  - dashboard-theme
+  - cache-network-store
+  - cache-network-micros
+  - dashboard-data
+  - dashboard-canvas
+  - dashboard-console
+  - cache-network-integration
+  - dashboard-cli
+  - dashboard-docs
+  - cache-network-docs
 timeline:
   parallel_phases:
-    - hours: 0-2
+    - hours: 0-1
       active:
-        - audit-findings
-        - audit-testers
-        - audit-aggregator
-        - audit-heal-loop
-        - audit-sporenet
-        - audit-cli
-        - audit-docs
-      description: All biomes germinate simultaneously under contract-freeze —
-        NUTRIENTS.md §§1–10 are the only cross-biome surface.
+        - dashboard-theme
+        - cache-network-store
+        - cache-network-micros
+      description: Wave 1 — foundational types + store + micros. No cross-biome deps inside this wave.
+    - hours: 1-3
+      active:
+        - dashboard-data
+        - dashboard-canvas
+        - dashboard-console
+        - cache-network-integration
+      description: Wave 2 — data layer + canvas + console + cultivate.ts integration. Each consumes wave 1's frozen exports via NUTRIENTS.
+    - hours: 3-4
+      active:
+        - dashboard-cli
+        - dashboard-docs
+        - cache-network-docs
+      description: Wave 3 — CLI wiring (depends on canvas + console + data + theme) and docs (describe shipped behavior).
 budget:
-  maxUsd: 75
+  maxUsd: 100
