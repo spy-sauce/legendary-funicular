@@ -21,6 +21,18 @@
   --ice-2: #A8B4C5;
   --cryo: #7AE5FF;
   --rule: #1A2030;
+
+  /* lifecycle colors — overridden at runtime from theme.lifecycle */
+  --life-germ: #B7A8E8;
+  --life-grow: #7BC9C0;
+  --life-flow: #8BB8E0;
+  --life-fruit: #D9C390;
+  --life-dorm: #5A6471;
+
+  /* severity colors — overridden at runtime from theme.severity */
+  --sev-warn: #D9B85A;
+  --sev-alert: #E08A5C;
+  --sev-crit: #DB5C6E;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -43,9 +55,10 @@ body {
 }
 
 /* ── Main frame layout ── */
+/* Rows: titlebar | metrics | body (canvas+rails) | feedbar | feed */
 .frame {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto auto 1fr auto auto;
   height: 100%;
   width: 100%;
   min-height: 0;
@@ -314,6 +327,7 @@ body::after {
 .metric .health-dot.crit { background: var(--sev-crit, #DB5C6E); color: var(--sev-crit, #DB5C6E); }
 
 /* Breath underline on metric values when they update */
+/* Animation total duration ≥1.5s per slow-pulse discipline */
 .metric .mv::after {
   content: '';
   position: absolute;
@@ -323,13 +337,13 @@ body::after {
   width: 0%;
   background: var(--cryo);
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 1.5s ease;
 }
 
 .metric.pulse .mv::after {
   width: 100%;
   opacity: 0.75;
-  transition: width 0.18s ease-out, opacity 1.2s ease-out 0.18s;
+  transition: width 1.5s ease-out, opacity 1.5s ease-out;
 }
 
 /* Responsive scaling — match v9.4 breakpoints */
@@ -346,10 +360,169 @@ body::after {
 /* body grid (stage + rails) — dashboard-console handles rails */
 .body {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr auto;
   min-height: 0;
   overflow: hidden;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   RIGHT RAIL — providers + agents
+   Scope: dashboard.console.providers-rail, dashboard.console.agents-rail
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.right-rail {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  min-width: 220px;
+  max-width: 280px;
+  background: var(--ink-2);
+  border-left: 0.5px solid var(--rule);
+  overflow: hidden;
+}
+
+/* ── Providers Rail (top section) — dashboard.console.providers-rail ── */
+.providers-rail {
+  flex-shrink: 0;
+  padding: 10px 12px 8px;
+  border-bottom: 0.5px solid var(--rule);
+}
+
+.providers-rail .rail-header {
+  font-family: 'Cormorant Infant', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 0.5px solid var(--rule);
+}
+
+.providers-rail .provider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-family: 'Geist', sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+}
+
+/* Provider identity dot — colored by theme.identity[provider.id], fallback cryo */
+.providers-rail .provider-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--cryo);
+  box-shadow: 0 0 6px var(--provider-color, var(--cryo));
+}
+
+/* Provider name — ice color, truncate if needed */
+.providers-rail .provider-name {
+  flex: 1;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Provider model — ice_2 color, smaller, after name */
+.providers-rail .provider-model {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  color: var(--ice-2);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* Provider status dot — green (grow) when up, red (severity.crit) when down */
+.providers-rail .provider-status {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--sev-crit, #DB5C6E);
+  transition: background 1.8s ease, box-shadow 1.8s ease;
+}
+
+.providers-rail .provider-status.up {
+  background: var(--life-grow, #7BC9C0);
+  box-shadow: 0 0 6px var(--life-grow, #7BC9C0);
+}
+
+/* Provider latency — right-aligned, monospace, ice_2 */
+.providers-rail .provider-latency {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ice-2);
+  text-align: right;
+  min-width: 42px;
+  flex-shrink: 0;
+}
+
+/* Latency warning thresholds */
+.providers-rail .provider-latency.slow {
+  color: var(--sev-warn, #D9B85A);
+}
+
+.providers-rail .provider-latency.very-slow {
+  color: var(--sev-alert, #E08A5C);
+}
+
+/* Empty state */
+.providers-rail .empty-state {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  color: var(--ice-2);
+  opacity: 0.6;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* ── Agents Rail placeholder (bottom section) — dashboard.console.agents-rail ── */
+.agents-rail {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.agents-rail .rail-header {
+  font-family: 'Cormorant Infant', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 0.5px solid var(--rule);
+}
+
+/* Scrollbar styling for agents rail */
+.agents-rail::-webkit-scrollbar {
+  width: 4px;
+}
+
+.agents-rail::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agents-rail::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 2px;
+}
+
+.agents-rail::-webkit-scrollbar-thumb:hover {
+  background: var(--ice-2);
+}
+
 
 /* feedbar — dashboard-console.feedbar */
 .feedbar {
@@ -536,6 +709,41 @@ body::after {
   <!-- titlebar: dashboard-console.titlebar will populate -->
   <div class="titlebar" id="titlebar"></div>
 
+  <!-- ══════════════════════════════════════════════════════════════════════════════
+       METRIC STRIP — dashboard.console.metric-strip
+       Scope: 5 core cells + 2 cache cells — populated by initMetricStrip()
+       ══════════════════════════════════════════════════════════════════════════════ -->
+  <div class="metrics" id="metrics">
+    <div class="metric" id="metric-health">
+      <div class="ml">Health</div>
+      <div class="mv"><span id="health-val">—</span><span class="health-dot" id="health-dot"></span></div>
+    </div>
+    <div class="metric" id="metric-agents">
+      <div class="ml">Agents · Leaves</div>
+      <div class="mv" id="agents-leaves-val">— · —</div>
+    </div>
+    <div class="metric" id="metric-spend">
+      <div class="ml">Spend 24h</div>
+      <div class="mv" id="spend-val">$—</div>
+    </div>
+    <div class="metric" id="metric-events">
+      <div class="ml">Events</div>
+      <div class="mv" id="events-val">—</div>
+    </div>
+    <div class="metric" id="metric-alerts">
+      <div class="ml">Alerts</div>
+      <div class="mv" id="alerts-val">0</div>
+    </div>
+    <div class="metric" id="metric-cache-hit">
+      <div class="ml">Cache hit %</div>
+      <div class="mv cryo" id="cache-hit-val">—</div>
+    </div>
+    <div class="metric" id="metric-calls-saved">
+      <div class="ml">Calls saved</div>
+      <div class="mv cryo" id="calls-saved-val">—</div>
+    </div>
+  </div>
+
   <!-- body: stage (canvas) + rails (dashboard-console) -->
   <div class="body">
     <div class="stage" id="stage">
@@ -565,7 +773,28 @@ body::after {
 
       <!-- Other HUD overlays, inspect panel, etc. — dashboard-console -->
     </div>
-    <!-- rails: dashboard-console.providers-rail, dashboard-console.agents-rail will add -->
+
+    <!-- ══════════════════════════════════════════════════════════════════════════════
+         RIGHT RAIL — providers + agents
+         Scope: dashboard.console.providers-rail, dashboard.console.agents-rail
+         ══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="right-rail" id="right-rail">
+      <!-- Providers Rail (top section) — dashboard.console.providers-rail -->
+      <div class="providers-rail" id="providers-rail">
+        <div class="rail-header">Providers</div>
+        <div id="providers-list">
+          <!-- Provider rows populated by JS from state.providers[] -->
+        </div>
+      </div>
+
+      <!-- Agents Rail (bottom section) — dashboard.console.agents-rail will populate -->
+      <div class="agents-rail" id="agents-rail">
+        <div class="rail-header">Agents</div>
+        <div id="agents-list">
+          <!-- Agent rows populated by dashboard.console.agents-rail -->
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- feedbar: dashboard-console.feedbar will populate -->
@@ -606,12 +835,27 @@ const THEME = window.__DASHBOARD_THEME__ || {
 // Apply theme to CSS custom properties
 function applyThemeToCss(theme) {
   const root = document.documentElement;
+  // Palette
   root.style.setProperty('--ink', theme.palette.ink);
   root.style.setProperty('--ink-2', theme.palette.ink_2);
   root.style.setProperty('--ice', theme.palette.ice);
   root.style.setProperty('--ice-2', theme.palette.ice_2);
   root.style.setProperty('--cryo', theme.palette.cryo);
   root.style.setProperty('--rule', theme.palette.rule);
+  // Lifecycle (dashboard.console.metric-strip uses these for health dot, etc.)
+  if (theme.lifecycle) {
+    root.style.setProperty('--life-germ', theme.lifecycle.germ);
+    root.style.setProperty('--life-grow', theme.lifecycle.grow);
+    root.style.setProperty('--life-flow', theme.lifecycle.flow);
+    root.style.setProperty('--life-fruit', theme.lifecycle.fruit);
+    root.style.setProperty('--life-dorm', theme.lifecycle.dorm);
+  }
+  // Severity (dashboard.console.metric-strip uses these for alerts, health, etc.)
+  if (theme.severity) {
+    root.style.setProperty('--sev-warn', theme.severity.warn);
+    root.style.setProperty('--sev-alert', theme.severity.alert);
+    root.style.setProperty('--sev-crit', theme.severity.crit);
+  }
 }
 applyThemeToCss(THEME);
 
@@ -2060,6 +2304,370 @@ window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgres
   };
 })();
 
+// ════════════════════════════════════════════════════════════════════════════════
+// PROVIDERS RAIL — top section of right rail
+// Scope: dashboard.console.providers-rail
+// Consumes: STATE.providers[], THEME.identity, THEME.severity, THEME.lifecycle
+//
+// Displays provider status: identity dot, provider name, up/down indicator, latency_ms
+// Reads from state.providers[] per NUTRIENTS §2 ProviderState interface
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initProvidersRail() {
+  const providersListEl = document.getElementById('providers-list');
+  if (!providersListEl) return;
+
+  // ── Latency thresholds for severity coloring ──
+  const LATENCY_SLOW_MS = 500;       // Above this: warn color
+  const LATENCY_VERY_SLOW_MS = 1500; // Above this: alert color
+
+  // ── Render a single provider row ──
+  function renderProviderRow(provider) {
+    // Per NUTRIENTS §2: ProviderState { id: string; up: boolean; latency_ms: number; model: string; }
+    const providerId = provider.id || 'unknown';
+    const isUp = provider.up === true;
+    const latencyMs = typeof provider.latency_ms === 'number' ? provider.latency_ms : null;
+    const model = provider.model || '';
+
+    // Get identity color from theme (fallback to cryo)
+    const identityColor = THEME.identity?.[providerId] || THEME.palette?.cryo || '#7AE5FF';
+
+    // Determine latency class
+    let latencyClass = '';
+    if (latencyMs !== null) {
+      if (latencyMs > LATENCY_VERY_SLOW_MS) {
+        latencyClass = 'very-slow';
+      } else if (latencyMs > LATENCY_SLOW_MS) {
+        latencyClass = 'slow';
+      }
+    }
+
+    // Format latency display
+    const latencyDisplay = latencyMs !== null ? `${latencyMs}ms` : '—';
+
+    // Create row element
+    const row = document.createElement('div');
+    row.className = 'provider-row';
+    row.innerHTML = `
+      <span class="provider-dot" style="background: ${identityColor}; --provider-color: ${identityColor};"></span>
+      <span class="provider-name">${providerId}</span>
+      ${model ? `<span class="provider-model">${model}</span>` : ''}
+      <span class="provider-status ${isUp ? 'up' : ''}"></span>
+      <span class="provider-latency ${latencyClass}">${latencyDisplay}</span>
+    `;
+
+    return row;
+  }
+
+  // ── Render the full providers list ──
+  function renderProvidersList() {
+    // Clear existing content
+    providersListEl.innerHTML = '';
+
+    const providers = STATE.providers || [];
+
+    if (providers.length === 0) {
+      // Empty state
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'empty-state';
+      emptyEl.textContent = 'no providers';
+      providersListEl.appendChild(emptyEl);
+      return;
+    }
+
+    // Render each provider
+    providers.forEach(provider => {
+      const row = renderProviderRow(provider);
+      providersListEl.appendChild(row);
+    });
+  }
+
+  // ── Initial render ──
+  renderProvidersList();
+
+  // ── Export for other console leaves and re-render capability ──
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.providersRail = {
+    renderProvidersList,
+    LATENCY_SLOW_MS,
+    LATENCY_VERY_SLOW_MS
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// METRIC STRIP — 5 core cells + 2 cache cells
+// Scope: dashboard.console.metric-strip
+// Consumes: STATE.agents[], STATE.events[], STATE.alerts[], STATE.cache
+//
+// Cells:
+//   1. Health — ratio of agents not failed/dorm, rendered as % + colored dot
+//   2. Agents · Leaves — count of agents · sum of leaves
+//   3. Spend 24h — sum of agent cost_usd, formatted $N.NN
+//   4. Events — count of events with ts within last 24h
+//   5. Alerts — length of state.alerts (red when > 0)
+//   6. Cache hit % — hits / (hits + misses), "—" if denominator 0
+//   7. Calls saved — sum of saved_tokens from cache.hit events, fallback to hits * 280
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initMetricStrip() {
+  // ── DOM element references ──
+  const healthValEl = document.getElementById('health-val');
+  const healthDotEl = document.getElementById('health-dot');
+  const agentsLeavesValEl = document.getElementById('agents-leaves-val');
+  const spendValEl = document.getElementById('spend-val');
+  const eventsValEl = document.getElementById('events-val');
+  const alertsValEl = document.getElementById('alerts-val');
+  const cacheHitValEl = document.getElementById('cache-hit-val');
+  const callsSavedValEl = document.getElementById('calls-saved-val');
+
+  // ── Track previous values for pulse animation ──
+  const prevValues = {
+    health: null,
+    agentsLeaves: null,
+    spend: null,
+    events: null,
+    alerts: null,
+    cacheHit: null,
+    callsSaved: null
+  };
+
+  // ── Pulse animation helper: triggers 1.5s pulse on value change ──
+  // Per slow-pulse discipline, all animation/transition durations ≥ 1.5s
+  function triggerPulse(metricId) {
+    const metricEl = document.getElementById(metricId);
+    if (!metricEl) return;
+    metricEl.classList.remove('pulse');
+    void metricEl.offsetWidth; // Force reflow to restart animation
+    metricEl.classList.add('pulse');
+    // Remove class after animation completes (1.5s transition + buffer)
+    setTimeout(() => metricEl.classList.remove('pulse'), 3200);
+  }
+
+  // ── Helper: format number with commas ──
+  function formatNumber(n) {
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    return n.toLocaleString('en-US');
+  }
+
+  // ── Helper: get 24h ago timestamp ──
+  function get24hAgoTimestamp() {
+    return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  // ── Cell 1: Health ──
+  // Ratio of agents not in "failed" or "dorm" state
+  function updateHealth() {
+    const agents = STATE.agents || [];
+    if (agents.length === 0) {
+      if (healthValEl) healthValEl.textContent = '—';
+      if (healthDotEl) healthDotEl.className = 'health-dot';
+      return;
+    }
+
+    const healthyCount = agents.filter(
+      a => a.state !== 'failed' && a.state !== 'dorm'
+    ).length;
+    const healthPct = Math.round((healthyCount / agents.length) * 100);
+    const healthStr = healthPct + '%';
+
+    // Determine severity class for dot
+    let dotClass = 'healthy';
+    if (healthPct < 50) {
+      dotClass = 'crit';
+    } else if (healthPct < 75) {
+      dotClass = 'alert';
+    } else if (healthPct < 90) {
+      dotClass = 'warn';
+    }
+
+    if (healthValEl) healthValEl.textContent = healthStr;
+    if (healthDotEl) healthDotEl.className = 'health-dot ' + dotClass;
+
+    // Pulse on change
+    if (prevValues.health !== healthStr) {
+      triggerPulse('metric-health');
+      prevValues.health = healthStr;
+    }
+  }
+
+  // ── Cell 2: Agents · Leaves ──
+  function updateAgentsLeaves() {
+    const agents = STATE.agents || [];
+    const agentCount = agents.length;
+    const leafCount = agents.reduce((sum, a) => sum + (a.leaves?.length || 0), 0);
+    const value = formatNumber(agentCount) + ' · ' + formatNumber(leafCount);
+
+    if (agentsLeavesValEl) agentsLeavesValEl.textContent = value;
+
+    if (prevValues.agentsLeaves !== value) {
+      triggerPulse('metric-agents');
+      prevValues.agentsLeaves = value;
+    }
+  }
+
+  // ── Cell 3: Spend 24h ──
+  // Sum of agent cost_usd, formatted $N.NN
+  function updateSpend() {
+    const agents = STATE.agents || [];
+    const totalSpend = agents.reduce((sum, a) => sum + (a.cost_usd || 0), 0);
+    const spendStr = '$' + totalSpend.toFixed(2);
+
+    if (spendValEl) spendValEl.textContent = spendStr;
+
+    // Color based on spend threshold (arbitrary: warn > $50, crit > $100)
+    if (spendValEl) {
+      spendValEl.classList.remove('warn', 'crit');
+      if (totalSpend > 100) {
+        spendValEl.classList.add('crit');
+      } else if (totalSpend > 50) {
+        spendValEl.classList.add('warn');
+      }
+    }
+
+    if (prevValues.spend !== spendStr) {
+      triggerPulse('metric-spend');
+      prevValues.spend = spendStr;
+    }
+  }
+
+  // ── Cell 4: Events ──
+  // Count of events with ts within last 24h
+  function updateEvents() {
+    const events = STATE.events || [];
+    const cutoff = get24hAgoTimestamp();
+    const recentEvents = events.filter(e => e.ts >= cutoff);
+    const count = recentEvents.length;
+    const countStr = formatNumber(count);
+
+    if (eventsValEl) eventsValEl.textContent = countStr;
+
+    if (prevValues.events !== countStr) {
+      triggerPulse('metric-events');
+      prevValues.events = countStr;
+    }
+  }
+
+  // ── Cell 5: Alerts ──
+  // Length of state.alerts (red when > 0)
+  function updateAlerts() {
+    const alerts = STATE.alerts || [];
+    const count = alerts.length;
+    const countStr = formatNumber(count);
+
+    if (alertsValEl) {
+      alertsValEl.textContent = countStr;
+      alertsValEl.classList.remove('crit', 'warn', 'alert');
+      if (count > 0) {
+        // Color by highest severity in alerts
+        const hasCrit = alerts.some(a => a.severity === 'crit');
+        const hasAlert = alerts.some(a => a.severity === 'alert');
+        if (hasCrit) {
+          alertsValEl.classList.add('crit');
+        } else if (hasAlert) {
+          alertsValEl.classList.add('alert');
+        } else {
+          alertsValEl.classList.add('warn');
+        }
+      }
+    }
+
+    if (prevValues.alerts !== countStr) {
+      triggerPulse('metric-alerts');
+      prevValues.alerts = countStr;
+    }
+  }
+
+  // ── Cell 6: Cache hit % ──
+  // hits / (hits + misses), "—" if denominator 0
+  function updateCacheHitPct() {
+    const cache = STATE.cache || { hits: 0, misses: 0 };
+    const hits = cache.hits || 0;
+    const misses = cache.misses || 0;
+    const total = hits + misses;
+
+    let pctStr = '—';
+    if (total > 0) {
+      const pct = Math.round((hits / total) * 100);
+      pctStr = pct + '%';
+    }
+
+    if (cacheHitValEl) cacheHitValEl.textContent = pctStr;
+
+    if (prevValues.cacheHit !== pctStr) {
+      triggerPulse('metric-cache-hit');
+      prevValues.cacheHit = pctStr;
+    }
+  }
+
+  // ── Cell 7: Calls saved ──
+  // Sum of saved_tokens from cache.hit events in state.events,
+  // or fall back to state.cache.hits * 280
+  function updateCallsSaved() {
+    const events = STATE.events || [];
+    const cache = STATE.cache || { hits: 0 };
+
+    // Try to sum saved_tokens from cache.hit events
+    // These come through as EventEntry with short_type "cache · hit"
+    // and the actual saved_tokens is in the raw event (not in EventEntry shape)
+    // Per NUTRIENTS §3: cache.hit events have saved_tokens
+    // However, EventEntry doesn't expose saved_tokens — fall back to estimate
+
+    // Fallback: hits * 280 (per HYPHA spec)
+    const hits = cache.hits || 0;
+    const estimatedSaved = hits * 280;
+
+    // Try to find actual saved_tokens from cache.hit events
+    // In the EventEntry shape, there's no saved_tokens field,
+    // so we use the estimate for now
+    // A more advanced version would aggregate from raw JSONL events
+
+    let savedStr = '—';
+    if (hits > 0) {
+      // Format with commas, show as "tokens saved"
+      savedStr = formatNumber(estimatedSaved);
+    }
+
+    if (callsSavedValEl) callsSavedValEl.textContent = savedStr;
+
+    if (prevValues.callsSaved !== savedStr) {
+      triggerPulse('metric-calls-saved');
+      prevValues.callsSaved = savedStr;
+    }
+  }
+
+  // ── Update all metrics ──
+  function updateAllMetrics() {
+    updateHealth();
+    updateAgentsLeaves();
+    updateSpend();
+    updateEvents();
+    updateAlerts();
+    updateCacheHitPct();
+    updateCallsSaved();
+  }
+
+  // ── Initial render ──
+  updateAllMetrics();
+
+  // ── Periodic refresh (every 1.4s to match cache.pulse cadence) ──
+  const metricRefreshInterval = setInterval(updateAllMetrics, 1400);
+
+  // ── Export metric strip functions for other console leaves ──
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.metricStrip = {
+    updateAllMetrics,
+    updateHealth,
+    updateAgentsLeaves,
+    updateSpend,
+    updateEvents,
+    updateAlerts,
+    updateCacheHitPct,
+    updateCallsSaved,
+    metricRefreshInterval,
+    triggerPulse
+  };
+})();
+
 // ────────── Cleanup on page unload ──────────
 window.addEventListener('beforeunload', () => {
   if (animationFrameId) {
@@ -2069,6 +2677,10 @@ window.addEventListener('beforeunload', () => {
   // Clear titlebar uptime interval (dashboard.console.titlebar)
   if (window.__DASHBOARD_CONSOLE__?.titlebar?.uptimeInterval) {
     clearInterval(window.__DASHBOARD_CONSOLE__.titlebar.uptimeInterval);
+  }
+  // Clear metric strip refresh interval (dashboard.console.metric-strip)
+  if (window.__DASHBOARD_CONSOLE__?.metricStrip?.metricRefreshInterval) {
+    clearInterval(window.__DASHBOARD_CONSOLE__.metricStrip.metricRefreshInterval);
   }
 });
 
