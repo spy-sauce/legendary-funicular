@@ -523,13 +523,195 @@ body::after {
   background: var(--ice-2);
 }
 
+/* ── Agent Row Styles — dashboard.console.agents-rail ── */
+.agents-rail .agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 0;
+  margin-bottom: 2px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background 1.5s ease, border-color 1.5s ease;
+  position: relative;
+}
 
-/* feedbar — dashboard-console.feedbar */
+.agents-rail .agent-row:hover {
+  background: rgba(122, 229, 255, 0.04);
+}
+
+.agents-rail .agent-row.selected {
+  background: rgba(122, 229, 255, 0.08);
+}
+
+.agents-rail .agent-row.pinned::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--cryo);
+  box-shadow: 0 0 6px var(--cryo);
+}
+
+/* Agent name — ice color, truncate if needed */
+.agents-rail .agent-name {
+  flex: 1;
+  font-family: 'Geist', sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Lifecycle pill — text from agent.state, background from theme.lifecycle */
+.agents-rail .lifecycle-pill {
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  color: var(--ink);
+  /* background set inline from JS based on theme.lifecycle */
+}
+
+/* Lifecycle state color mappings */
+.agents-rail .lifecycle-pill.pending {
+  background: var(--life-germ, #B7A8E8);
+}
+
+.agents-rail .lifecycle-pill.active {
+  background: var(--life-flow, #8BB8E0);
+}
+
+.agents-rail .lifecycle-pill.fruit {
+  background: var(--life-fruit, #D9C390);
+}
+
+.agents-rail .lifecycle-pill.failed {
+  background: var(--sev-crit, #DB5C6E);
+}
+
+.agents-rail .lifecycle-pill.dorm {
+  background: var(--life-dorm, #5A6471);
+  color: var(--ice-2);
+}
+
+/* Empty state */
+.agents-rail .empty-state {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  color: var(--ice-2);
+  opacity: 0.6;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   FEEDBAR — dashboard.console.feedbar
+   Scope: filter chips (all/lifecycle/nutrient/cost/health/anomaly/cache)
+   cache chip pivots canvas via CustomEvent("dashboard:filter", { detail: "cache" })
+   Consumes: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 .feedbar {
-  /* placeholder: dashboard.console.feedbar will implement */
-  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  min-height: 28px;
   background: var(--ink-2);
   border-top: 0.5px solid var(--rule);
+  flex-shrink: 0;
+}
+
+.feedbar-label {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  opacity: 0.7;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.feedbar-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.feedbar-chips::-webkit-scrollbar {
+  display: none;
+}
+
+/* Filter chip base */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: background 1.5s ease, color 1.5s ease, border-color 1.5s ease;
+  /* Inactive state: rule border, ice_2 text */
+  background: transparent;
+  border: 0.5px solid var(--rule);
+  color: var(--ice-2);
+}
+
+.filter-chip:hover {
+  border-color: var(--ice-2);
+  color: var(--ice);
+}
+
+/* Active chip: cryo background, ink text */
+.filter-chip.active {
+  background: var(--cryo);
+  border-color: var(--cryo);
+  color: var(--ink);
+  box-shadow: 0 0 8px rgba(122, 229, 255, 0.25);
+}
+
+.filter-chip.active:hover {
+  background: var(--cryo);
+  border-color: var(--cryo);
+  color: var(--ink);
+}
+
+/* Cache chip special glow when active (to visually indicate canvas pivot) */
+.filter-chip[data-filter="cache"].active {
+  box-shadow: 0 0 12px rgba(122, 229, 255, 0.4);
+}
+
+/* Chip separator (subtle) */
+.feedbar-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--rule);
+  margin: 0 4px;
+  flex-shrink: 0;
 }
 
 /* feed — dashboard-console.event-feed */
@@ -2665,6 +2847,120 @@ window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgres
     updateCallsSaved,
     metricRefreshInterval,
     triggerPulse
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// FEEDBAR — dashboard.console.feedbar
+// Scope: filter chips (all/lifecycle/nutrient/cost/health/anomaly/cache)
+// cache chip pivots canvas via CustomEvent("dashboard:filter", { detail: "cache" })
+// Consumes: STATE, THEME
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initFeedbar() {
+  const feedbarEl = document.getElementById('feedbar');
+  if (!feedbarEl) return;
+
+  // ────────── Filter Categories ──────────
+  // Per NUTRIENTS §2 EventEntry.category union + "all"
+  const FILTER_CATEGORIES = [
+    { id: 'all',       label: 'All' },
+    { id: 'lifecycle', label: 'Lifecycle' },
+    { id: 'nutrient',  label: 'Nutrient' },
+    { id: 'cost',      label: 'Cost' },
+    { id: 'health',    label: 'Health' },
+    { id: 'anomaly',   label: 'Anomaly' },
+    { id: 'cache',     label: 'Cache' }
+  ];
+
+  // ────────── Module-scope state ──────────
+  // Per HYPHA: "Selecting a chip sets a module-scope state.feedFilter"
+  let currentFilter = 'all';
+
+  // ────────── Build Feedbar DOM ──────────
+  feedbarEl.innerHTML = `
+    <span class="feedbar-label">Filter</span>
+    <div class="feedbar-chips" id="feedbar-chips">
+      ${FILTER_CATEGORIES.map((cat, i) => `
+        ${i === 1 ? '<span class="feedbar-sep"></span>' : ''}
+        <button class="filter-chip${cat.id === 'all' ? ' active' : ''}" data-filter="${cat.id}">
+          ${cat.label}
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  const chipsContainer = document.getElementById('feedbar-chips');
+  const chips = chipsContainer.querySelectorAll('.filter-chip');
+
+  // ────────── Chip Click Handler ──────────
+  function selectFilter(filterId) {
+    const prevFilter = currentFilter;
+    currentFilter = filterId;
+
+    // Update active state on chips
+    chips.forEach(chip => {
+      const isActive = chip.dataset.filter === filterId;
+      chip.classList.toggle('active', isActive);
+    });
+
+    // Dispatch filter event for event-feed (sibling leaf)
+    // Per HYPHA: "re-renders the event feed"
+    document.dispatchEvent(new CustomEvent('dashboard:feedbar-filter', {
+      detail: { filter: filterId, prev: prevFilter }
+    }));
+
+    // ────────── Cache chip canvas pivot ──────────
+    // Per HYPHA: "The cache chip ALSO dispatches CustomEvent('dashboard:filter', { detail: 'cache' })
+    // for the canvas to listen for (it dims outer mesh + brightens relay topology).
+    // Switching away from cache dispatches detail: 'default'."
+    if (filterId === 'cache' && prevFilter !== 'cache') {
+      document.dispatchEvent(new CustomEvent('dashboard:filter', {
+        detail: 'cache'
+      }));
+    } else if (prevFilter === 'cache' && filterId !== 'cache') {
+      document.dispatchEvent(new CustomEvent('dashboard:filter', {
+        detail: 'default'
+      }));
+    }
+  }
+
+  // ────────── Attach Click Listeners ──────────
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const filterId = chip.dataset.filter;
+      if (filterId !== currentFilter) {
+        selectFilter(filterId);
+      }
+    });
+  });
+
+  // ────────── Keyboard Navigation (accessibility) ──────────
+  chipsContainer.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      const chipsArr = Array.from(chips);
+      const currentIdx = chipsArr.findIndex(c => c.dataset.filter === currentFilter);
+      let nextIdx;
+
+      if (e.key === 'ArrowRight') {
+        nextIdx = (currentIdx + 1) % chipsArr.length;
+      } else {
+        nextIdx = (currentIdx - 1 + chipsArr.length) % chipsArr.length;
+      }
+
+      const nextChip = chipsArr[nextIdx];
+      nextChip.focus();
+      selectFilter(nextChip.dataset.filter);
+      e.preventDefault();
+    }
+  });
+
+  // ────────── Export feedbar state for other console leaves ──────────
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.feedbar = {
+    getCurrentFilter: () => currentFilter,
+    setFilter: selectFilter,
+    FILTER_CATEGORIES
   };
 })();
 
