@@ -4,6 +4,78 @@
 
 ---
 
+## [MYC] 2026-05-13 — audit-run cultivation shipped + first proof-of-life + autofix loop close + next: mycelium-dashboard
+
+**Massive session.** Three things landed back-to-back:
+
+### 1. audit-run cultivation shipped via dogfood
+
+Cultivated `mycelium audit-run` into the framework using `mycelium cultivate` itself. Operator-authored 7 HYPHAs (`audit-{findings,testers,aggregator,heal-loop,sporenet,cli,docs}`), 22 sub-leaves, 10 frozen NUTRIENTS sections. Contract-freeze gating. 22/22 FRUIT_READY in **332s wall-clock** (vs run8's 4.7 hours for 10 leaves — recursion-build was faster than the original real-client build it's modeled on).
+
+Pre-cultivation surgical extraction: `runWithConcurrency` lifted out of `cultivate.ts` (was module-private) to `cli/src/lib/concurrency.ts`. Shared between cultivate.ts and the new audit-run testers-pool. No cultivate.ts public-contract change.
+
+`feat/audit-run` branched off `feat/section-h-security` (since merged to main as PR #1). PR #2 opened with 26 commits at push. Added `.github/workflows/ci.yml` — the framework's first PR-CI DDP gate, runs lint/typecheck/test/build on PR + push to feat/**. Closes the cultivate.yml-only gap.
+
+### 2. First proof-of-life: audit-run vs live-grid-run8
+
+`npm link` made the dev build globally callable. Scaffolded HYPHA-TEST files in run8 (3 testers: `tester.talent-onboarding` from spec §9, `tester.types`, plus path-based biome attribution to make heal-loop routing work).
+
+**Baseline run:** found a REAL critical TS error (`TS2353: 'fonts' does not exist in type 'Theme'` at `src/App.tsx:59`). Independently verified — running `npx tsc --noEmit` manually surfaces the same error. Engine mirrors ground truth. 78.96s wall, exit 1. Schema correct (sha256 ids, severity union, ISO-8601 ts, suggested_fix actionable). The `tester.talent-onboarding` from spec §9's worked example ran clean — that bug was already fixed in run8 by the time we audited.
+
+### 3. Autofix loop closes (after 2 patches)
+
+First `--autofix` surfaced **4 framework bugs** the spec didn't catch:
+- **Bug 1** — F1 skip-already-done blocked heal-loop replant (cultivate.ts:158-170 sees leaves as `done`, produces 0 files). **Patched.** New `resetBiomeLeaves(stateDir, biomeId)` in audit-sporenet flips matching leaves done→pending before each spawnCultivate. Atomic temp/rename, serialized on existing audit-state chain.
+- **Bug 4** — `writeSummary` async-without-await on non-autofix path; process exited before temp/rename. Autofix masked it because the heal-loop kept the event loop alive. **Patched** with one-character `await`.
+- **Bug 2 (open)** — `no_progress` termination doesn't fire per NUTRIENTS §8. Single-file fix in `heal-iteration.ts:evaluateTermination`.
+- **Bug 3 (open)** — Finding SHA dedupe fragile; LLM-authored `summary` varies between runs → different ids → no dedupe. Needs NUTRIENTS §1 contract amendment (drop `summary` from id hash).
+- **Bug 5 (open)** — heal-loop's `runTestersFn` doesn't actually re-run testers; re-emits baseline findings. Iter dirs lack `testers/` subdirs. Affects automatic termination on success.
+
+**End-to-end loop close validated:**
+- Baseline → 1 critical (exit 1)
+- `--autofix` → heal-loop reset state, cultivate spawned, leaf produced 5 files including App.tsx fix, committed as `4180d40` in live-grid-run8
+- Manual `tsc --noEmit` → exit 0, clean
+- Fresh baseline → 0 findings, exit 0, summary.json present
+
+**The recursive build of the recursive tool worked.** audit-run cultivated itself, then audited real code, found a real bug, fixed it via heal-loop, re-verified clean. Receipt at `live-grid-run8/audit/2026-05-11T23-18-20-546Z/framework-findings.md`.
+
+**PR #2 state:** 27 commits, last is `c01769d` "audit-run: heal-loop F1 reset + writeSummary await — closes the autofix loop". CI status visibility blocked by PAT scope but workflow should be firing.
+
+### State at session pause
+
+- Working tree: clean on `feat/audit-run`
+- PR #2 open: https://github.com/spy-sauce/legendary-funicular/pull/2
+- Open framework bugs: 2, 3, 5 (separate follow-up PRs)
+- 3 spec docs from prior session live + 1 new (`docs/mycelium-audit-run-spec.md`)
+- `npm link` is active: `/opt/homebrew/bin/mycelium` → this repo's `cli/dist`
+
+### Next planned: mycelium-dashboard cultivation
+
+**SPY direction:** cultivate dashboard feature next, BEFORE (b) cloud deploy of DDP architecture.
+
+**Reference designs:**
+- `/Users/spy/mfautomation/mycelium-network.html` — animated canvas + organic curved hyphae + nutrient-dot particles + node-on-hover info panel; Bloom-branded but concepts are general
+- `/Users/spy/mfautomation/mycelium-dashboard_1.jsx` — lifecycle-colored agents (germinating/growing/flowing/fruiting/dormant), categorized event stream w/ severity styling, metric cards, alert rings, provider tags, simulated event generator
+
+**Decided design:**
+- **Approach:** dogfood cultivation (same path as audit-run)
+- **Molding:** per-cultivation `theme.yaml` — each cultivation owns its theme (palette + brand + biome→node-type+color+icon mapping + lifecycle colors)
+- **Sequence:** dashboard → (b) cloud deploy
+
+**Open scope questions for next session:**
+- Biome decomposition: likely 7-9 biomes — `theme-system`, `canvas-network-renderer`, `event-stream-feed`, `metric-cards`, `alert-ring`, `sporenet-routes`, `dashboard-cli` (init + render subcommands), `dashboard-docs`. Possibly split rendering by surface (network/events/metrics) or unify.
+- NUTRIENTS contracts to draft: theme.yaml schema, dashboard route shape, event stream API, metric card data contract, alert envelope, biome→node-type mapping function, lifecycle color tokens, network viz JSON shape (consumed by canvas).
+- Per-cultivation theme.yaml stub example: should `mycelium init` emit a default theme.yaml? Or only `mycelium dashboard init`? Lean: init emits minimal default, dashboard init customizes.
+- Does this overlap meaningfully with the Router 30-day plan (Lane B `mycelium llm` provider tags)? Worth noting that the dashboard.jsx file already has Claude/Ollama/GPT-4o/Haiku/Gemini provider tags — the dashboard is a natural surface for whatever Router ships.
+
+**Gotchas:**
+- `feat/audit-run` PR #2 is still open; dashboard cultivation should branch off a fresh point (either main once #2 merges, or stack on feat/audit-run if PR linearity matters less). Sean Patrick gate may apply.
+- The 3 open audit-run bugs (2, 3, 5) live in this PR's domain but were not patched here. They don't block dashboard work but should be tracked.
+- The "molding" mechanism is the design crux. theme.yaml needs to be expressive enough to cover the file-1 Bloom case AND the file-2 mycelium dashboard case AND future cultivations like LiveGrid. Don't over-fit to either reference design.
+- live-grid-run8 has uncommitted state from the autofix run (the App.tsx fix in commit `4180d40`, plus 3 HYPHA-TEST files I wrote: talent-onboarding, types). Likely fine to leave as run8's own concern.
+
+---
+
 ## [MYC] 2026-05-10 — ECC adoption analysis → 3 spec docs + rule #5 disambiguation
 
 **Context:** Analyzed `affaan-m/everything-claude-code` (182 skills, 68 commands, ECC2 Rust core) against Mycelium for adoption candidates. Mycelium and ECC are doing overlapping work on different axes: Mycelium = orchestration (many agents, one product), ECC = harness optimization (one agent, many sessions). Mycelium is language-agnostic at the cultivation-output layer; ECC is more harness-portable (CC, Codex, Cursor, Opencode, Gemini). Complementary, not competitors — most of ECC's 130+ stack-specific skills are dead weight from a Mycelium perspective; a small slice is directly load-bearing.
