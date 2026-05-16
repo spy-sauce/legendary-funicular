@@ -637,6 +637,101 @@ async function cultivateLeaf(
   const maxBudgetUsd = readMaxBudgetUsd(config);
   let budgetExceeded: { spent: number } | null = null;
 
+  // ── Cache-network lookup ────────────────────────────────────────
+  // Derive cache key from prompt + contract hash. Check cache before
+  // spawning SDK session. On hit: skip SDK, use cached payload.
+  // On miss: proceed with SDK, cache result after stream completes.
+  const contractHash = config.contractHash ?? "unfrozen";
+  const cacheKeyValue = _cacheEnabled && _cacheStore
+    ? cacheKey({ tool_name: "claude-agent-sdk", args: prompt, contract_hash: contractHash })
+    : null;
+
+  if (_cacheEnabled && _cacheStore && cacheKeyValue && _cacheEventsPath) {
+    const hit = _cacheStore.get(cacheKeyValue);
+    if (hit) {
+      // Cache hit — store.get() already emitted cache.hit event per NUTRIENTS §4
+      const cached = hit.payload as CachedLeafPayload;
+      logLine({ event: "cache_hit", key_hash: cacheKeyValue.slice(0, 12) });
+
+      // Replay cached data into local state
+      artifacts.push(...cached.artifacts);
+      leafTextChunks.push(...cached.textChunks);
+
+      spinner.text =
+        chalk.cyan(`🧊 ${leaf.id}`) +
+        chalk.gray(` — cache hit (${cached.artifacts.length} files)`);
+
+      // Skip to the post-stream success path (extract synopsis, commit, etc.)
+      const leafSynopsis = extractSynopsis(leafTextChunks.join("\n"));
+      const commitResult = await commitQueue.enqueue(async () => {
+        return autoCommitLeaf(
+          leaf,
+          targetDir,
+          artifacts,
+          (config as any)._push !== false,
+          leafSynopsis
+        );
+      });
+      const commitMsg = commitResult?.message ?? null;
+      const commitSha = commitResult?.sha ?? null;
+
+      const updates: Record<string, any> = {
+        status: "done",
+        completed_at: new Date().toISOString(),
+        duration_seconds: Math.round(((Date.now() - started) / 1000) * 10) / 10,
+        files_produced: Array.from(new Set(artifacts)).length,
+        cache_hit: true,
+      };
+      if (commitSha) {
+        updates.commit = commitSha;
+      }
+
+      let synopsis: string | null = null;
+      if (updates.commit) {
+        try {
+          const body = execFileSync(
+            "git",
+            ["-C", targetDir, "log", "-1", "--format=%B", updates.commit],
+            { encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
+          );
+          synopsis = extractSynopsis(body);
+        } catch {}
+      }
+      if (!synopsis) synopsis = leafSynopsis;
+      if (!synopsis) synopsis = leaf.scope || "";
+      updates.synopsis = synopsis;
+
+      writeLeafState(targetDir, leaf.id, updates);
+
+      const ms = Date.now() - started;
+      logLine({ event: "fruit_ready", artifacts, ms, commit: commitMsg, cache_hit: true });
+      logStream.end();
+      spinner.succeed(
+        chalk.green(`🧊 ${leaf.id}`) +
+          chalk.gray(
+            ` CACHE_HIT (${artifacts.length} files, ${(ms / 1000).toFixed(1)}s)` +
+              (commitMsg ? ` · ${commitMsg}` : "")
+          )
+      );
+      return { leaf, success: true, artifacts, ms, logPath };
+    } else {
+      // Cache miss — emit event per NUTRIENTS §3, record miss for stats
+      _cacheStore.recordMiss();
+      emitCacheEvent(
+        {
+          type: "cache.miss",
+          ts: new Date().toISOString(),
+          leaf_id: leaf.id,
+          key_hash: cacheKeyValue.slice(0, 12),
+        },
+        _cacheEventsPath
+      );
+      logLine({ event: "cache_miss", key_hash: cacheKeyValue.slice(0, 12) });
+    }
+  }
+
+  // ── SDK session (cache miss or cache disabled) ────────────────────
+  let inputTokens = 0;
   let stream: any;
   try {
     stream = query({
@@ -670,12 +765,32 @@ async function cultivateLeaf(
             leafTextChunks.push(b.text);
           }
         }
-      } else if (
-        msg.type === "result" &&
-        (msg as any).subtype === "error_max_budget_usd"
-      ) {
-        budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
+      } else if (msg.type === "result") {
+        if ((msg as any).subtype === "error_max_budget_usd") {
+          budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
+        }
+        // Capture input tokens from result for cache storage
+        const usage = (msg as any).usage;
+        if (usage?.input_tokens) {
+          inputTokens = usage.input_tokens;
+        }
       }
+    }
+
+    // ── Cache store after successful stream completion ──────────────
+    if (_cacheEnabled && _cacheStore && cacheKeyValue) {
+      _cacheStore.set(
+        cacheKeyValue,
+        {
+          artifacts: [...artifacts],
+          textChunks: [...leafTextChunks],
+          inputTokens,
+        } as CachedLeafPayload,
+        inputTokens,
+        leaf.id,
+        _currentIter
+      );
+      logLine({ event: "cache_set", key_hash: cacheKeyValue.slice(0, 12), inputTokens });
     }
 
     if (budgetExceeded) {
