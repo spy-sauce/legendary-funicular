@@ -305,6 +305,9 @@ const GLOBE_R = 4.6;
 // ────────── Animation Loop ──────────
 let animationFrameId = null;
 
+// Animation hook registry — other canvas leaves can register their animation functions
+const animationHooks = [];
+
 function animate(time) {
   animationFrameId = requestAnimationFrame(animate);
 
@@ -314,12 +317,189 @@ function animate(time) {
   // Update controls damping
   controls.update();
 
+  // Run registered animation hooks (agent-globe, leaves-and-micros, cache-relays, etc.)
+  animationHooks.forEach(hook => hook(t));
+
   // Render scene
   renderer.render(scene, camera);
 }
 
 // Start animation
 animate(0);
+
+// ════════════════════════════════════════════════════════════════════════════════
+// AGENT GLOBE — fibonacci-sphere placement + wireframe Bloch rings
+// Scope: dashboard.canvas.agent-globe
+// Consumes: STATE.agents[], THEME.identity, THEME.modulator
+// ════════════════════════════════════════════════════════════════════════════════
+
+const TAU = Math.PI * 2;
+const PHI = Math.PI * (Math.sqrt(5) - 1); // Golden angle ~2.399 radians
+
+// ────────── Brightness Modulator by Agent State ──────────
+function getBrightnessForState(state, modulator) {
+  switch (state) {
+    case 'active':  return modulator.active_brightness;
+    case 'fruit':   return modulator.fruit_brightness;
+    case 'failed':  return modulator.failed_brightness;
+    case 'pending':
+    case 'dorm':
+    default:        return modulator.pending_brightness;
+  }
+}
+
+// ────────── Color Helper: Apply Brightness to Hex ──────────
+function modulateColor(hexColor, brightness) {
+  // Parse hex to RGB
+  const hex = hexColor.replace('#', '');
+  let r = parseInt(hex.substring(0, 2), 16);
+  let g = parseInt(hex.substring(2, 4), 16);
+  let b = parseInt(hex.substring(4, 6), 16);
+
+  // Apply brightness as a multiplier (clamped)
+  r = Math.min(255, Math.round(r * brightness));
+  g = Math.min(255, Math.round(g * brightness));
+  b = Math.min(255, Math.round(b * brightness));
+
+  return (r << 16) | (g << 8) | b;
+}
+
+// ────────── Bloch Ring Factory ──────────
+// Creates a wireframe Bloch representation: 3 orthogonal torus rings + central pip
+function makeBlochRings(color, opacity = 0.85) {
+  const group = new THREE.Group();
+  const r = 0.5; // Ring radius
+
+  const ringGeo = new THREE.TorusGeometry(r, 0.005, 6, 64);
+  const matBright = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+  const matDim = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opacity * 0.5 });
+  const matMerid2 = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opacity * 0.35 });
+
+  // Equator ring (XZ plane)
+  const equator = new THREE.Mesh(ringGeo, matBright);
+  group.add(equator);
+
+  // Meridian 1 (XY plane, rotated 90° around X)
+  const meridian1 = new THREE.Mesh(ringGeo, matDim);
+  meridian1.rotation.x = Math.PI / 2;
+  group.add(meridian1);
+
+  // Meridian 2 (YZ plane, rotated 90° around Y)
+  const meridian2 = new THREE.Mesh(ringGeo, matMerid2);
+  meridian2.rotation.y = Math.PI / 2;
+  group.add(meridian2);
+
+  // Central pip (state indicator)
+  const pipMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+  const pip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 14), pipMat);
+  group.add(pip);
+
+  // Store materials for later brightness animation
+  group.userData = {
+    materials: [matBright, matDim, matMerid2, pipMat],
+    baseOpacities: [opacity, opacity * 0.5, opacity * 0.35, opacity],
+    baseColor: color
+  };
+
+  return group;
+}
+
+// ────────── Fibonacci Sphere Position Calculator ──────────
+function fibonacciSpherePosition(index, total, radius) {
+  // Offset index to avoid placing nodes at exact poles
+  const y = 1 - (index / (total - 1 || 1)) * 2;
+  const ringRadius = Math.sqrt(1 - y * y);
+  const theta = PHI * index;
+
+  return new THREE.Vector3(
+    Math.cos(theta) * ringRadius,
+    y,
+    Math.sin(theta) * ringRadius
+  ).multiplyScalar(radius);
+}
+
+// ────────── Agent Globe Data Structure ──────────
+// Maps agent.id -> { group, blochRings, position, state, spin, spinRate }
+const agentGlobeData = new Map();
+
+// ────────── Create Agent Bloch Rings ──────────
+function createAgentGlobe() {
+  const agents = STATE.agents || [];
+  const n = agents.length;
+
+  agents.forEach((agent, i) => {
+    // Calculate fibonacci sphere position
+    const position = fibonacciSpherePosition(i, n, GLOBE_R);
+
+    // Get identity color from theme (fallback to cryo)
+    const identityHex = THEME.identity[agent.id] || THEME.palette.cryo;
+
+    // Get brightness for current state
+    const brightness = getBrightnessForState(agent.state, THEME.modulator);
+
+    // Modulate color by brightness
+    const modulatedColor = modulateColor(identityHex, brightness);
+
+    // Create Bloch rings with modulated color
+    const blochRings = makeBlochRings(modulatedColor, 0.85);
+    blochRings.position.copy(position);
+
+    // Random spin initialization (visual interest, not state-dependent)
+    const spin = Math.random() * TAU;
+    const spinRate = (0.08 + Math.random() * 0.06) * (Math.random() < 0.5 ? 1 : -1);
+
+    // Add to main group
+    mainGroup.add(blochRings);
+
+    // Store reference for animation
+    agentGlobeData.set(agent.id, {
+      group: blochRings,
+      position: position.clone(),
+      basePosition: position.clone(),
+      state: agent.state,
+      identityHex,
+      spin,
+      spinRate,
+      index: i
+    });
+  });
+}
+
+// ────────── Agent Globe Animation ──────────
+// Called each frame from the main animation loop
+function animateAgentGlobe(t) {
+  const pulseHz = Math.min(THEME.modulator.active_pulse_hz, 1.5); // Clamp to slow-pulse ceiling
+
+  agentGlobeData.forEach((data, agentId) => {
+    const { group, state, identityHex, spin, spinRate } = data;
+
+    // Gentle spin animation (all agents)
+    group.rotation.y = spin + t * spinRate;
+    group.rotation.x = Math.sin(t * 0.15 + data.index) * 0.1;
+
+    // Slow breath pulse for ACTIVE agents only
+    if (state === 'active') {
+      // sin oscillation: 0.8 to 1.0 brightness range (subtle breath)
+      const breathPhase = Math.sin(t * pulseHz * TAU);
+      const breathBrightness = 0.9 + breathPhase * 0.1;
+
+      // Update material opacity to create breath effect
+      const { materials, baseOpacities } = group.userData;
+      materials.forEach((mat, i) => {
+        mat.opacity = baseOpacities[i] * breathBrightness;
+      });
+    }
+  });
+}
+
+// Initialize agent globe
+createAgentGlobe();
+
+// Register agent globe animation hook
+animationHooks.push(animateAgentGlobe);
+
+// ────────── Export Agent Globe Data for Other Leaves ──────────
+// Other leaves (leaves-and-micros, adaptive-zoom, etc.) need agent positions
 
 // ────────── Exports for other canvas leaves ──────────
 // Other dashboard.canvas.* leaves will import/access these via window
@@ -332,7 +512,17 @@ window.__DASHBOARD_CANVAS__ = {
   GLOBE_R,
   STATE,
   THEME,
-  THREE
+  THREE,
+  // Animation hook registry — other canvas leaves register here
+  animationHooks,
+  // Agent globe exports
+  agentGlobeData,
+  fibonacciSpherePosition,
+  makeBlochRings,
+  getBrightnessForState,
+  modulateColor,
+  TAU,
+  PHI
 };
 
 // ────────── Cleanup on page unload ──────────
