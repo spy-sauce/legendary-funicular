@@ -2150,6 +2150,400 @@ function animateAdaptiveZoom(t) {
 // Register zoom animation hook
 animationHooks.push(animateAdaptiveZoom);
 
+// ════════════════════════════════════════════════════════════════════════════════
+// MULTIVERSE VIEW — outer-layer mini-globes for each product
+// Scope: dashboard.canvas.multiverse
+// ════════════════════════════════════════════════════════════════════════════════
+
+const MULTIVERSE_OUTER_RADIUS = 7.8;
+const MULTIVERSE_MINI_GLOBE_R = 1.2;
+
+function makeTextSprite(text, size = 40, color = '#A8B4C5') {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 80;
+  const cx = c.getContext('2d');
+  cx.font = \`400 \${size}px "Geist Mono", monospace\`;
+  cx.fillStyle = color; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText(text, c.width / 2, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const multiverseGroup = new THREE.Group();
+scene.add(multiverseGroup);
+const productMinis = [];
+
+const MOCK_PRODUCTS = [
+  { id: 'product-alpha', name: 'alpha', tint: 'fruit', agents: 8, leavesDone: 12, leavesTotal: 20, status: 'active' },
+  { id: 'product-beta', name: 'beta', tint: 'flow', agents: 6, leavesDone: 3, leavesTotal: 14, status: 'building' },
+  { id: 'product-gamma', name: 'gamma', tint: 'grow', agents: 5, leavesDone: 8, leavesTotal: 10, status: 'finishing' },
+  { id: 'product-delta', name: 'delta', tint: 'dorm', agents: 4, leavesDone: 0, leavesTotal: 8, status: 'queued' },
+];
+
+function getTintColor(tint) {
+  const m = { fruit: THEME.lifecycle.fruit, flow: THEME.lifecycle.flow, grow: THEME.lifecycle.grow, germ: THEME.lifecycle.germ, dorm: THEME.lifecycle.dorm };
+  return m[tint] || THEME.palette.cryo;
+}
+
+function createMultiverseMiniGlobes() {
+  MOCK_PRODUCTS.forEach((prod, i) => {
+    const g = new THREE.Group();
+    const basePos = fibonacciSpherePosition(i, MOCK_PRODUCTS.length, MULTIVERSE_OUTER_RADIUS);
+    g.position.copy(basePos);
+    const r = MULTIVERSE_MINI_GLOBE_R;
+    const tintHex = getTintColor(prod.tint);
+    const tintColor = parseInt(tintHex.replace('#', ''), 16);
+
+    const ringGeo = new THREE.TorusGeometry(r, 0.005, 6, 64);
+    const ringMat = new THREE.MeshBasicMaterial({ color: tintColor, transparent: true, opacity: 0.75 });
+    const ringMatDim = new THREE.MeshBasicMaterial({ color: tintColor, transparent: true, opacity: 0.35 });
+    const eq = new THREE.Mesh(ringGeo, ringMat); eq.rotation.x = Math.PI / 2; g.add(eq);
+    const md = new THREE.Mesh(ringGeo, ringMatDim); g.add(md);
+
+    const dots = [];
+    for (let ai = 0; ai < prod.agents; ai++) {
+      const y = 1 - (ai / (prod.agents - 1 || 1)) * 2;
+      const ring = Math.sqrt(1 - y * y);
+      const theta = PHI * ai;
+      const done = ai < Math.floor(prod.agents * prod.leavesDone / prod.leavesTotal);
+      const dotColor = done ? parseInt(THEME.lifecycle.fruit.replace('#', ''), 16) : tintColor;
+      const dotMat = new THREE.MeshBasicMaterial({ color: dotColor, transparent: true, opacity: 0.95 });
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), dotMat);
+      dot.position.set(Math.cos(theta) * ring * r, y * r, Math.sin(theta) * ring * r);
+      g.add(dot); dots.push({ mesh: dot, mat: dotMat, done });
+    }
+
+    const coreMat = new THREE.MeshBasicMaterial({ color: tintColor, transparent: true, opacity: 0.9 });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), coreMat); g.add(core);
+    const cryoColor = parseInt(THEME.palette.cryo.replace('#', ''), 16);
+    const haloMat = new THREE.MeshBasicMaterial({ color: cryoColor, transparent: true, opacity: 0, side: THREE.BackSide });
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(r * 1.18, 24, 24), haloMat); g.add(halo);
+    const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(r * 1.25, 16, 16), hitMat);
+    hit.userData = { kind: 'product', productId: prod.id }; g.add(hit);
+
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(prod.name, 36, THEME.palette.ice), transparent: true, opacity: 0.95, depthTest: false }));
+    label.scale.set(2.0, 0.28, 1); label.position.set(0, -r - 0.36, 0); g.add(label);
+    const sub = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(\`\${prod.leavesDone}/\${prod.leavesTotal} · \${prod.status}\`, 24, THEME.palette.ice_2), transparent: true, opacity: 0.85, depthTest: false }));
+    sub.scale.set(1.6, 0.18, 1); sub.position.set(0, -r - 0.62, 0); g.add(sub);
+
+    multiverseGroup.add(g);
+    productMinis.push({ id: prod.id, product: prod, group: g, halo, haloMat, hitMesh: hit, eq, md, ringMat, ringMatDim, core, coreMat, basePos: basePos.clone(), dots });
+  });
+}
+
+const multiverseEdges = [];
+function createMultiverseEdges() {
+  const n = productMinis.length; if (n < 2) return;
+  for (let i = 0; i < n; i++) {
+    const from = productMinis[i], to = productMinis[(i + 1) % n];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([from.basePos.x, from.basePos.y, from.basePos.z, to.basePos.x, to.basePos.y, to.basePos.z], 3));
+    const mat = new THREE.LineBasicMaterial({ color: parseInt(THEME.palette.rule.replace('#', ''), 16), transparent: true, opacity: 0.35 });
+    const line = new THREE.Line(geo, mat); multiverseGroup.add(line);
+    multiverseEdges.push({ from, to, line, mat, geo });
+  }
+}
+
+const mvPacketGroup = new THREE.Group(); multiverseGroup.add(mvPacketGroup);
+const mvPackets = [];
+function spawnMvPacket(edge) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10),
+    new THREE.MeshBasicMaterial({ color: parseInt(THEME.palette.cryo.replace('#', ''), 16), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  mvPacketGroup.add(m);
+  mvPackets.push({ edge, mesh: m, t: 0, speed: 0.003 + Math.random() * 0.004, reverse: Math.random() < 0.5 });
+}
+let mvPacketSpawnerId = null;
+function startMvPacketSpawner() {
+  if (mvPacketSpawnerId) return;
+  mvPacketSpawnerId = setInterval(() => {
+    if (STATE.organism.view !== 'multiverse' || multiverseEdges.length === 0) return;
+    spawnMvPacket(multiverseEdges[Math.floor(Math.random() * multiverseEdges.length)]);
+  }, 2000);
+}
+function stopMvPacketSpawner() { if (mvPacketSpawnerId) { clearInterval(mvPacketSpawnerId); mvPacketSpawnerId = null; } }
+
+const mvRaycaster = new THREE.Raycaster(); mvRaycaster.params.Mesh = { threshold: 0.05 };
+const mvNdc = new THREE.Vector2();
+let hoveredProductId = null;
+function getProductHitMeshes() { return productMinis.map(pm => pm.hitMesh); }
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (STATE.organism.view !== 'multiverse') { if (hoveredProductId) { productMinis.forEach(pm => { pm.haloMat.opacity = 0; }); hoveredProductId = null; } return; }
+  const rect = renderer.domElement.getBoundingClientRect();
+  mvNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mvNdc.y = ((e.clientY - rect.top) / rect.height) * -2 + 1;
+  mvRaycaster.setFromCamera(mvNdc, camera);
+  const hits = mvRaycaster.intersectObjects(getProductHitMeshes(), false);
+  let newHoveredId = (hits.length > 0 && hits[0].object.userData.kind === 'product') ? hits[0].object.userData.productId : null;
+  if (newHoveredId !== hoveredProductId) { productMinis.forEach(pm => { pm.haloMat.opacity = (pm.id === newHoveredId) ? 0.18 : 0; }); hoveredProductId = newHoveredId; }
+});
+renderer.domElement.addEventListener('pointerleave', () => { if (hoveredProductId) { productMinis.forEach(pm => { pm.haloMat.opacity = 0; }); hoveredProductId = null; } });
+
+let mvPointerDown = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { if (STATE.organism.view === 'multiverse') mvPointerDown = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (STATE.organism.view !== 'multiverse' || !mvPointerDown) return;
+  const dx = e.clientX - mvPointerDown.x, dy = e.clientY - mvPointerDown.y; mvPointerDown = null;
+  if (Math.sqrt(dx * dx + dy * dy) > 4) return;
+  if (hoveredProductId) { document.dispatchEvent(new CustomEvent('dashboard:enter-product', { detail: { product_id: hoveredProductId } })); enterProductView(hoveredProductId); }
+});
+
+let multiverseCurrentView = STATE.organism.view || 'multiverse';
+let multiverseActiveProductId = STATE.organism.active_product_id || null;
+
+function enterProductView(productId) {
+  multiverseCurrentView = 'product'; multiverseActiveProductId = productId;
+  multiverseGroup.visible = false; stopMvPacketSpawner(); mainGroup.visible = true;
+  document.dispatchEvent(new CustomEvent('dashboard:view-changed', { detail: { view: 'product', product_id: productId } }));
+}
+function enterMultiverseView() {
+  multiverseCurrentView = 'multiverse'; multiverseActiveProductId = null;
+  multiverseGroup.visible = true; mainGroup.visible = true; startMvPacketSpawner();
+  document.dispatchEvent(new CustomEvent('dashboard:view-changed', { detail: { view: 'multiverse', product_id: null } }));
+}
+document.addEventListener('dashboard:exit-product', () => { enterMultiverseView(); });
+
+function animateMultiverse(t) {
+  if (!multiverseGroup.visible) return;
+  productMinis.forEach((pm, pi) => {
+    const breath = (Math.sin(t * 0.6 + pi * 1.2) + 1) * 0.5;
+    pm.coreMat.opacity = 0.7 + breath * 0.25;
+    pm.group.rotation.y = t * 0.08 + pi * 0.5;
+    if (pm.product.status === 'active') pm.dots.forEach((d, di) => { d.mat.opacity = 0.8 + (Math.sin(t * 0.5 + di * 0.4) + 1) * 0.5 * 0.15; });
+  });
+  multiverseEdges.forEach((edge, ei) => { edge.mat.opacity = 0.25 + (Math.sin(t * 0.4 + ei * 0.7) + 1) * 0.5 * 0.12; });
+  for (let i = mvPackets.length - 1; i >= 0; i--) {
+    const pkt = mvPackets[i]; pkt.t += pkt.speed;
+    if (pkt.t >= 1) { mvPacketGroup.remove(pkt.mesh); pkt.mesh.geometry.dispose(); pkt.mesh.material.dispose(); mvPackets.splice(i, 1); continue; }
+    const progress = pkt.reverse ? (1 - pkt.t) : pkt.t;
+    pkt.mesh.position.lerpVectors(pkt.edge.from.basePos, pkt.edge.to.basePos, progress);
+    pkt.mesh.material.opacity = 0.7 * Math.sin(progress * Math.PI);
+  }
+}
+
+createMultiverseMiniGlobes(); createMultiverseEdges();
+if (STATE.organism.view === 'multiverse') { multiverseGroup.visible = true; startMvPacketSpawner(); } else { multiverseGroup.visible = false; }
+animationHooks.push(animateMultiverse);
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// LEAVES AND MICROS — orbital sub-elements around agents (focus-conditional)
+// Scope: dashboard.canvas.leaves-and-micros
+// Consumes: agentGlobeData, STATE, THEME, focusTarget, currentZoomPreset
+//
+// Leaves orbit each agent at radius 1.3 (LEAF_ORBIT_RADIUS).
+// Micros orbit each leaf at radius 0.4 (MICRO_ORBIT_RADIUS), 2-4 per leaf.
+// Color by micro.routing: cheap → theme.lifecycle.germ, full → theme.palette.cryo.
+// Orbit speeds: leaves 0.18 rad/s, micros 0.32 rad/s (under 1.5Hz ceiling).
+// Visible only when parent agent is focused (zoom preset 'agents' or 'leaves').
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Leaves & Micros Constants ──────────
+const LEAF_ORBIT_RADIUS = 1.3;      // Leaves orbit agents at this radius
+const MICRO_ORBIT_RADIUS = 0.4;     // Micros orbit leaves at this radius
+const LEAF_ORBIT_SPEED = 0.18;      // rad/s — slow orbit (well under 1.5Hz ceiling)
+const MICRO_ORBIT_SPEED = 0.32;     // rad/s — slightly faster but still slow
+
+// ────────── Shared Geometry (reused for all leaves/micros) ──────────
+const leafSphereGeo = new THREE.IcosahedronGeometry(0.10, 1);
+const leafWireGeo = new THREE.WireframeGeometry(leafSphereGeo);
+const microSphereGeo = new THREE.SphereGeometry(0.022, 8, 8);
+
+// ────────── Leaves & Micros Storage ──────────
+// Map<agentId, { group: THREE.Group, leaves: Map<leafId, leafData> }>
+const agentLeafMeshes = new Map();
+// Map<leafId, { group, wireMesh, fillMesh, micros: [], parentAgentId, orbitAngle, orbitIncline }>
+const leafMeshData = new Map();
+
+// ────────── Color Helpers ──────────
+const MICRO_CHEAP_COLOR = new THREE.Color(THEME.lifecycle?.germ || '#B7A8E8');  // germ violet
+const MICRO_FULL_COLOR = new THREE.Color(THEME.palette?.cryo || '#7AE5FF');     // cryo cyan
+
+// ────────── Create a Single Leaf Mesh with Micros ──────────
+function createLeafMesh(leaf, agentId, leafIndex, totalLeaves, parentIdentityColor) {
+  const leafGroup = new THREE.Group();
+  leafGroup.name = `leaf-${leaf.id}`;
+
+  // Determine leaf color based on parent agent's identity hue, modulated by leaf state
+  const leafColor = new THREE.Color(parentIdentityColor);
+  const leafBrightness = getBrightnessForState(leaf.state === 'done' ? 'fruit' : leaf.state);
+  leafColor.multiplyScalar(leafBrightness);
+
+  // Wireframe mesh (primary visual)
+  const wireMat = new THREE.LineBasicMaterial({
+    color: leafColor,
+    opacity: 0.85,
+    transparent: true
+  });
+  const wireMesh = new THREE.LineSegments(leafWireGeo, wireMat);
+  leafGroup.add(wireMesh);
+
+  // Solid fill mesh (for hit detection + subtle glow)
+  const fillMat = new THREE.MeshBasicMaterial({
+    color: leafColor,
+    opacity: 0.15,
+    transparent: true
+  });
+  const fillMesh = new THREE.Mesh(leafSphereGeo, fillMat);
+  fillMesh.userData = { kind: 'leaf', leafId: leaf.id, agentId: agentId };
+  leafGroup.add(fillMesh);
+
+  // Calculate orbital parameters for this leaf
+  // Distribute leaves evenly around the agent in a tilted orbit plane
+  const orbitAngle = (leafIndex / Math.max(1, totalLeaves)) * TAU;
+  const orbitIncline = (leafIndex % 3) * 0.3 - 0.3; // Vary orbital plane slightly
+
+  // Create micros orbiting this leaf
+  const micros = [];
+  const microCount = leaf.micros?.length || 0;
+
+  for (let mi = 0; mi < microCount; mi++) {
+    const micro = leaf.micros[mi];
+    const microColor = micro.routing === 'cheap' ? MICRO_CHEAP_COLOR : MICRO_FULL_COLOR;
+
+    const microMat = new THREE.MeshBasicMaterial({
+      color: microColor,
+      opacity: 0.9,
+      transparent: true
+    });
+    const microMesh = new THREE.Mesh(microSphereGeo, microMat);
+    microMesh.name = `micro-${leaf.id}-${mi}`;
+
+    // Initial micro orbit angle (distributed around leaf)
+    const microOrbitAngle = (mi / microCount) * TAU;
+
+    micros.push({
+      mesh: microMesh,
+      orbitAngle: microOrbitAngle,
+      routing: micro.routing,
+      lastHit: micro.last_call_was_hit,
+      fireCount: micro.fire_count
+    });
+
+    leafGroup.add(microMesh);
+  }
+
+  // Store leaf data for animation
+  const leafData = {
+    group: leafGroup,
+    wireMesh,
+    fillMesh,
+    micros,
+    parentAgentId: agentId,
+    leafState: leaf.state,
+    orbitAngle,
+    orbitIncline,
+    leafId: leaf.id
+  };
+
+  leafMeshData.set(leaf.id, leafData);
+
+  return { group: leafGroup, data: leafData };
+}
+
+// ────────── Build All Leaves and Micros ──────────
+function buildLeavesAndMicros() {
+  // Iterate over all agents
+  for (const agent of STATE.agents || []) {
+    const agentData = agentGlobeData.get(agent.id);
+    if (!agentData) continue;
+
+    // Create a group to hold all leaves for this agent
+    const agentLeafGroup = new THREE.Group();
+    agentLeafGroup.name = `leaves-${agent.id}`;
+
+    // Get agent's identity color
+    const identityColor = THEME.identity?.[agent.id] || '#7AE5FF';
+
+    const leaves = agent.leaves || [];
+    const leafMap = new Map();
+
+    for (let li = 0; li < leaves.length; li++) {
+      const leaf = leaves[li];
+      const { group, data } = createLeafMesh(leaf, agent.id, li, leaves.length, identityColor);
+      leafMap.set(leaf.id, data);
+      agentLeafGroup.add(group);
+    }
+
+    // Position the leaf group at the agent's position (leaves orbit around this point)
+    agentLeafGroup.position.copy(agentData.position);
+
+    // Initially hidden — visibility controlled by focus state
+    agentLeafGroup.visible = false;
+
+    // Add to main group and store reference
+    mainGroup.add(agentLeafGroup);
+    agentLeafMeshes.set(agent.id, {
+      group: agentLeafGroup,
+      leaves: leafMap,
+      agentPosition: agentData.position.clone()
+    });
+  }
+}
+
+// ────────── Animate Leaves and Micros ──────────
+function animateLeavesAndMicros(t) {
+  const ft = focusTarget;
+  const zoomPreset = currentZoomPreset;
+
+  // Determine if we should show leaves (only when focused on an agent or leaf)
+  const shouldShowLeaves = ft && (zoomPreset === 'agents' || zoomPreset === 'leaves');
+  const focusedAgentId = ft?.type === 'agent' ? ft.id : (ft?.type === 'leaf' ? ft.agentId : null);
+
+  agentLeafMeshes.forEach((agentLeafData, agentId) => {
+    const isThisAgentFocused = agentId === focusedAgentId;
+    const showThisAgent = shouldShowLeaves && isThisAgentFocused;
+
+    // Animate visibility (instant for now, could add fade)
+    agentLeafData.group.visible = showThisAgent;
+
+    if (!showThisAgent) return;
+
+    // Update each leaf's orbit position
+    agentLeafData.leaves.forEach((leafData) => {
+      // Leaf orbits around agent at LEAF_ORBIT_RADIUS
+      const leafOrbitT = t * LEAF_ORBIT_SPEED + leafData.orbitAngle;
+
+      // Position on orbital circle (with incline for visual interest)
+      const lx = Math.cos(leafOrbitT) * LEAF_ORBIT_RADIUS;
+      const ly = Math.sin(leafData.orbitIncline * 2) * LEAF_ORBIT_RADIUS * 0.3;
+      const lz = Math.sin(leafOrbitT) * LEAF_ORBIT_RADIUS;
+
+      leafData.group.position.set(lx, ly, lz);
+
+      // Rotate leaf mesh slowly for visual interest
+      leafData.wireMesh.rotation.y = t * 0.1;
+      leafData.wireMesh.rotation.x = t * 0.07;
+
+      // Update micros orbiting this leaf
+      leafData.micros.forEach((micro, mi) => {
+        const microOrbitT = t * MICRO_ORBIT_SPEED + micro.orbitAngle;
+
+        // Position micro on its orbit around the leaf
+        const mx = Math.cos(microOrbitT) * MICRO_ORBIT_RADIUS;
+        const my = Math.sin(microOrbitT + mi * 0.5) * MICRO_ORBIT_RADIUS * 0.5;
+        const mz = Math.sin(microOrbitT) * MICRO_ORBIT_RADIUS;
+
+        micro.mesh.position.set(mx, my, mz);
+
+        // Subtle pulse effect on micros that recently fired (hit)
+        if (micro.lastHit) {
+          const pulseScale = 1.0 + Math.sin(t * 2) * 0.15;
+          micro.mesh.scale.setScalar(pulseScale);
+        } else {
+          micro.mesh.scale.setScalar(1.0);
+        }
+      });
+    });
+  });
+}
+
+// Build leaves and micros on initialization
+buildLeavesAndMicros();
+
+// Register animation hook
+animationHooks.push(animateLeavesAndMicros);
+
 // ────────── Export Agent Globe Data for Other Leaves ──────────
 // Other leaves (leaves-and-micros, multiverse, hud-overlays, etc.)
 
@@ -2207,7 +2601,30 @@ window.__DASHBOARD_CANVAS__ = {
   currentZoomPreset: () => currentZoomPreset,
   raycaster,
   getAgentHitTargets,
-  getLeafHitTargets
+  getLeafHitTargets,
+  // Multiverse exports (dashboard.canvas.multiverse)
+  multiverseGroup,
+  productMinis,
+  multiverseEdges,
+  mvPackets,
+  MULTIVERSE_OUTER_RADIUS,
+  MULTIVERSE_MINI_GLOBE_R,
+  enterProductView,
+  enterMultiverseView,
+  makeTextSprite,
+  getProductHitMeshes,
+  // Leaves & micros exports (dashboard.canvas.leaves-and-micros)
+  agentLeafMeshes,
+  leafMeshData,
+  LEAF_ORBIT_RADIUS,
+  MICRO_ORBIT_RADIUS,
+  LEAF_ORBIT_SPEED,
+  MICRO_ORBIT_SPEED,
+  MICRO_CHEAP_COLOR,
+  MICRO_FULL_COLOR,
+  createLeafMesh,
+  buildLeavesAndMicros,
+  animateLeavesAndMicros
 };
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -2573,6 +2990,227 @@ window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgres
     renderProvidersList,
     LATENCY_SLOW_MS,
     LATENCY_VERY_SLOW_MS
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// AGENTS RAIL — bottom section of right rail
+// Scope: dashboard.console.agents-rail
+// Consumes: STATE.agents[], THEME.identity, THEME.lifecycle, THEME.modulator
+//
+// Displays agent list with:
+//   - 3px left border colored by theme.identity[agent.id] modulated by brightness
+//   - Agent name
+//   - Lifecycle pill (text from agent.state, background from theme.lifecycle)
+//   - Click fires selectAgent → dispatches CustomEvent("dashboard:agent-select")
+//   - Second click pins, third click unpins
+// Per NUTRIENTS §2 AgentState interface
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initAgentsRail() {
+  const agentsListEl = document.getElementById('agents-list');
+  if (!agentsListEl) return;
+
+  // ── State tracking for selection + pinning ──
+  let selectedAgentId = null;
+  let pinnedAgentId = null;
+  let clickCount = 0; // Tracks clicks on same agent for pin/unpin logic
+
+  // ── Map agent.state → modulator key for brightness ──
+  // Per NUTRIENTS §1: modulator has pending_brightness, active_brightness, fruit_brightness, failed_brightness
+  // dorm uses pending_brightness as fallback
+  function mapStateToModulator(state) {
+    switch (state) {
+      case 'pending': return 'pending_brightness';
+      case 'active':  return 'active_brightness';
+      case 'fruit':   return 'fruit_brightness';
+      case 'failed':  return 'failed_brightness';
+      case 'dorm':    return 'pending_brightness'; // dorm uses pending as fallback
+      default:        return 'pending_brightness';
+    }
+  }
+
+  // ── Helper: modulate hex color brightness ──
+  // Takes a hex color and a brightness multiplier (0-1), returns adjusted hex
+  function modulateBrightness(hex, brightness) {
+    if (!hex || typeof brightness !== 'number') return hex;
+    // Parse hex
+    let r, g, b;
+    if (hex.length === 7) {
+      r = parseInt(hex.slice(1, 3), 16);
+      g = parseInt(hex.slice(3, 5), 16);
+      b = parseInt(hex.slice(5, 7), 16);
+    } else if (hex.length === 4) {
+      r = parseInt(hex[1] + hex[1], 16);
+      g = parseInt(hex[2] + hex[2], 16);
+      b = parseInt(hex[3] + hex[3], 16);
+    } else {
+      return hex;
+    }
+    // Apply brightness (simple linear scaling)
+    r = Math.round(r * brightness);
+    g = Math.round(g * brightness);
+    b = Math.round(b * brightness);
+    // Clamp
+    r = Math.min(255, Math.max(0, r));
+    g = Math.min(255, Math.max(0, g));
+    b = Math.min(255, Math.max(0, b));
+    // Convert back to hex
+    return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+  }
+
+  // ── selectAgent: dispatch CustomEvent and open inspect panel ──
+  function selectAgent(agentId) {
+    // Per HYPHA spec: fires CustomEvent("dashboard:agent-select", { detail: agent.id })
+    window.dispatchEvent(new CustomEvent('dashboard:agent-select', { detail: agentId }));
+  }
+
+  // ── Handle agent row click with pin/unpin logic ──
+  // Per HYPHA spec:
+  //   - Click on agent → select + open inspect panel
+  //   - Second click on same agent → pin (sticky open)
+  //   - Third click → unpin + close
+  function handleAgentClick(agentId) {
+    if (selectedAgentId === agentId) {
+      // Same agent clicked again
+      clickCount++;
+      if (clickCount === 2) {
+        // Second click: pin
+        pinnedAgentId = agentId;
+        updateRowStates();
+      } else if (clickCount >= 3) {
+        // Third click: unpin + close
+        pinnedAgentId = null;
+        selectedAgentId = null;
+        clickCount = 0;
+        updateRowStates();
+        // Dispatch close event for inspect panel
+        window.dispatchEvent(new CustomEvent('dashboard:agent-close', { detail: agentId }));
+        return;
+      }
+    } else {
+      // Different agent clicked
+      selectedAgentId = agentId;
+      clickCount = 1;
+      // If we had a pinned agent that wasn't this one, unpin it
+      if (pinnedAgentId && pinnedAgentId !== agentId) {
+        pinnedAgentId = null;
+      }
+      updateRowStates();
+    }
+    // Fire select event
+    selectAgent(agentId);
+  }
+
+  // ── Update row selected/pinned classes ──
+  function updateRowStates() {
+    const rows = agentsListEl.querySelectorAll('.agent-row');
+    rows.forEach(row => {
+      const rowId = row.dataset.agentId;
+      row.classList.toggle('selected', rowId === selectedAgentId);
+      row.classList.toggle('pinned', rowId === pinnedAgentId);
+    });
+  }
+
+  // ── Render a single agent row ──
+  function renderAgentRow(agent) {
+    // Per NUTRIENTS §2: AgentState { id, state, paused, contracts, provider, leaves, history, cost_usd, tokens }
+    const agentId = agent.id || 'unknown';
+    const agentState = agent.state || 'dorm';
+
+    // Get identity color from theme (fallback to cryo)
+    const baseIdentityColor = THEME.identity?.[agentId] || THEME.palette?.cryo || '#7AE5FF';
+
+    // Get brightness modulator based on state
+    const modulatorKey = mapStateToModulator(agentState);
+    const brightness = THEME.modulator?.[modulatorKey] ?? 1.0;
+
+    // Apply brightness modulation to identity color
+    const modulatedColor = modulateBrightness(baseIdentityColor, brightness);
+
+    // Create row element
+    const row = document.createElement('div');
+    row.className = 'agent-row';
+    row.dataset.agentId = agentId;
+    row.style.borderLeftColor = modulatedColor;
+
+    // Check if this row is selected/pinned
+    if (agentId === selectedAgentId) {
+      row.classList.add('selected');
+    }
+    if (agentId === pinnedAgentId) {
+      row.classList.add('pinned');
+    }
+
+    row.innerHTML = `
+      <span class="agent-name">${agentId}</span>
+      <span class="lifecycle-pill ${agentState}">${agentState}</span>
+    `;
+
+    // Click handler
+    row.addEventListener('click', () => handleAgentClick(agentId));
+
+    return row;
+  }
+
+  // ── Render the full agents list ──
+  function renderAgentsList() {
+    // Clear existing content
+    agentsListEl.innerHTML = '';
+
+    const agents = STATE.agents || [];
+
+    if (agents.length === 0) {
+      // Empty state per HYPHA spec: "no agents" when empty
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'empty-state';
+      emptyEl.textContent = 'no agents';
+      agentsListEl.appendChild(emptyEl);
+      return;
+    }
+
+    // Render each agent
+    agents.forEach(agent => {
+      const row = renderAgentRow(agent);
+      agentsListEl.appendChild(row);
+    });
+  }
+
+  // ── Keyboard handler: Esc closes inspect panel ──
+  // Per HYPHA spec: Esc keypress closes (and unpins)
+  function handleKeydown(e) {
+    if (e.key === 'Escape') {
+      if (selectedAgentId) {
+        const prevAgentId = selectedAgentId;
+        pinnedAgentId = null;
+        selectedAgentId = null;
+        clickCount = 0;
+        updateRowStates();
+        // Dispatch close event
+        window.dispatchEvent(new CustomEvent('dashboard:agent-close', { detail: prevAgentId }));
+      }
+    }
+  }
+
+  // ── Listen for keyboard events ──
+  window.addEventListener('keydown', handleKeydown);
+
+  // ── Initial render ──
+  renderAgentsList();
+
+  // ── Export for other console leaves and re-render capability ──
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.agentsRail = {
+    renderAgentsList,
+    selectAgent,
+    getSelectedAgentId: () => selectedAgentId,
+    getPinnedAgentId: () => pinnedAgentId,
+    clearSelection: () => {
+      selectedAgentId = null;
+      pinnedAgentId = null;
+      clickCount = 0;
+      updateRowStates();
+    }
   };
 })();
 
