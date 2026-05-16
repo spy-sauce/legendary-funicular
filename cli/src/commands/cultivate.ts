@@ -88,6 +88,11 @@ export function registerCultivateCommand(program: Command): void {
       "--no-push",
       "Auto-commit but do not push to origin (default: push)"
     )
+    .option(
+      "--no-cache",
+      "Skip cache-network wrapper (default: cache ON)",
+      false
+    )
     .action(async (opts) => {
       const configPath = path.join(process.cwd(), "mycelium.yaml");
       if (!fs.existsSync(configPath)) {
