@@ -498,6 +498,226 @@ createAgentGlobe();
 // Register agent globe animation hook
 animationHooks.push(animateAgentGlobe);
 
+// ════════════════════════════════════════════════════════════════════════════════
+// CACHE RELAYS — inner-shell octahedron network at radius 2.6
+// Scope: dashboard.canvas.cache-relays
+// Consumes: STATE.agents[], THEME.identity["cache-network-store"], agentGlobeData
+//
+// 4-6 octahedron relay nodes forming an inner cache network shell. Each agent
+// edges to its nearest relay; relays form a 2-neighbor mesh among themselves.
+// Slow sinusoidal breath animation (0.8 rad/s) — well under the 1.5Hz ceiling.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Cache Relay Constants ──────────
+const CACHE_RELAY_RADIUS = 2.6;  // inner radius vs agent GLOBE_R=4.6
+const CACHE_RELAY_COUNT = 5;     // 4-6 relays; 5 for good fibonacci distribution
+const CACHE_RELAY_BREATH_RATE = 0.8; // rad/s — under 1.5Hz ceiling
+
+// Color from theme identity, fallback to cyan-teal (#1E9EBF)
+const CACHE_RELAY_COLOR_HEX = parseInt(
+  (THEME.identity['cache-network-store'] || '#1E9EBF').replace('#', ''),
+  16
+);
+const CACHE_RELAY_COLOR = new THREE.Color(CACHE_RELAY_COLOR_HEX);
+
+// Shared geometry — OctahedronGeometry (faceted look, distinct from agent Bloch rings)
+const CACHE_RELAY_GEO = new THREE.OctahedronGeometry(0.18, 0);
+
+// ────────── Cache Relay Data Structures ──────────
+const cacheRelayGroup = new THREE.Group();
+mainGroup.add(cacheRelayGroup);
+
+// Relay nodes: { id, basePos, wireMesh, fillMesh, haloMesh, wireMat, fillMat, haloMat }
+const cacheRelays = [];
+
+// Agent → relay edges: { agentId, relay, line, mat, geo }
+const cacheRelayEdges = [];
+
+// Relay → relay mesh edges: { ai, bi, line, mat }
+const cacheRelayMesh = [];
+
+// ────────── Create Cache Relay Nodes ──────────
+// Fibonacci-distributed on inner sphere at CACHE_RELAY_RADIUS
+for (let i = 0; i < CACHE_RELAY_COUNT; i++) {
+  // Fibonacci sphere position (same algorithm as agent-globe)
+  const basePos = fibonacciSpherePosition(i, CACHE_RELAY_COUNT, CACHE_RELAY_RADIUS);
+
+  // Wireframe octahedron
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: CACHE_RELAY_COLOR_HEX,
+    transparent: true,
+    opacity: 0.55,
+    wireframe: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const wireMesh = new THREE.Mesh(CACHE_RELAY_GEO, wireMat);
+  wireMesh.position.copy(basePos);
+  cacheRelayGroup.add(wireMesh);
+
+  // Solid fill (back-face, subtle inner glow)
+  const fillMat = new THREE.MeshBasicMaterial({
+    color: CACHE_RELAY_COLOR_HEX,
+    transparent: true,
+    opacity: 0.12,
+    side: THREE.BackSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const fillMesh = new THREE.Mesh(CACHE_RELAY_GEO, fillMat);
+  fillMesh.position.copy(basePos);
+  cacheRelayGroup.add(fillMesh);
+
+  // Soft halo sphere (focus indicator, faint by default)
+  const haloMat = new THREE.MeshBasicMaterial({
+    color: CACHE_RELAY_COLOR_HEX,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide
+  });
+  const haloMesh = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), haloMat);
+  haloMesh.position.copy(basePos);
+  cacheRelayGroup.add(haloMesh);
+
+  cacheRelays.push({
+    id: `cache-relay-${i}`,
+    basePos: basePos.clone(),
+    wireMesh,
+    fillMesh,
+    haloMesh,
+    wireMat,
+    fillMat,
+    haloMat
+  });
+}
+
+// ────────── Agent → Nearest Cache Relay Edges ──────────
+// Each agent connects to its 3D-nearest relay with a subtle line
+agentGlobeData.forEach((agentData, agentId) => {
+  let nearestRelay = null;
+  let nearestDist = Infinity;
+
+  cacheRelays.forEach(relay => {
+    const dist = agentData.basePosition.distanceTo(relay.basePos);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearestRelay = relay;
+    }
+  });
+
+  if (nearestRelay) {
+    // Line geometry from agent position to relay position
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([
+      agentData.basePosition.x, agentData.basePosition.y, agentData.basePosition.z,
+      nearestRelay.basePos.x, nearestRelay.basePos.y, nearestRelay.basePos.z
+    ], 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color: CACHE_RELAY_COLOR_HEX,
+      transparent: true,
+      opacity: 0.10,
+      blending: THREE.AdditiveBlending
+    });
+
+    const line = new THREE.Line(geo, mat);
+    cacheRelayGroup.add(line);
+
+    cacheRelayEdges.push({
+      agentId,
+      relay: nearestRelay,
+      line,
+      mat,
+      geo
+    });
+
+    // Store relay reference on agent data for other leaves (pulses, etc.)
+    agentData.cacheRelay = nearestRelay;
+  }
+});
+
+// ────────── Relay → Relay Mesh (2-neighbor connectivity) ──────────
+// Each relay connects to its 2 nearest neighbors, avoiding duplicate edges
+cacheRelays.forEach((relayA, ai) => {
+  // Calculate distances to all other relays
+  const distances = cacheRelays
+    .map((relayB, bi) => ({
+      relay: relayB,
+      bi,
+      dist: relayA.basePos.distanceTo(relayB.basePos)
+    }))
+    .filter(x => x.bi !== ai)
+    .sort((a, b) => a.dist - b.dist);
+
+  // Connect to 2 nearest neighbors
+  distances.slice(0, 2).forEach(({ relay: relayB, bi }) => {
+    // Avoid duplicate edges (A→B and B→A)
+    const edgeExists = cacheRelayMesh.some(
+      e => (e.ai === ai && e.bi === bi) || (e.ai === bi && e.bi === ai)
+    );
+    if (edgeExists) return;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([
+      relayA.basePos.x, relayA.basePos.y, relayA.basePos.z,
+      relayB.basePos.x, relayB.basePos.y, relayB.basePos.z
+    ], 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color: CACHE_RELAY_COLOR_HEX,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending
+    });
+
+    const line = new THREE.Line(geo, mat);
+    cacheRelayGroup.add(line);
+
+    cacheRelayMesh.push({ ai, bi, line, mat });
+  });
+});
+
+// ────────── Cache Relay Animation ──────────
+// Slow sinusoidal breath (0.8 rad/s) — well under 1.5Hz ceiling
+function animateCacheRelays(t) {
+  cacheRelays.forEach((relay, ri) => {
+    // Slow breath: sin(t * 0.8 + relayIndex * 0.9)
+    // 0.8 rad/s ≈ 0.127 Hz — safely under 1.5Hz ceiling
+    const breath = (Math.sin(t * CACHE_RELAY_BREATH_RATE + ri * 0.9) + 1) * 0.5;
+
+    // Modulate wireframe opacity (0.55 base + breath variation)
+    const baseWireOpacity = 0.55;
+    relay.wireMat.opacity = baseWireOpacity + breath * 0.25;
+
+    // Modulate fill opacity (0.10 base + breath variation)
+    const baseFillOpacity = 0.10;
+    relay.fillMat.opacity = baseFillOpacity + breath * 0.08;
+
+    // Halo: very subtle breath (only visible during focus, handled by other leaves)
+    relay.haloMat.opacity = breath * 0.05;
+
+    // Very slow self-rotation (0.18 rad/s)
+    relay.wireMesh.rotation.y = t * 0.18 + ri;
+    relay.fillMesh.rotation.y = t * 0.18 + ri;
+
+    // Gentle breath scale (1.0 to 1.06)
+    const scale = 1.0 + breath * 0.06;
+    relay.wireMesh.scale.setScalar(scale);
+    relay.fillMesh.scale.setScalar(scale);
+  });
+
+  // Relay mesh edges — subtle pulse in unison
+  const meshBreath = (Math.sin(t * CACHE_RELAY_BREATH_RATE * 0.7) + 1) * 0.5;
+  cacheRelayMesh.forEach(edge => {
+    edge.mat.opacity = 0.14 + meshBreath * 0.04;
+  });
+}
+
+// Register cache relay animation hook
+animationHooks.push(animateCacheRelays);
+
 // ────────── Export Agent Globe Data for Other Leaves ──────────
 // Other leaves (leaves-and-micros, adaptive-zoom, etc.) need agent positions
 
@@ -522,7 +742,15 @@ window.__DASHBOARD_CANVAS__ = {
   getBrightnessForState,
   modulateColor,
   TAU,
-  PHI
+  PHI,
+  // Cache relay exports (dashboard.canvas.cache-relays)
+  cacheRelayGroup,
+  cacheRelays,
+  cacheRelayEdges,
+  cacheRelayMesh,
+  CACHE_RELAY_RADIUS,
+  CACHE_RELAY_COLOR_HEX,
+  CACHE_RELAY_COLOR
 };
 
 // ────────── Cleanup on page unload ──────────
