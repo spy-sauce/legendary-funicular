@@ -29,3 +29,6 @@ Thumbs.db
 
 # Mycelium telemetry (runtime, local)
 .mycelium/
+
+# Superpowers brainstorming scratch
+.superpowers/
