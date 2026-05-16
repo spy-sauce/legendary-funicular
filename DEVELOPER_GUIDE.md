@@ -824,6 +824,211 @@ Cross-reference: see the "Cache-Network" section (§17) for the full cache runti
 
 ---
 
+## 17. Cache-Network
+
+A cultivation-scoped memoization layer that intercepts model calls at the SDK chokepoint. Every leaf and its sub-workers query the same shared cache; hits skip the LLM round-trip entirely. The result is lower per-run cost, faster heal-loop replays, and a first-class cost-savings metric visible in the dashboard.
+
+For design rationale — why per-cultivation scope, why 2–4 micros per leaf, why LRU and not TRS-weighted eviction — see `docs/cache-network-micro-agents.md`. This section documents shipped behavior only.
+
+### 17.1 Two canonical terms
+
+| Term | What it names |
+|------|---------------|
+| **CACHE_NET** | The framework-level shared cache layer. Keyed by `tool + normalized_args + contract_hash`. LRU-evicted. Iter-invalidated on heal-loop advance. Emits `cache.hit` / `cache.miss` / `cache.evict` / `cache.pulse` events to the BIOME BUS. |
+| **MICRO** | A sub-leaf worker. 2–4 spawned per leaf at `active`, retired at `done`/`failed`. Routes between `cheap` (Haiku-class) and `full` (Opus-class) providers. Not a separate process — bookkeeping only. Visible on the dashboard canvas as small spheres orbiting each leaf. |
+
+Both terms are now frozen framework vocabulary (NUTRIENTS.md §7). Lowercase in prose, uppercase in spec contexts.
+
+### 17.2 The `--no-cache` flag
+
+Cache is ON by default. Pass `--no-cache` to `mycelium cultivate` to disable it:
+
+```bash
+mycelium cultivate --no-cache
+```
+
+With `--no-cache`, every SDK call goes to the model; no cache lookup, no cache write, no cache events. The cultivation behaves as if CACHE_NET does not exist.
+
+**When to use it:**
+
+| Scenario | Why |
+|----------|-----|
+| Debugging cache invalidation issues | Confirms whether a bug is cache-related or in the underlying code. |
+| A/B comparison against cached baselines | Run one cultivation with cache, one without; compare cost and output. |
+| Reproducing a known-cold run | Ensures no stale cache entries from prior iterations affect the result. |
+
+Source: `cli/src/commands/cultivate.ts` — the integration biome's SDK-call wrapper checks this flag and short-circuits the cache path when set.
+
+### 17.3 Event types
+
+Four cache events flow to the JSONL stream (`.mycelium/events/<organism>.jsonl`) per NUTRIENTS.md §3. The dashboard consumes each for a different surface:
+
+| Event | Shape | Dashboard surface |
+|-------|-------|-------------------|
+| `cache.hit` | `{ type, ts, leaf_id, key_hash, saved_tokens, saved_usd }` | Canvas pulse animations (cyan hit-ring on cache relay) |
+| `cache.miss` | `{ type, ts, leaf_id, key_hash }` | Canvas pulse animations (gold miss-ring, relay dims briefly) |
+| `cache.evict` | `{ type, ts, key_hash, reason }` | Event feed (lifecycle category); `reason` is `"lru"`, `"iter_invalidate"`, or `"contract_change"` |
+| `cache.pulse` | `{ type, ts, window_seconds, hits, misses, net_saved_usd }` | Metric strip ticker readouts (Cache hit %, Calls saved) |
+
+Raw `cache.hit` and `cache.miss` events emit on every call. The `cache.pulse` event aggregates over a 1.4-second window and only emits when at least one hit or miss occurred in that window.
+
+The `key_hash` field is the first 12 characters of `sha256(tool_name + "|" + normalized_args + "|" + contract_hash)`. Operators see the prefix only — raw args (which may contain prompts or secrets) are never logged.
+
+### 17.4 `state.cache` in `sporenet/state.json`
+
+The cache integration writes an additive `cache` block to `sporenet/state.json` on a 1.4-second cadence (matching the pulse aggregator). Existing fields are untouched.
+
+```ts
+interface SporenetState {
+  // ... existing fields preserved ...
+  cache?: {
+    hits: number;
+    misses: number;
+    entries: number;
+    capacity: number;
+    last_updated: string;     // ISO-8601
+  };
+}
+```
+
+**Reader tolerance:** `buildDashboardState` treats a missing `cache` block as `{ hits: 0, misses: 0, entries: 0, capacity: 0, recent_keys: [] }`. Pre-cache-network cultivations (no `cache` field) render cleanly with zeroed metrics.
+
+**Writer:** `cli/src/lib/cache-network/accounting.ts:writeCachePulse(stateDir, cacheState)`. Reads current `state.json`, deep-merges the new `cache` block, writes atomically via temp-file/rename (serialized promise chain, never loses writes).
+
+### 17.5 Cost accounting
+
+Every cache hit saves a model call. The cost savings are computed as:
+
+```
+saved_usd = saved_tokens × UNIT_COST
+```
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `UNIT_COST` | `0.000003` | Rough per-input-token cost for Opus-class models (claude-opus-4-0-20250514). |
+
+`UNIT_COST` is exported from `cli/src/lib/cache-network/accounting.ts`. The constant assumes Opus input pricing; actual savings vary by model tier. For v1, the constant is hardcoded — there is no env-var or config-file override.
+
+**To retune:** edit `cli/src/lib/cache-network/accounting.ts` and rebuild the CLI. Update the constant if your cultivation predominantly uses cheaper or more expensive models.
+
+Per-hit `saved_usd` is recorded in each `cache.hit` event. Aggregate `net_saved_usd` over each 1.4-second window is recorded in `cache.pulse` events. Both flow to the dashboard's cost roll-up.
+
+### 17.6 Tuning capacity
+
+Cache capacity is configured at store instantiation via constructor options:
+
+```ts
+import { makeCacheStore } from "../lib/cache-network/index.js";
+
+const store = makeCacheStore({
+  capacity: 1000,           // max entries before LRU eviction
+  eventsPath: "/path/to/.mycelium/events/org.jsonl", // optional
+});
+```
+
+In the `cultivate.ts` integration, capacity is currently a compile-time constant. To change it:
+
+1. Open `cli/src/commands/cultivate.ts`.
+2. Locate the `makeCacheStore({ capacity: ... })` call.
+3. Change the `capacity` value.
+4. Rebuild: `cd cli && npm run build`.
+
+**v1 limitation:** no env-var (`MYCELIUM_CACHE_CAPACITY`) or `mycelium.yaml` field exists yet. Adding an external config surface is planned for v2; for now, the constant lives in source. Document any custom capacity in your organism's `CLAUDE.md` so future operators know the tuning.
+
+**Eviction policy:** strict LRU. When the store is at capacity and a new entry arrives, the least-recently-accessed entry is evicted. A `cache.evict` event with `reason: "lru"` is emitted.
+
+**Iter invalidation:** when the heal-loop advances iteration, `store.invalidateIter(prevIter)` evicts all entries from the previous iteration. This prevents stale results from a failed iteration leaking into the retry. A `cache.evict` event with `reason: "iter_invalidate"` is emitted per evicted entry.
+
+### 17.7 Cross-reference: Dashboard surfaces
+
+The Dashboard section (§16) describes the operator console. Cache-network surfaces in the dashboard include:
+
+| Surface | Location | Data source |
+|---------|----------|-------------|
+| Cache hit % metric | Metric strip, 6th cell | `state.cache.hits / (hits + misses)` |
+| Calls saved metric | Metric strip, 7th cell | `state.cache.hits` |
+| Cache filter chip | Feedbar | Filters event feed to `category: "cache"` events |
+| Cache relay nodes | Canvas inner shell | 4–6 cyan-teal octahedrons at radius 2.6 |
+| Hit/miss pulse rings | Canvas | Cyan ring on hit, gold ring on miss, per `cache.hit` / `cache.miss` events |
+
+See `docs/dashboard-theming.md` for palette customization; the cache relay color is `palette.cryo` (default `#7AE5FF`).
+
+### 17.8 Cache key derivation
+
+Cache keys are content-addressed hashes derived from three inputs:
+
+```ts
+import { cacheKey } from "../lib/cache-network/index.js";
+
+const key = cacheKey({
+  tool_name: "claude-agent-sdk",
+  args: normalizedPrompt,
+  contract_hash: nutrientsHash,
+});
+// Returns: sha256 hex string (64 chars)
+```
+
+**Normalization:** `args` is JSON-stringified with sorted object keys before hashing. This ensures semantically identical prompts with different key order produce the same cache key.
+
+**Contract hash:** derived from `NUTRIENTS.md` content at freeze time. If contracts change between runs, all prior cache entries become unhittable (different `contract_hash` → different key). This is intentional — contract changes invalidate cached reasoning.
+
+**Key collision:** vanishingly unlikely given sha256. The framework does not handle collisions; they are treated as cache hits. If you somehow manufacture a collision, congratulations — you've broken cryptography.
+
+### 17.9 Micro-agent fan-out
+
+Each leaf spawns 2–4 micro-agents at `active` time. Micros are bookkeeping units, not separate processes — they share the parent leaf's Claude session but track routing and cache behavior independently.
+
+**Spawn logic:** `cli/src/lib/micro-agents/spawn.ts:spawnMicros({ leafId, severity? })` uses a seeded PRNG (sha256 of `leafId`, first 4 bytes as seed) to deterministically generate 2–4 micros per leaf.
+
+**Routing split:**
+
+| Severity | cheap (Haiku-class) | full (Opus-class) |
+|----------|---------------------|-------------------|
+| `"critical"` | 50% | 50% |
+| `"major"` or `"minor"` | 70% | 30% |
+| (unset) | 70% | 30% |
+
+Micros inherit their parent leaf's lifecycle — they do not emit their own `leaf_started` / `leaf_fruited` events. The bus sees one `cache_pulse` per leaf at FRUIT time that aggregates all micro cache activity.
+
+**Dashboard visibility:** micros appear as small spheres orbiting each leaf node on the 3D canvas. Violet (`#B7A8E8`) for cheap routing, cyan (`#7AE5FF`) for full routing. They render only when the parent agent is focused and the leaf is `active` or `done` — at globe zoom they are hidden to reduce visual noise.
+
+### 17.10 Lifecycle integration
+
+The cache network integrates with cultivate's lifecycle at three points:
+
+| Hook | What happens | Source |
+|------|--------------|--------|
+| SDK-call chokepoint | Cache lookup before model call; cache write after call | `cultivate.ts` SDK wrapper |
+| Iter advance | `invalidateIter(prevIter)` evicts stale entries | `cultivate.ts` heal-loop handler |
+| Shutdown | `stopPulseAggregator()` flushes pending pulse and cleans up timer | `cultivate.ts` exit handler |
+
+**Heal-loop behavior:** when a cultivation enters a retry iteration (after a leaf failure), the prior iteration's cache entries are invalidated. This ensures the retry starts with a clean cache for the affected sub-tree, preventing stale results from masking real fixes.
+
+**Graceful shutdown:** on SIGINT or successful completion, the cultivate command calls `stopPulseAggregator()` to flush any pending pulse event and clear the interval timer. This ensures the final `state.json` snapshot includes accurate cache stats.
+
+### 17.11 Troubleshooting
+
+**Cache never hits:**
+- Check `--no-cache` isn't set (either via CLI flag or env var).
+- Verify prompts are deterministic — any non-determinism in prompt generation (timestamps, random IDs) produces different cache keys on each call.
+- Check contract hash — if `NUTRIENTS.md` changed between runs, all prior keys are invalid.
+
+**Cache hits but results are stale:**
+- Run with `--no-cache` to confirm the issue is cache-related.
+- Check iter invalidation — if heal-loop advanced but `invalidateIter` wasn't called, stale entries persist.
+- Force-clear by deleting `.mycelium/cache/` if disk-backed caching is enabled (not in v1 by default).
+
+**Dashboard shows 0% hit rate:**
+- Confirm `sporenet/state.json` has a `cache` block (check `last_updated` timestamp).
+- Verify JSONL events are writing to the expected path (check `.mycelium/events/<organism>.jsonl`).
+- Check browser console for SSE connection errors.
+
+**Pulse events missing:**
+- The pulse aggregator only emits when `hits + misses > 0` in the 1.4s window. A quiet cultivation produces no pulses.
+- Check `eventsPath` was passed to `makeCacheStore` — without it, no events emit.
+
+---
+
 That's the full surface area. A new dev should be able to read `cli/src/commands/cultivate.ts` + this guide and ship their own organism.
 
 *The network provides.* 🍄
