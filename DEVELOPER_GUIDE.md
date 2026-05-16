@@ -782,6 +782,48 @@ For the full authoring guide — CACHE HEADER fields, assertion patterns, repro 
 
 ---
 
+## 16. Dashboard
+
+A live operator console that renders any cultivation's `sporenet/state.json` as a 3D canvas — a Three.js fibonacci-sphere agent globe with an inner cache-relay shell — plus DOM chrome for metrics, alerts, and event feeds. The dashboard reads state and theme per-request and re-renders on refresh, mirroring the `mycelium sporenet serve` live-render discipline.
+
+### 16.1 Command surface
+
+| Subcommand | Description | Key flags |
+|------------|-------------|-----------|
+| `mycelium dashboard init` | Scaffold `theme.yaml` (from default) + static `sporenet/dashboard.html` snapshot | `--cwd <path>`, `--force` (overwrites existing) |
+| `mycelium dashboard serve` | HTTP server with live re-render and SSE event stream | `--port <n>` (default 3334), `--cwd <path>` |
+| `mycelium dashboard render` | One-shot static render to `sporenet/dashboard.html` (no server) | `--cwd <path>`, `--out <path>` |
+
+Source: `cli/src/commands/dashboard/`.
+
+### 16.2 `theme.yaml` location
+
+The theme file lives at the cultivation root next to `mycelium.yaml`. Running `dashboard init` writes a default theme from `templates/theme.default.yaml`; operators edit in place.
+
+Schema: see NUTRIENTS.md §1 for the canonical `DashboardTheme` shape (brand, palette, lifecycle, severity, identity, modulator).
+
+Worked example: see `docs/dashboard-theming.md` for customizing themes per-cultivation.
+
+### 16.3 How serve re-renders
+
+Every `GET /` request to the dashboard server re-reads `sporenet/state.json` + `theme.yaml` from disk and re-runs the template renderer. Editing `theme.yaml` and refreshing the page is the inner loop — no server restart required.
+
+Routes:
+
+| Route | Description |
+|-------|-------------|
+| `GET /` | Re-reads state + theme, renders `templates/dashboard.html` with inlined `window.__DASHBOARD_STATE__` and `window.__DASHBOARD_THEME__` |
+| `GET /events/stream` | SSE stream tailing `.mycelium/events/<organism>.jsonl` for real-time updates |
+| `GET /static/*` | Serves assets from `templates/` (mostly empty in v1 — Three.js loads from CDN) |
+
+### 16.4 Cache-network surfaces
+
+The inner shell of the canvas renders cache relays as cyan-teal octahedrons. Hit-ring and miss-ring animations pulse on `cache.hit` / `cache.miss` events emitted to the JSONL stream (see NUTRIENTS.md §3 for event shapes). The metric strip shows live cache hit percentage and calls saved.
+
+Cross-reference: see the "Cache-Network" section (§17) for the full cache runtime and event schema.
+
+---
+
 That's the full surface area. A new dev should be able to read `cli/src/commands/cultivate.ts` + this guide and ship their own organism.
 
 *The network provides.* 🍄
