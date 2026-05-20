@@ -3081,7 +3081,7 @@ const MULTIVERSE_MINI_GLOBE_R = 1.2;
 function makeTextSprite(text, size = 40, color = '#A8B4C5') {
   const c = document.createElement('canvas'); c.width = 512; c.height = 80;
   const cx = c.getContext('2d');
-  cx.font = \`400 \${size}px "Geist Mono", monospace\`;
+  cx.font = `400 ${size}px "Geist Mono", monospace`;
   cx.fillStyle = color; cx.textAlign = 'center'; cx.textBaseline = 'middle';
   cx.fillText(text, c.width / 2, c.height / 2);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
@@ -3143,7 +3143,7 @@ function createMultiverseMiniGlobes() {
 
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(prod.name, 36, THEME.palette.ice), transparent: true, opacity: 0.95, depthTest: false }));
     label.scale.set(2.0, 0.28, 1); label.position.set(0, -r - 0.36, 0); g.add(label);
-    const sub = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(\`\${prod.leavesDone}/\${prod.leavesTotal} · \${prod.status}\`, 24, THEME.palette.ice_2), transparent: true, opacity: 0.85, depthTest: false }));
+    const sub = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(`${prod.leavesDone}/${prod.leavesTotal} · ${prod.status}`, 24, THEME.palette.ice_2), transparent: true, opacity: 0.85, depthTest: false }));
     sub.scale.set(1.6, 0.18, 1); sub.position.set(0, -r - 0.62, 0); g.add(sub);
 
     multiverseGroup.add(g);
