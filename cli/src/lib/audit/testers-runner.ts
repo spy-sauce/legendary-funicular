@@ -15,6 +15,9 @@ import path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { TesterDef, TesterResult } from "./testers.js";
 import type { Finding } from "./findings.js";
+import { runMicroFanout } from "../micro-agents/fanout.js";
+import { scanReReads } from "../micro-agents/metrics.js";
+import type { MicroCallRecord } from "../micro-agents/types.js";
 
 // ── Types for runner context ────────────────────────────────────────────
 
@@ -22,6 +25,9 @@ export interface RunTesterContext {
   auditRunDir: string;
   cultivationDir: string;
   iteration: number;
+  microsEnabled?: boolean;                 // default true; --no-micros sets false
+  contractHash?: string;                   // for micro cache keys (default "unfrozen")
+  microStore?: import("../cache-network/store.js").CacheStoreWithMissRecording;
 }
 
 // ── Extended TesterDef with runner-parsed fields ────────────────────────
@@ -118,7 +124,7 @@ export async function closeAllTesterSessions(): Promise<void> {
  * body focuses on assertions rather than deliverables. Module-private in
  * cultivate.ts — we replicate the structure here per NUTRIENTS §10.
  */
-function buildTesterPrompt(def: TesterDefExtended, ctx: RunTesterContext): string {
+function buildTesterPrompt(def: TesterDefExtended, ctx: RunTesterContext, foldedContext: string): string {
   const findingJsonPath = path.join(
     ctx.auditRunDir,
     "testers",
@@ -141,7 +147,9 @@ function buildTesterPrompt(def: TesterDefExtended, ctx: RunTesterContext): strin
     `YOUR MISSION`,
     `═══════════════════════════════════════════════════════════════════════`,
     ``,
-    `1. READ the cultivated artifacts listed in your INPUTS.`,
+    foldedContext
+      ? `1. Your INPUTS are summarized below under "Gathered Context" — RELY on those summaries. Only re-READ a raw file if a summary is insufficient for a specific assertion.`
+      : `1. READ the cultivated artifacts listed in your INPUTS.`,
     `2. EXERCISE each assertion in your assertion set (below).`,
     `3. If ALL assertions pass, do NOT write any file — exit cleanly.`,
     `4. If ANY assertion fails, emit exactly ONE Finding JSON to:`,
@@ -188,6 +196,7 @@ function buildTesterPrompt(def: TesterDefExtended, ctx: RunTesterContext): strin
     `  tester_id | biome | summary | file_path (or empty) | line_range (e.g. "10-20" or empty)`,
     `Then SHA-256 hash that string (lowercase hex, 64 chars).`,
     ``,
+    ...(foldedContext ? [foldedContext, ``] : []),
     `═══════════════════════════════════════════════════════════════════════`,
     `INPUTS (read-only artifacts to examine)`,
     `═══════════════════════════════════════════════════════════════════════`,
@@ -262,6 +271,9 @@ export async function runTester(
   const logStdout = (line: string) => stdoutStream.write(line + "\n");
   const logStderr = (line: string) => stderrStream.write(line + "\n");
 
+  let stdoutBuffer = "";
+  const logStdoutBuf = (line: string) => { stdoutBuffer += line + "\n"; logStdout(line); };
+
   logStdout(`[${new Date().toISOString()}] Tester ${def.id} started`);
   logStdout(`Iteration: ${ctx.iteration}`);
   logStdout(`Mirrors biome: ${def.mirrors_biome ?? "(cross-cutting)"}`);
@@ -269,8 +281,26 @@ export async function runTester(
   logStdout(`Inputs: ${def.inputs.join(", ") || "(none)"}`);
   logStdout("─".repeat(70));
 
+  // ── Read-side micro fan-out (Spec §3) ──────────────────────────────
+  const micrsEnabled = ctx.microsEnabled !== false; // default ON
+  let microRecords: MicroCallRecord[] = [];
+  let microFoldedTargets: string[] = [];
+  let foldedContext = "";
+  if (micrsEnabled) {
+    const fan = await runMicroFanout({
+      testerId: def.id,
+      inputs: def.inputs,
+      cultivationDir: ctx.cultivationDir,
+      contractHash: ctx.contractHash ?? "unfrozen",
+      store: ctx.microStore,
+    });
+    foldedContext = fan.foldedContext;
+    microRecords = fan.records;
+    microFoldedTargets = fan.foldedTargets;
+  }
+
   // Build the tester prompt
-  const prompt = buildTesterPrompt(extDef, ctx);
+  const prompt = buildTesterPrompt(extDef, ctx, foldedContext);
   logStdout("[PROMPT]");
   logStdout(prompt);
   logStdout("─".repeat(70));
@@ -299,9 +329,9 @@ export async function runTester(
         const blocks = (msg as any).message?.content ?? [];
         for (const b of blocks) {
           if (b.type === "text" && typeof b.text === "string") {
-            logStdout(`[ASSISTANT] ${b.text}`);
+            logStdoutBuf(`[ASSISTANT] ${b.text}`);
           } else if (b.type === "tool_use") {
-            logStdout(
+            logStdoutBuf(
               `[TOOL_USE] ${b.name}: ${JSON.stringify(b.input).slice(0, 200)}`
             );
           }
@@ -314,11 +344,11 @@ export async function runTester(
               typeof b.content === "string"
                 ? b.content
                 : JSON.stringify(b.content);
-            logStdout(`[TOOL_RESULT] ${content.slice(0, 500)}`);
+            logStdoutBuf(`[TOOL_RESULT] ${content.slice(0, 500)}`);
           }
         }
       } else if (msg.type === "result") {
-        logStdout(`[RESULT] ${JSON.stringify(msg)}`);
+        logStdoutBuf(`[RESULT] ${JSON.stringify(msg)}`);
         if ((msg as any).subtype === "error_max_budget_usd") {
           exitCode = 1;
           logStderr(
@@ -372,6 +402,8 @@ export async function runTester(
 
   const wall_ms = Date.now() - started;
 
+  const microReReads = micrsEnabled ? scanReReads(stdoutBuffer, microFoldedTargets) : 0;
+
   return {
     tester_id: def.id,
     exit_code: exitCode,
@@ -379,5 +411,8 @@ export async function runTester(
     finding,
     stdout_path: stdoutPath,
     stderr_path: stderrPath,
+    micro_records: microRecords,
+    micro_folded_targets: microFoldedTargets,
+    micro_redundant_re_reads: microReReads,
   };
 }
