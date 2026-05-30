@@ -41,3 +41,14 @@ import { MicroRegistry } from "./registry.js";
  * a specific reason to maintain a separate registry (e.g., testing).
  */
 export const microRegistry = new MicroRegistry();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Read-side micro-agents v1 surface (additive re-exports)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type { MicroSubJob, MicroCallRecord, MicroMetrics, MicroFanoutResult } from "./types.js";
+export { derivePlan } from "./derive-plan.js";
+export { rollupMetrics, scanReReads } from "./metrics.js";
+export type { RollupInput } from "./metrics.js";
+export { runMicroFanout } from "./fanout.js";
+export type { MicroFanoutOpts } from "./fanout.js";
