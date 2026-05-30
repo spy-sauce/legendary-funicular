@@ -95,7 +95,16 @@ async function runWorker(
         }
       } else if (msg.type === "result") {
         const usage = (msg as any).usage;
-        if (usage?.input_tokens) inputTokens = usage.input_tokens;
+        // The SDK splits input across three fields: the bare `input_tokens` is
+        // only the non-cached delta (often ~4); the real volume lives in
+        // cache_creation_input_tokens + cache_read_input_tokens. Sum all three
+        // so the headline metric reflects true input cost, not the delta.
+        if (usage) {
+          inputTokens =
+            (usage.input_tokens ?? 0) +
+            (usage.cache_creation_input_tokens ?? 0) +
+            (usage.cache_read_input_tokens ?? 0);
+        }
         if (usage?.output_tokens) outputTokens = usage.output_tokens;
       }
     }
