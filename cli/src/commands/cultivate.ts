@@ -268,6 +268,16 @@ export function registerCultivateCommand(program: Command): void {
       console.log(chalk.gray(`  📝 Leaf logs: ${path.relative(targetDir, runLogDir)}/<leaf-id>.log\n`));
       const allResults: LeafResult[] = [];
 
+      // 0.1: resolve the BASE commit every leaf worktree forks from. null →
+      // not a git repo → cultivateLeaf falls back to the legacy shared tree.
+      const base = resolveBase(targetDir);
+      if (base) {
+        console.log(chalk.gray(`  🌲 Worktree isolation: leaves fork from ${base.slice(0, 8)}\n`));
+      } else {
+        console.log(chalk.yellow(`  ⚠ Not a git repo — leaves share the working tree (no isolation)\n`));
+      }
+      const allConflicts: { leafId: string; files: string[] }[] = [];
+
       try {
         for (let w = 0; w < waves.length; w++) {
           const wave = waves[w];
@@ -303,7 +313,8 @@ export function registerCultivateCommand(program: Command): void {
                 config,
                 runLogDir,
                 upgrades,
-                upgradeCtx
+                upgradeCtx,
+                base
               );
               if (upgrades.length > 0) {
                 await runAfterLeaf(upgrades, upgradeCtx, leaf, result);
@@ -312,6 +323,29 @@ export function registerCultivateCommand(program: Command): void {
             }
           );
           allResults.push(...results);
+
+          // 0.1: integrate this wave's leaf branches onto the working tree,
+          // single-threaded, in the main loop. Disjoint changes merge clean;
+          // same-path overlaps CONFLICT loudly (attributed to the leaf) rather
+          // than silently last-writer-wins. Only runs in worktree (git) mode.
+          if (base) {
+            const wonLeaves = results
+              .filter((r) => r.success)
+              .map((r) => r.leaf);
+            const integ = await integrateLeafBranches(targetDir, wonLeaves);
+            if (integ.merged.length > 0) {
+              console.log(
+                chalk.gray(`  🔗 Integrated ${integ.merged.length} leaf branch(es) into the working tree`)
+              );
+            }
+            for (const c of integ.conflicted) {
+              allConflicts.push(c);
+              console.log(
+                chalk.red(`  ✗ MERGE CONFLICT — leaf ${chalk.bold(c.leafId)} overlaps existing work`) +
+                  (c.files.length ? chalk.yellow(`\n      colliding: ${c.files.join(", ")}`) : "")
+              );
+            }
+          }
           console.log();
         }
       } catch (err) {
@@ -327,6 +361,54 @@ export function registerCultivateCommand(program: Command): void {
       // before the final status=done writes hit disk, leaving harvest +
       // dashboard with a stale view.
       await drainLeafStateWrites();
+
+      // ── 0.1: push integrated leaf branches (deferred from per-leaf) ──
+      // In worktree mode push was suppressed at commit time; now that every
+      // branch is created + integrated, push them from the main tree if the
+      // organism wants a remote. Best-effort, swallow no-remote.
+      if (base && (config as any)._push !== false) {
+        const wonIds = allResults.filter((r) => r.success).map((r) => r.leaf.id);
+        let pushed = 0;
+        for (const id of wonIds) {
+          const branch = `feat/${id}`;
+          try {
+            git(targetDir, ["rev-parse", "--verify", branch]);
+          } catch {
+            continue; // branch never created (no-op leaf)
+          }
+          try {
+            git(targetDir, ["push", "--set-upstream", "origin", branch]);
+            pushed++;
+          } catch {
+            // no remote / push failure — non-fatal, mirrors legacy behavior
+          }
+        }
+        if (pushed > 0) {
+          console.log(chalk.gray(`  ⬆ Pushed ${pushed} leaf branch(es) to origin`));
+        }
+      }
+
+      // ── 0.1: loud integration-conflict summary ──────────────────────
+      // Surfaces the overlaps that the old shared-tree mechanism would have
+      // lost silently (last-writer-wins). A conflict means two leaves'
+      // declared scopes physically overlapped — a decomposition bug to fix,
+      // not a silent data loss to discover later.
+      if (allConflicts.length > 0) {
+        console.log();
+        console.log(
+          chalk.red.bold(`  ⚠️  ${allConflicts.length} leaf branch(es) did NOT integrate (scope overlap):`)
+        );
+        for (const c of allConflicts) {
+          console.log(
+            chalk.red(`     • ${c.leafId}`) +
+              (c.files.length ? chalk.yellow(` — ${c.files.join(", ")}`) : "")
+          );
+        }
+        console.log(
+          chalk.gray(`     Their feat/<id> branches exist but are unmerged; resolve manually or fix the overlapping scopes.`)
+        );
+        console.log();
+      }
 
       // ── Report ─────────────────────────────────────────────────────
       summary(allResults, organism);
@@ -448,7 +530,8 @@ async function cultivateLeaf(
   config: any,
   logDir: string,
   upgrades: Upgrade[] = [],
-  upgradeCtx?: UpgradeCtx
+  upgradeCtx?: UpgradeCtx,
+  base: string | null = null
 ): Promise<LeafResult> {
   const started = Date.now();
   const spinner = ora({
@@ -459,10 +542,38 @@ async function cultivateLeaf(
 
   // F3: mark active so the live dashboard reflects in-flight leaves
   // during the multi-hour cultivate phase, not only at completion.
+  // SporeNet state + leaf logs ALWAYS live on the main tree (orchestrator
+  // state), never inside the leaf's worktree.
   writeLeafState(targetDir, leaf.id, {
     status: "active",
     started_at: new Date().toISOString(),
   });
+
+  // 0.1: each leaf runs in its own worktree off BASE. `runDir` is where the
+  // SDK writes + commits; it falls back to the shared targetDir only if this
+  // isn't a git repo (base === null) — preserving the legacy path for the
+  // `mycelium init` non-git scaffold case.
+  let worktree: Worktree | null = null;
+  let runDir = targetDir;
+  if (base) {
+    try {
+      worktree = await addLeafWorktree(targetDir, leaf, base);
+      runDir = worktree.path;
+    } catch (err: any) {
+      // Worktree setup failed — fail the leaf loudly rather than silently
+      // falling back to the shared tree (which would re-introduce the race).
+      spinner.fail(
+        chalk.red(`⚠ ${leaf.id}`) +
+          chalk.gray(` — worktree setup failed: ${String(err?.message ?? err).split("\n")[0]}`)
+      );
+      writeLeafState(targetDir, leaf.id, {
+        status: "failed",
+        error: `worktree setup failed: ${String(err?.message ?? err).split("\n")[0].slice(0, 160)}`,
+        completed_at: new Date().toISOString(),
+      });
+      return { leaf, success: false, artifacts: [], error: "worktree setup failed", ms: Date.now() - started };
+    }
+  }
 
   let prompt = buildLeafPrompt(leaf, config);
   if (upgrades.length > 0 && upgradeCtx) {
@@ -487,7 +598,7 @@ async function cultivateLeaf(
     stream = query({
       prompt,
       options: {
-        cwd: targetDir,
+        cwd: runDir,
         allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permissionMode: "acceptEdits",
         ...(maxBudgetUsd !== undefined ? { maxBudgetUsd } : {}),
@@ -536,16 +647,26 @@ async function cultivateLeaf(
     // post-commit via the SHA to confirm it landed.
     const leafSynopsis = extractSynopsis(leafTextChunks.join("\n"));
 
-    // ── Auto-commit via serialized queue (no git race) ──────────
-    const commitResult = await commitQueue.enqueue(async () => {
-      return autoCommitLeaf(
-        leaf,
-        targetDir,
-        artifacts,
-        (config as any)._push !== false,
-        leafSynopsis
-      );
-    });
+    // ── Auto-commit ─────────────────────────────────────────────
+    // 0.1: in worktree mode each leaf commits to its OWN worktree on its
+    // own branch — no shared-tree race, so no CommitQueue serialization
+    // needed here (that's the whole win). Push is deferred to the post-wave
+    // integration pass on the main tree, so we force push=false here.
+    // Legacy non-git path (worktree === null) keeps the serialized commit.
+    let commitResult: AutoCommitResult | null;
+    if (worktree) {
+      commitResult = autoCommitLeaf(leaf, runDir, artifacts, false, leafSynopsis);
+    } else {
+      commitResult = await commitQueue.enqueue(async () => {
+        return autoCommitLeaf(
+          leaf,
+          targetDir,
+          artifacts,
+          (config as any)._push !== false,
+          leafSynopsis
+        );
+      });
+    }
     const commitMsg = commitResult?.message ?? null;
     const commitSha = commitResult?.sha ?? null;
 
@@ -566,7 +687,7 @@ async function cultivateLeaf(
         try {
           const sha = execFileSync(
             "git",
-            ["-C", targetDir, "rev-parse", "HEAD"],
+            ["-C", runDir, "rev-parse", "HEAD"],
             { encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
           ).trim();
           updates.commit = sha;
@@ -583,7 +704,7 @@ async function cultivateLeaf(
       try {
         const body = execFileSync(
           "git",
-          ["-C", targetDir, "log", "-1", "--format=%B", updates.commit],
+          ["-C", runDir, "log", "-1", "--format=%B", updates.commit],
           { encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
         );
         synopsis = extractSynopsis(body);
@@ -643,6 +764,13 @@ async function cultivateLeaf(
       ms,
       logPath,
     };
+  } finally {
+    // 0.1: tear down the leaf's worktree. The commit (and its feat/<id>
+    // branch ref) persist in the shared .git after the working-tree files
+    // are removed, so integration can still merge the branch afterward.
+    if (worktree) {
+      await removeLeafWorktree(targetDir, worktree);
+    }
   }
 }
 
@@ -806,8 +934,15 @@ function buildLeafPrompt(leaf: Leaf, config: any): string {
   ].join("\n");
 }
 
-// ── Serialized git queue — prevents parallel git races ─────────────────
-
+// ── Serialized git queue — guards operations on the shared .git ────────
+//
+// 0.1 (worktree isolation): per-leaf *commits* no longer race — each leaf
+// writes + commits inside its OWN worktree on its own `feat/<id>` branch
+// off a fixed BASE, so concurrent commits to disjoint worktrees are safe.
+// But all worktrees share one `.git`, so worktree add/remove and the
+// post-wave integration merge still touch shared ref state. This queue is
+// repurposed (NOT removed — hard-rule #2) to serialize exactly those
+// shared-ref operations.
 class CommitQueue {
   private chain: Promise<any> = Promise.resolve();
   enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -821,6 +956,153 @@ const commitQueue = new CommitQueue();
 // 100MB buffer for git invocations — large leaf outputs can otherwise hit the
 // default 1MB cap and fail with ENOBUFS (observed on discovery in run-3).
 const GIT_MAX_BUFFER = 100 * 1024 * 1024;
+
+function git(cwd: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    maxBuffer: GIT_MAX_BUFFER,
+  }).toString();
+}
+
+// ── 0.1 Worktree isolation ─────────────────────────────────────────────
+//
+// Each leaf runs in a private `git worktree` checked out at a fixed BASE
+// commit. Leaf writes (Write/Edit/Bash — doesn't matter) land ONLY in that
+// isolated checkout, so two leaves writing the same path can no longer
+// silently clobber each other in a shared tree (the run8 talent-onboarding
+// race + the PR#3 "0 files committed" / artifact-overlap follow-ups all
+// stem from the shared tree). Cross-leaf coherence is preserved because
+// leaves consume frozen NUTRIENTS stubs, never each other's output files
+// (verified: buildLeafPrompt requires NUTRIENTS, never sibling artifacts;
+// buildLeafWaves uses blocked_by for ORDERING only). Integration happens
+// after each wave via a single-threaded merge that surfaces overlaps LOUDLY
+// instead of losing them silently.
+
+interface Worktree {
+  path: string;
+  branch: string;
+}
+
+const WORKTREE_ROOT = ".mycelium/worktrees";
+
+// Resolve the BASE commit all leaf worktrees fork from = current HEAD of the
+// working branch. Returns null if not a git repo (cultivate then runs in the
+// legacy shared-tree mode — see cultivateLeaf).
+function resolveBase(targetDir: string): string | null {
+  try {
+    return git(targetDir, ["rev-parse", "HEAD"]).trim();
+  } catch {
+    return null;
+  }
+}
+
+// Add an isolated worktree for a leaf at BASE, on branch feat/<leaf.id>.
+// Serialized through commitQueue (shared .git ref state). Force-resets the
+// branch + removes any stale worktree dir so re-runs (heal-loop replants)
+// are idempotent.
+async function addLeafWorktree(
+  targetDir: string,
+  leaf: Leaf,
+  base: string
+): Promise<Worktree> {
+  const branch = `feat/${leaf.id}`;
+  const wtPath = path.join(targetDir, WORKTREE_ROOT, leaf.id);
+  await commitQueue.enqueue(async () => {
+    // Clean any prior worktree/branch for this leaf (idempotent replant).
+    try {
+      git(targetDir, ["worktree", "remove", "--force", wtPath]);
+    } catch {}
+    if (fs.existsSync(wtPath)) {
+      fs.rmSync(wtPath, { recursive: true, force: true });
+    }
+    try {
+      git(targetDir, ["worktree", "prune"]);
+    } catch {}
+    fs.mkdirSync(path.dirname(wtPath), { recursive: true });
+    // -B resets the branch to BASE if it already exists (prior run).
+    git(targetDir, ["worktree", "add", "-B", branch, wtPath, base]);
+  });
+  return { path: wtPath, branch };
+}
+
+// Remove a leaf's worktree after integration (or on failure). Best-effort;
+// serialized. The branch itself is kept until/through integration.
+async function removeLeafWorktree(
+  targetDir: string,
+  wt: Worktree
+): Promise<void> {
+  await commitQueue.enqueue(async () => {
+    try {
+      git(targetDir, ["worktree", "remove", "--force", wt.path]);
+    } catch {}
+    if (fs.existsSync(wt.path)) {
+      fs.rmSync(wt.path, { recursive: true, force: true });
+    }
+    try {
+      git(targetDir, ["worktree", "prune"]);
+    } catch {}
+  });
+}
+
+interface IntegrationResult {
+  merged: string[];
+  conflicted: { leafId: string; files: string[] }[];
+}
+
+// Single-threaded merge of each successful leaf's feat/<id> branch onto the
+// working branch in the MAIN tree. Disjoint leaf changes merge cleanly; two
+// leaves that touched the same path now CONFLICT explicitly — we abort that
+// leaf's merge, name it + the colliding files, and continue. This is the
+// whole point of 0.1: silent last-writer-wins becomes a loud, attributable
+// integration error. Runs in the main loop (no SDK, no hook).
+async function integrateLeafBranches(
+  targetDir: string,
+  leaves: Leaf[]
+): Promise<IntegrationResult> {
+  const merged: string[] = [];
+  const conflicted: { leafId: string; files: string[] }[] = [];
+  for (const leaf of leaves) {
+    const branch = `feat/${leaf.id}`;
+    // Skip leaves whose branch has no commit beyond BASE (no-op leaf).
+    let ahead = "0";
+    try {
+      ahead = git(targetDir, [
+        "rev-list",
+        "--count",
+        `HEAD..${branch}`,
+      ]).trim();
+    } catch {
+      continue; // branch doesn't exist — nothing to integrate
+    }
+    if (ahead === "0") continue;
+    try {
+      git(targetDir, [
+        "merge",
+        "--no-ff",
+        "-m",
+        `MERGE ${leaf.id}: integrate leaf branch`,
+        branch,
+      ]);
+      merged.push(leaf.id);
+    } catch {
+      // Conflict (or other merge failure) — capture the colliding files,
+      // then abort so the working tree stays clean for the next leaf.
+      let files: string[] = [];
+      try {
+        files = git(targetDir, ["diff", "--name-only", "--diff-filter=U"])
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      } catch {}
+      try {
+        git(targetDir, ["merge", "--abort"]);
+      } catch {}
+      conflicted.push({ leafId: leaf.id, files });
+    }
+  }
+  return { merged, conflicted };
+}
 
 interface AutoCommitResult {
   message: string;
@@ -919,22 +1201,35 @@ function autoCommitLeaf(
       ).trim();
     } catch {}
 
-    // Stamp the per-biome branch to point at this commit. The serialized
-    // commit queue guarantees HEAD is THIS leaf's commit at this instant,
-    // so a force-update of feat/<id> to HEAD is safe and creates the branch
-    // that `mycelium harvest` expects to find.
+    // Stamp the per-biome branch to point at this commit so `mycelium
+    // harvest` finds it. 0.1: in worktree mode the worktree is ALREADY on
+    // feat/<id> (created via `worktree add -B`), so the commit landed on the
+    // branch directly — `git branch -f` on a checked-out branch would error.
+    // Only force-stamp when we're not already on the target branch (legacy
+    // shared-tree path, where the serialized commit queue guarantees HEAD is
+    // this leaf's commit at this instant).
+    let currentBranch = "";
     try {
-      execFileSync("git", ["branch", "-f", branchName, "HEAD"], {
+      currentBranch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
         cwd,
-        stdio: "pipe",
+        encoding: "utf-8",
         maxBuffer: GIT_MAX_BUFFER,
-      });
-    } catch (branchErr: any) {
-      // Non-fatal: if branch stamping fails (rare), the commit still landed.
-      const errMsg = String(branchErr?.stderr ?? branchErr?.message ?? branchErr);
-      console.error(
-        chalk.yellow(`  ⚠️  feat/${leaf.id} branch stamp failed: ${errMsg.split("\n")[0]}`)
-      );
+      }).trim();
+    } catch {}
+    if (currentBranch !== branchName) {
+      try {
+        execFileSync("git", ["branch", "-f", branchName, "HEAD"], {
+          cwd,
+          stdio: "pipe",
+          maxBuffer: GIT_MAX_BUFFER,
+        });
+      } catch (branchErr: any) {
+        // Non-fatal: if branch stamping fails (rare), the commit still landed.
+        const errMsg = String(branchErr?.stderr ?? branchErr?.message ?? branchErr);
+        console.error(
+          chalk.yellow(`  ⚠️  feat/${leaf.id} branch stamp failed: ${errMsg.split("\n")[0]}`)
+        );
+      }
     }
 
     // Push — set upstream on first push per branch, swallow no-remote errors.
