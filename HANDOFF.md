@@ -4,6 +4,101 @@
 
 ---
 
+## [MYC] 2026-07-02 — Tier-0 backlog executed: eval baseline shipped + harvest 0.3 + bugs 2/3/5 + merge-wave plan
+
+**Ultracode session (Fable 5).** Two multi-agent workflows (9-agent deep-dive + 10-agent execution, ~1.6M subagent tokens) executed the parked backlog (`docs/BACKLOG-parked-2026-06-16.md`) concurrently on `feat/engine-tier0-worktree-iso`. Everything below is working-tree only — orchestrator owns commits.
+
+### Executed
+
+- **0.2 eval baseline SHIPPED** (`mycelium eval`, spec phases 1–3): `cli/src/commands/eval.ts` + `cli/src/lib/eval/{types,tasks,metrics,judges,runner,report}.ts` + `evals/` (README, 3 task YAMLs: lane-b-noop / lane-b-telemetry / lane-a-mini, 3 fixtures). pass@1/pass@k/pass^k, hand-rolled YAML validation (no new deps), deterministic judges (tsc/grep/command/contract-v1; llm=skipped, phase 4), baselines with explicit `baseline accept`, regression delta incl. ±20% cost gate. **Design override (named):** trials use scratch dirs + git-init'd fixture copies under gitignored `.mycelium/evals/`, NOT worktree-per-trial — post-22351c3 cultivate owns repo-global `feat/<leafId>` worktrees/branches; worktree trials would collide. Eval executes the CURRENT built CLI; `pinned_commit` is provenance. **Not yet run end-to-end** (real SDK spend) — next session: `cd cli && npm run build && node dist/index.js eval run --task lane-b-noop`, then author baselines. Refusal gate #1 remains closed until baselines are accepted.
+- **0.3 harvest ID-namespace fix**: mirrored PR#3's validated `310ea12` prefix-rollup onto `harvest.ts:110+`, then operator extended it with a `sub_agents`-declared rollup (covers leaf ids that don't derive from biome id, e.g. `audit-heal-loop` → `audit.heal.iteration`). Deliberately richer than `310ea12` → small deliberate conflict at PR#3 merge; keep this branch's version.
+- **1.2 bugs 2/3/5 fixed** (all located + root-caused): Bug 2 `heal-iteration.ts` no_progress now self-contained (`findings_out >= findings_in`, prevRecord guard dropped). Bug 3 summary removed from finding-id hash (findings.ts + NUTRIENTS §1 amendment lines 22/37 + tester prompt) **plus framework-side id recompute at ingest** (testers-runner) — LLM hash arithmetic now irrelevant. Bug 5 heal-loop threads `iterations/<n>/` into re-test runs + stale `finding.json` rmSync — root cause was stale-artifact reuse, not skipped re-runs (HANDOFF's earlier framing superseded).
+- **1.2 tracker**: `docs/BUGS.md` — 18 consolidated entries (B1–B18): fixed-this-session (B2/B3/B5/B6-harvest), likely-fixed-by-0.1 pending live validation (B8 multiverse + dashboard.cli 0-files), open engine risks found by the deep-dive (fixed BASE across waves; Bash-created files destroyed at worktree teardown; conflicted leaves stay `done` + exit 0 → ddp/harvest treat unmerged work as shipped; SIGINT skips cleanup; harvest never exits non-zero; heal-budget.ts + autofix-branch.ts are dead modules — budget_exhausted unreachable).
+- **Hygiene**: CELLULAR-MAP.md regenerated (audit-run scope, by hand); `agent.ts:15` lifecycle comment fixed to frozen 6-state; BACKLOG got a dated status addendum. Rule-#5 carve-out, HANDOFF reconciliation, and ci-vs-ddp doc (ARCHITECTURE.md) were already in the working tree pre-session.
+
+**Verified:** tsc --noEmit clean · `npm run build` clean · vitest 31/31 · `eval --help`/`run --help`/`report` smoke pass · all 3 task YAMLs load via compiled `loadAllTasks`. Audit bug fixes are tsc/build-verified only (no behavioral test exists for audit/*) — level 3-4, honest.
+
+### Deep-dive verdicts (full gap map in workflow outputs; key items)
+
+- **Chokepoint MOVED: `cultivate.ts:480` → `:598`** (query() inside cultivateLeaf, post-22351c3). Re-anchor all governance language to the symbol, not the line.
+- Worktree isolation (0.1) verified real: BASE-pinned worktrees, unserialized per-leaf commits, single-threaded post-wave `merge --no-ff` with loud attributed conflicts; CommitQueue repurposed for shared-.git ops only. Zero inter-leaf signaling confirmed — BIOME BUS/mesh remains aspirational; the six-signal bus exists only in the disconnected impl/ embeddings.
+- Vapor vs docs: no Router, no TCF, no §6.7/§6.8 (whitepaper only on PR#4 branch), no contract-test generators, no hooks, **no `mycelium brief`** (documented in CLAUDE.md but exists on no branch), no versioned release story (phantom `@vibespace/mycelium-core` import in agent.ts).
+
+### Merge waves (verified via read-only git; conflict surfaces hunk-checked)
+
+1. **Wave 1 (now):** PR #4 (docs-only, zero conflicts) → main. Push + PR + merge `feat/engine-tier0-worktree-iso` (0.1 + this session's work). Delete `feat/section-h-security` + 22 local `feat/audit.*` leaf branches (all merge-base-confirmed ancestors of main).
+2. **Wave 2:** run + accept eval baselines (≥3 tasks) — the gate-opener. Keep 34 `feat/cache.*`/`feat/dashboard.*` origin leaf branches until PR#3 resolves.
+3. **Wave 3 (gated on accepted baselines):** PR #3 — must push its 11 unpushed local commits, rebase onto post-0.1 main, and **REWORK (not merge) the cache integration**: its cache-hit replay path commits via `autoCommitLeaf(leaf, targetDir,...)` on the shared tree — bypasses worktrees/branches and reintroduces the exact race 0.1 kills. Hard textual conflict too (cache wrap at base :482/:515 sits inside the 0.1 rewrite; both insert at :328). Optional de-risk: split the dashboard-only half (no cultivate.ts contact) and merge it in wave 2.
+
+### Suggested commit batching (operator)
+
+1. `MYC/EVAL: mycelium eval — pass@k baseline harness (backlog 0.2, spec phases 1-3)` — cli/src/lib/eval/, cli/src/commands/eval.ts, cli/src/index.ts, evals/
+2. `MYC/HARVEST: biome rollup for cellular organisms (backlog 0.3)` — cli/src/commands/harvest.ts
+3. `MYC/AUDIT: close bugs 2/3/5 — no_progress, id-hash sans summary + ingest recompute, iteration-dir threading` — cli/src/lib/audit/, NUTRIENTS.md
+4. `MYC/DOCS: BUGS.md tracker + CELLULAR-MAP regen + backlog addendum + lifecycle comment` — docs/BUGS.md, CELLULAR-MAP.md, docs/BACKLOG-*, cli/src/commands/agent.ts
+5. Pre-existing working-tree docs (CLAUDE.md carve-out, ARCHITECTURE ci-vs-ddp, HANDOFF reconcile, wishlists, whitepaper) — batch per operator preference.
+
+### Gotchas
+
+- NUTRIENTS.md §1 was amended (frozen contract — backlog-authorized, exactly the two id-hash lines). Two different defects at the same tester+biome+file+line_range now dedupe to one id — accepted trade-off.
+- Spec doc's gates keys (`pass_at_3`) ≠ frozen contract (`pass_at_k`) — loader enforces the frozen names; update spec doc eventually.
+- `eval report --json` stdout carries the boxen banner (index.ts preAction) — consume `summary.json` files for machine reads.
+- Lane A cost capture needs telemetry-emitter + cost-tracker upgrades enabled in the fixture (they are); otherwise cost=0 with a note.
+- Open engine risks B13–B16 (fixed BASE, Bash-file loss, conflicted=done+exit-0, SIGINT cleanup) are real correctness holes in 0.1 — tracked in BUGS.md, none blocks wave 1, but B13/B15 deserve fixes before the next multi-wave real-client run.
+
+---
+
+## [MYC] 2026-05-16 — dashboard + cache-network cultivation shipped (PR #3)
+
+> Reconciled 2026-07-02 from `feat/dashboard-cache-net`'s HANDOFF.md (this entry previously existed only on that branch; the code it describes still lives ONLY there — PR #3 remains open/unmerged).
+
+**Massive session.** Dogfood cultivation of the operator dashboard AND the cache-network runtime, in one parallel build.
+
+### What landed
+
+Branch `feat/dashboard-cache-net`, PR #3 (https://github.com/spy-sauce/legendary-funicular/pull/3). 40 commits, 47 files changed, +11,304 / -930.
+
+- **`mycelium dashboard {init,serve,render}`** — cryogenic operator console. Three.js Bloch-sphere agents on a fibonacci globe, **cache relay inner shell** (cyan-teal `#1E9EBF` octahedrons at r=2.6), multiverse view, Star Wars HUD overlays, slow-pulse discipline (≥1.5s, no fast blinks). Per-cultivation `theme.yaml` molds palette + brand + biome→identity-color map. `serve` re-reads state.json + theme.yaml every request; SSE event stream at `/events/stream`.
+- **`cli/src/lib/cache-network/`** — LRU `CacheStore` wraps SDK calls at `cultivate.ts:480` (chokepoint located via `query()` grep). `--no-cache` flag for bypass. JSONL events: `cache.hit` / `cache.miss` / `cache.evict` / `cache.pulse` (1.4s aggregation). `state.cache` additive block on `sporenet/state.json`.
+- **`cli/src/lib/micro-agents/spawn.ts`** — deterministic 2-4 micro fan-out per leaf via xorshift seeded from sha256(leafId). 70/30 cheap/full split (50/50 if critical severity).
+- **`templates/dashboard.html`** — 5292-line single-file dashboard. Three.js CDN-loaded. Reads `window.__DASHBOARD_STATE__` + `window.__DASHBOARD_THEME__` inlined by `cli/src/lib/dashboard/render.ts`.
+- **`docs/cache-network-micro-agents.md`** + **`docs/dashboard-theming.md`** + **`DEVELOPER_GUIDE.md`** Dashboard + Cache-Network sections.
+
+### Cultivation stats
+
+- 10 biomes, 43 sub-leaves, 7 frozen NUTRIENTS sections, contract-freeze gating
+- Frozen 2026-05-16T08:40:49.410Z (via `--skip-audit` per audit-run precedent — framework-internal cultivation has no app-stack)
+- **First cultivate attempt at -c 30: 0/43 (all rate-limited).** Anthropic API rate limit hit ~25s in, every leaf returned `API Error: Rate limit reached` after burning $0.40 each (~$17 total).
+- **Second attempt at -c 4: 43/43 FRUIT_READY in 1055.7s (~17.6 min).** Concurrency dropped to let token bucket recover between batches; warmed prompt cache.
+
+### Visual reference
+
+v9.4 prototype at `.superpowers/brainstorm/4035-1778891130/content/hybrid-v9.4-cache-relays.html` (gitignored) was canonical visual ground truth. Built dashboard ports it faithfully — bind to state instead of simulator.
+
+### Open framework follow-ups (NOT blocking PR)
+
+- **Harvest threshold check mismatched.** `mycelium harvest` looks for `feat/<biome-id>` branches per `mycelium.yaml agents[].branch`, but cultivate emits `feat/<leaf-id>` branches. Reports 0% threshold even when work is fully on the target branch via CommitQueue. *(This is backlog item 0.3.)*
+- **`dashboard.canvas.multiverse` artifact-path mismatch.** Leaf produced 10 files but declared `templates/dashboard.canvas.multiverse.js` as artifact — file didn't exist at that path. Content landed but commit attribution split.
+- **Four `dashboard.cli.*` leaves "0 files committed".** Files DO exist on disk; framework's `git add --all -- <declared-paths>` couldn't match. Possibly auto-committed by sibling leaves with overlapping artifact paths. *(Root cause = shared-working-tree race; addressed by worktree isolation, backlog 0.1, commit `22351c3`.)*
+- **`mycelium contracts freeze` requires `--stack` flag now.** Audit-run was grandfathered; framework-internal cultivations have no app-stack. `--skip-audit` is the workaround. Long-term: add `stack: framework-internal` preset or scope-relax the freeze audit.
+
+### State at session pause
+
+- Working tree: clean on `feat/dashboard-cache-net`
+- PR #3 open: https://github.com/spy-sauce/legendary-funicular/pull/3
+- 7 frozen NUTRIENTS sections, 10 HYPHA files, 43 leaf commits + 6 operator-authored commits = 40 commits since main
+- `npm link` still active: `/opt/homebrew/bin/mycelium` → repo's `cli/dist`
+- Dashboard serve verified live on port 3334 against /tmp/dashboard-test cwd
+- `cli && tsc --noEmit` clean
+
+### Cost
+
+- ~$17 burned on the rate-limit attempt (zero output)
+- ~$30-40 estimated on the successful -c 4 run (43 leaves × ~$0.80 avg with cache reads)
+- Budget: organism `budget.maxUsd: 100`. Well under.
+
+---
+
 ## [MYC] 2026-05-13 — audit-run cultivation shipped + first proof-of-life + autofix loop close + next: mycelium-dashboard
 
 **Massive session.** Three things landed back-to-back:
