@@ -209,6 +209,25 @@ export function registerCultivateCommand(program: Command): void {
         }
       }
 
+      // B18: duplicate leaf ids collide on feat/<id> branches, worktree
+      // paths, and state.json keys — reject loudly instead of corrupting
+      // all three downstream. --dry-run is the designated validation
+      // discipline, so this must fire there too (it does: same path).
+      const seenIds = new Map<string, number>();
+      for (const l of leaves) seenIds.set(l.id, (seenIds.get(l.id) ?? 0) + 1);
+      const dupes = [...seenIds.entries()].filter(([, n]) => n > 1).map(([id]) => id);
+      if (dupes.length > 0) {
+        console.log(
+          chalk.red.bold(`  ❌ Duplicate leaf id(s) in mycelium.yaml: `) +
+            chalk.yellow(dupes.join(", "))
+        );
+        console.log(
+          chalk.gray("     Each leaf id must be unique — ids key feat/<id> branches, worktrees, and sporenet state.")
+        );
+        process.exitCode = 1;
+        return;
+      }
+
       const waves: Leaf[][] = gating === "contract-freeze"
         ? [leaves] // one wave, all at once
         : buildLeafWaves(biomes, leaves);
@@ -270,7 +289,9 @@ export function registerCultivateCommand(program: Command): void {
 
       // 0.1: resolve the BASE commit every leaf worktree forks from. null →
       // not a git repo → cultivateLeaf falls back to the legacy shared tree.
-      const base = resolveBase(targetDir);
+      // B13: `let`, not `const` — re-resolved after each wave's integration
+      // so later waves fork from a BASE that includes earlier waves' output.
+      let base = resolveBase(targetDir);
       if (base) {
         console.log(chalk.gray(`  🌲 Worktree isolation: leaves fork from ${base.slice(0, 8)}\n`));
       } else {
@@ -340,10 +361,25 @@ export function registerCultivateCommand(program: Command): void {
             }
             for (const c of integ.conflicted) {
               allConflicts.push(c);
+              // B15: the leaf already wrote status=done at completion time,
+              // BEFORE integration ran. Flip it so ddp/harvest/dashboard see
+              // unmerged work as not shipped (additive fields per rule #9).
+              writeLeafState(targetDir, c.leafId, {
+                status: "conflicted",
+                integrated: false,
+                conflict_files: c.files,
+              });
               console.log(
                 chalk.red(`  ✗ MERGE CONFLICT — leaf ${chalk.bold(c.leafId)} overlaps existing work`) +
                   (c.files.length ? chalk.yellow(`\n      colliding: ${c.files.join(", ")}`) : "")
               );
+            }
+            // B13: waves after this one must fork from the post-integration
+            // HEAD, not the run-start BASE — otherwise wave-N leaves cannot
+            // see files that waves 1..N-1 created (Edits hit missing files,
+            // then merge-conflict on integration).
+            if (integ.merged.length > 0) {
+              base = resolveBase(targetDir) ?? base;
             }
           }
           console.log();
@@ -408,6 +444,10 @@ export function registerCultivateCommand(program: Command): void {
           chalk.gray(`     Their feat/<id> branches exist but are unmerged; resolve manually or fix the overlapping scopes.`)
         );
         console.log();
+        // B15: unmerged work means the cultivation did NOT fully ship — let
+        // ddp (which halts on non-zero exit) and CI see that. exitCode, not
+        // process.exit(), so the report below still prints and streams flush.
+        process.exitCode = 1;
       }
 
       // ── Report ─────────────────────────────────────────────────────
@@ -420,6 +460,11 @@ export function registerCultivateCommand(program: Command): void {
 // interrupt + release all of them on error or ctrl-c.
 
 const activeSessions = new Set<any>();
+
+// B17: live worktrees registered here so the shutdown hook can tear them
+// down — per-leaf `finally` blocks never run on SIGINT/SIGTERM, which left
+// stale worktrees, orphan refs, and state.json stuck `active`.
+const activeWorktrees = new Map<string, { targetDir: string; wtPath: string }>();
 
 async function closeStream(s: any): Promise<void> {
   try {
@@ -440,15 +485,38 @@ function installShutdownHook(): void {
   sigintInstalled = true;
   const shutdown = async () => {
     const count = activeSessions.size;
-    if (count === 0) {
-      process.exit(130);
+    if (count > 0) {
+      console.log();
+      console.log(chalk.yellow.bold(`  ✋ Interrupt received — closing ${count} active session(s)...`));
+      const pending = Array.from(activeSessions);
+      activeSessions.clear();
+      await Promise.allSettled(pending.map((s) => closeStream(s)));
+      console.log(chalk.yellow("  🍂 Sessions closed."));
     }
-    console.log();
-    console.log(chalk.yellow.bold(`  ✋ Interrupt received — closing ${count} active session(s)...`));
-    const pending = Array.from(activeSessions);
-    activeSessions.clear();
-    await Promise.allSettled(pending.map((s) => closeStream(s)));
-    console.log(chalk.yellow("  🍂 Sessions closed. Exiting."));
+    // B17: best-effort worktree teardown — the per-leaf `finally` blocks
+    // won't run after process.exit. Direct git calls (not commitQueue —
+    // the queue may hold ops that will never complete now).
+    if (activeWorktrees.size > 0) {
+      console.log(chalk.yellow(`  🧹 Removing ${activeWorktrees.size} leaf worktree(s)...`));
+      for (const { targetDir, wtPath } of activeWorktrees.values()) {
+        try {
+          git(targetDir, ["worktree", "remove", "--force", wtPath]);
+        } catch {}
+        try {
+          fs.rmSync(wtPath, { recursive: true, force: true });
+        } catch {}
+        try {
+          git(targetDir, ["worktree", "prune"]);
+        } catch {}
+      }
+      activeWorktrees.clear();
+    }
+    // B17: flush queued sporenet/state.json writes so leaves interrupted
+    // mid-flight don't leave the dashboard showing a stale `active`.
+    try {
+      await drainLeafStateWrites();
+    } catch {}
+    console.log(chalk.yellow("  Exiting."));
     process.exit(130);
   };
   process.once("SIGINT", shutdown);
@@ -509,7 +577,21 @@ function buildLeafWaves(biomes: Agent[], leaves: Leaf[]): Leaf[][] {
       (b.blocked_by || []).every((dep) => placed.has(dep))
     );
     if (ready.length === 0) {
-      // cycle / dead-end: dump the rest into one final wave
+      // B18: cycle / dead-end — previously dumped silently, so --dry-run
+      // (the designated validation discipline) rendered a cyclic plan as
+      // if intentional. Still dump into a final wave (fail-soft: the work
+      // runs), but say so loudly and name the biomes involved.
+      console.log(
+        chalk.yellow.bold(
+          `  ⚠️  blocked_by cycle or unresolvable dependency among: ` +
+            remaining.map((b) => b.id).join(", ")
+        )
+      );
+      console.log(
+        chalk.gray(
+          "     These biomes' blockers never became ready — running them together in one final wave. Check blocked_by in mycelium.yaml."
+        )
+      );
       waves.push(remaining.flatMap((b) => byBiome[b.id] || []));
       break;
     }
@@ -655,7 +737,9 @@ async function cultivateLeaf(
     // Legacy non-git path (worktree === null) keeps the serialized commit.
     let commitResult: AutoCommitResult | null;
     if (worktree) {
-      commitResult = autoCommitLeaf(leaf, runDir, artifacts, false, leafSynopsis);
+      // B14: privateTree=true — stage the whole worktree so Bash-created
+      // files survive teardown, not just SDK-tracked Write/Edit artifacts.
+      commitResult = autoCommitLeaf(leaf, runDir, artifacts, false, leafSynopsis, true);
     } else {
       commitResult = await commitQueue.enqueue(async () => {
         return autoCommitLeaf(
@@ -1023,6 +1107,8 @@ async function addLeafWorktree(
     // -B resets the branch to BASE if it already exists (prior run).
     git(targetDir, ["worktree", "add", "-B", branch, wtPath, base]);
   });
+  // B17: register for shutdown-hook teardown (finally blocks don't run on SIGINT).
+  activeWorktrees.set(wtPath, { targetDir, wtPath });
   return { path: wtPath, branch };
 }
 
@@ -1032,6 +1118,7 @@ async function removeLeafWorktree(
   targetDir: string,
   wt: Worktree
 ): Promise<void> {
+  activeWorktrees.delete(wt.path); // B17: normal teardown owns it now
   await commitQueue.enqueue(async () => {
     try {
       git(targetDir, ["worktree", "remove", "--force", wt.path]);
@@ -1125,42 +1212,56 @@ function autoCommitLeaf(
   cwd: string,
   artifacts: string[],
   push: boolean = true,
-  synopsis: string | null = null
+  synopsis: string | null = null,
+  privateTree: boolean = false
 ): AutoCommitResult | null {
   try {
-    // F4 (Bug 2): stage only THIS leaf's Write/Edit paths. The previous
-    // `git add -A` pattern grabbed every modified file in the shared
-    // working tree — including files that parallel leaves had written
-    // but not yet committed. Whichever leaf hit the serialized commit
-    // queue first absorbed everyone's pending work; later leaves saw an
-    // empty `git status` and returned null with no feat branch stamped.
-    // (Run8 talent-onboarding hit exactly this — its 26 files committed
-    // under DISCOVERY's commit, no feat/talent-onboarding branch.)
-    //
-    // De-dup + path-resolve artifacts so we don't pass duplicates or
-    // absolute paths git would reject. Strip cwd prefix so paths are
-    // relative to the repo root.
-    const cwdAbs = path.resolve(cwd) + path.sep;
-    const stagedPaths = Array.from(
-      new Set(
-        artifacts
-          .map((a) => path.resolve(a))
-          .filter((a) => a.startsWith(cwdAbs))
-          .map((a) => a.slice(cwdAbs.length))
-      )
-    );
+    if (privateTree) {
+      // B14 (worktree mode): the tree is private to this leaf, so staging
+      // everything is safe — and necessary. The SDK artifact tracker only
+      // sees Write/Edit paths; files a leaf creates via Bash (npx create-*,
+      // codegen, cp) are invisible to it, and anything unstaged is destroyed
+      // at worktree teardown. The F4 artifact-scoping below exists to stop
+      // cross-leaf absorption in a SHARED tree — inapplicable here.
+      execFileSync("git", ["add", "-A"], {
+        cwd,
+        maxBuffer: GIT_MAX_BUFFER,
+      });
+    } else {
+      // F4 (Bug 2): stage only THIS leaf's Write/Edit paths. The previous
+      // `git add -A` pattern grabbed every modified file in the shared
+      // working tree — including files that parallel leaves had written
+      // but not yet committed. Whichever leaf hit the serialized commit
+      // queue first absorbed everyone's pending work; later leaves saw an
+      // empty `git status` and returned null with no feat branch stamped.
+      // (Run8 talent-onboarding hit exactly this — its 26 files committed
+      // under DISCOVERY's commit, no feat/talent-onboarding branch.)
+      //
+      // De-dup + path-resolve artifacts so we don't pass duplicates or
+      // absolute paths git would reject. Strip cwd prefix so paths are
+      // relative to the repo root.
+      const cwdAbs = path.resolve(cwd) + path.sep;
+      const stagedPaths = Array.from(
+        new Set(
+          artifacts
+            .map((a) => path.resolve(a))
+            .filter((a) => a.startsWith(cwdAbs))
+            .map((a) => a.slice(cwdAbs.length))
+        )
+      );
 
-    if (stagedPaths.length === 0) {
-      // Leaf produced no Write/Edit artifacts the SDK tracked — likely
-      // a no-op leaf (skipped, already-done, or pure-validation pass).
-      return null;
+      if (stagedPaths.length === 0) {
+        // Leaf produced no Write/Edit artifacts the SDK tracked — likely
+        // a no-op leaf (skipped, already-done, or pure-validation pass).
+        return null;
+      }
+
+      // Use --all so deletes are also staged, scoped to the leaf's paths.
+      execFileSync("git", ["add", "--all", "--", ...stagedPaths], {
+        cwd,
+        maxBuffer: GIT_MAX_BUFFER,
+      });
     }
-
-    // Use --all so deletes are also staged, scoped to the leaf's paths.
-    execFileSync("git", ["add", "--all", "--", ...stagedPaths], {
-      cwd,
-      maxBuffer: GIT_MAX_BUFFER,
-    });
 
     // Verify something was actually staged (artifact paths could be
     // unchanged if the leaf rewrote files identically). If nothing
