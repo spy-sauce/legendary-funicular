@@ -29,7 +29,16 @@ import type { Finding } from "./findings.js";
 import { readFindings, findingsPath } from "./findings-writer.js";
 import { aggregate, type AggregatedFindings } from "./aggregator.js";
 import { composeBriefFix } from "./aggregator-brief.js";
-import { resetBiomeLeaves } from "./sporenet-integration.js";
+import { resetBiomeLeaves, writeAuditBlock } from "./sporenet-integration.js";
+import { extractTotalCostFromEvents, trackCost } from "./heal-budget.js";
+// B10: use the full autofix-branch module (originalBranch tracking, stash
+// verification, finalize) instead of the inline reimplementation that
+// shadowed it as dead code.
+import {
+  setupAutofixBranch,
+  finalizeAutofixBranch,
+  type AutofixBranchSetupResult,
+} from "./autofix-branch.js";
 import {
   type IterationRecord,
   type HealLoopSummary,
@@ -69,6 +78,13 @@ export interface HealLoopOptions {
 
   /** Path to the original brief.md in the cultivation */
   originalBriefPath: string;
+
+  /**
+   * B12: audit run id for live sporenet audit-block updates during the
+   * (potentially multi-hour) loop. Optional + additive — when absent, no
+   * per-iteration block writes happen (block still finalized by orchestrator).
+   */
+  auditRunId?: string;
 }
 
 /**
@@ -226,69 +242,6 @@ async function spawnCultivate(
 }
 
 /**
- * Setup autofix-branch before iteration 1.
- *
- * Per HYPHA spec:
- * - `git checkout -b <autofixBranch>`
- * - Stash uncommitted work first; abort loudly if stash conflicts
- *
- * @param cultivationDir - The cultivation root
- * @param branchName - Name of the autofix branch
- * @returns true if setup succeeded, false if aborted
- */
-async function setupAutofixBranch(
-  cultivationDir: string,
-  branchName: string
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    // First, try to stash any uncommitted work
-    const stash = spawn("git", ["stash", "push", "-m", "audit-autofix-stash"], {
-      cwd: cultivationDir,
-      stdio: "pipe",
-    });
-
-    let stashOutput = "";
-    stash.stdout?.on("data", (d) => (stashOutput += d.toString()));
-    stash.stderr?.on("data", (d) => (stashOutput += d.toString()));
-
-    stash.on("close", (stashCode) => {
-      if (stashCode !== 0 && !stashOutput.includes("No local changes")) {
-        console.error(
-          `[heal-loop] ABORT: git stash failed with code ${stashCode}`
-        );
-        console.error(`[heal-loop] stash output: ${stashOutput}`);
-        resolve(false);
-        return;
-      }
-
-      // Now create and checkout the branch
-      const checkout = spawn("git", ["checkout", "-b", branchName], {
-        cwd: cultivationDir,
-        stdio: "pipe",
-      });
-
-      let checkoutOutput = "";
-      checkout.stdout?.on("data", (d) => (checkoutOutput += d.toString()));
-      checkout.stderr?.on("data", (d) => (checkoutOutput += d.toString()));
-
-      checkout.on("close", (checkoutCode) => {
-        if (checkoutCode !== 0) {
-          console.error(
-            `[heal-loop] ABORT: git checkout -b ${branchName} failed`
-          );
-          console.error(`[heal-loop] checkout output: ${checkoutOutput}`);
-          resolve(false);
-          return;
-        }
-
-        console.log(`[heal-loop] Created autofix branch: ${branchName}`);
-        resolve(true);
-      });
-    });
-  });
-}
-
-/**
  * Count findings by severity.
  */
 function countBySeverity(findings: Finding[]): {
@@ -329,6 +282,7 @@ export async function runHealLoop(
     maxBudgetUsd,
     autofixBranch,
     originalBriefPath,
+    auditRunId,
   } = opts;
 
   const iterations: IterationRecord[] = [];
@@ -361,11 +315,19 @@ export async function runHealLoop(
   }
 
   // Setup autofix-branch if requested (before iteration 1)
+  let branchSetup: AutofixBranchSetupResult | null = null;
   if (autofixBranch) {
-    const branchOk = await setupAutofixBranch(cultivationDir, autofixBranch);
-    if (!branchOk) {
-      // Abort the loop — branch setup failed
-      terminationReason = "no_progress"; // Best fit; could add a new reason
+    branchSetup = await setupAutofixBranch(cultivationDir, autofixBranch);
+    if (!branchSetup.success) {
+      console.error(
+        `[heal-loop] ABORT: autofix branch setup failed: ${branchSetup.error ?? "(unknown)"}`
+      );
+      // B10 note: "no_progress" is still a semantic mislabel for an
+      // infrastructure failure, but the NUTRIENTS §8 termination union is
+      // frozen — adding a distinct `setup_failed` reason needs a contract
+      // amendment (tracked in docs/BUGS.md). The error above at least makes
+      // the real cause loud.
+      terminationReason = "no_progress";
       const summary = buildHealLoopSummary([], terminationReason);
       await writeHealLoopSummary(auditRunDir, summary);
 
@@ -393,6 +355,11 @@ export async function runHealLoop(
     record.findings_in = currentFindings.length;
     record.criticals_in = prevSeverity.critical;
 
+    // B9: snapshot total telemetry cost before the iteration; the delta
+    // after replant + re-test is this iteration's spend. (Replant run_ids
+    // are unknown to the loop, so we sum across all runs and diff.)
+    const costBeforeUsd = extractTotalCostFromEvents(cultivationDir);
+
     // ── Step 1: Compose brief-fix.md ──────────────────────────────────────
     const prevFindingsPath =
       iter === 1
@@ -413,6 +380,22 @@ export async function runHealLoop(
     ].sort();
 
     record.biomes_replanted = biomesToReplant;
+
+    // B12: keep the dashboard live during the multi-hour loop — the block
+    // previously froze at iteration-0 "complete" for the whole autofix run.
+    // Best-effort (writeAuditBlock bails silently without state.json).
+    if (auditRunId) {
+      writeAuditBlock(cultivationDir, {
+        status: "running",
+        audit_run_id: auditRunId,
+        iteration: iter,
+        findings_count: record.findings_in,
+        by_severity: prevSeverity,
+        biomes_affected: biomesToReplant,
+        last_run_at: null,
+        started_at: record.started_at,
+      });
+    }
 
     let lastExitCode = 0;
     let lastCommand = "";
@@ -435,7 +418,12 @@ export async function runHealLoop(
     }
 
     // ── Step 3: Re-run testers ────────────────────────────────────────────
-    const newFindings = await runTestersFn(auditRunDir, cultivationDir, iter);
+    // Bug 5 fix: testers must run against THIS iteration's dir, not the
+    // baseline auditRunDir — otherwise stale baseline finding.json files
+    // re-emit and iterations/<n>/testers/ is never created. runTester
+    // mkdirs its testerDir recursively, so the subtree self-creates.
+    const iterRunDir = path.join(auditRunDir, "iterations", String(iter));
+    const newFindings = await runTestersFn(iterRunDir, cultivationDir, iter);
 
     // Write findings for this iteration
     writeIterationFindings(auditRunDir, iter, newFindings);
@@ -448,14 +436,19 @@ export async function runHealLoop(
     record.findings_out = currentFindings.length;
     record.criticals_out = newSeverity.critical;
 
-    // Cost tracking — placeholder (audit.heal.budget sibling provides actual impl)
-    // For now, we track 0 cost; the budget sibling will integrate with
-    // lib/budget.ts and cost-recorded events.
-    const iterationCost = 0; // TODO: audit.heal.budget will populate this
-    cumulativeCostUsd += iterationCost;
+    // B9: cost = events-total delta across the iteration (0 when the
+    // cultivation has no telemetry upgrades enabled — budget then degrades
+    // to the iteration/no-progress caps). trackCost persists the
+    // idempotent per-iteration ledger at <auditRunDir>/.cost.json.
+    const iterationCost = Math.max(
+      0,
+      extractTotalCostFromEvents(cultivationDir) - costBeforeUsd
+    );
+    const tracked = trackCost(auditRunDir, iter, iterationCost, maxBudgetUsd);
+    cumulativeCostUsd = tracked.cumulative;
     record.cost_usd = iterationCost;
     record.cumulative_cost_usd = cumulativeCostUsd;
-    record.budget_remaining_usd = maxBudgetUsd - cumulativeCostUsd;
+    record.budget_remaining_usd = tracked.remaining;
 
     // Finalize timing
     finalizeIterationRecord(record);
@@ -483,6 +476,15 @@ export async function runHealLoop(
   }
 
   // ── Write final summary ─────────────────────────────────────────────────
+  // B10: finalize the autofix branch (verifies we're still on it; per spec
+  // it is NOT merged — left for operator review). Best-effort log either way.
+  if (autofixBranch && branchSetup) {
+    const fin = await finalizeAutofixBranch(cultivationDir, autofixBranch, branchSetup);
+    if (fin.message) {
+      console.log(`[heal-loop] ${fin.message}`);
+    }
+  }
+
   const summary = buildHealLoopSummary(iterations, terminationReason);
   await writeHealLoopSummary(auditRunDir, summary);
 

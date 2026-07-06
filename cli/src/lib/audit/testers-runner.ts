@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { TesterDef, TesterResult } from "./testers.js";
-import type { Finding } from "./findings.js";
+import { findingId, validateFinding, type Finding } from "./findings.js";
 
 // ── Types for runner context ────────────────────────────────────────────
 
@@ -165,7 +165,7 @@ function buildTesterPrompt(def: TesterDefExtended, ctx: RunTesterContext): strin
     `═══════════════════════════════════════════════════════════════════════`,
     ``,
     `{`,
-    `  "id": "<sha256(tester_id|biome|summary|file_path|line_range)>",`,
+    `  "id": "<sha256(tester_id|biome|file_path|line_range)>",`,
     `  "tester_id": "${def.id}",`,
     `  "biome": "${def.mirrors_biome ?? "cross-cutting"}",`,
     `  "severity": "critical" | "major" | "minor",`,
@@ -185,7 +185,7 @@ function buildTesterPrompt(def: TesterDefExtended, ctx: RunTesterContext): strin
     `  - minor: informational; included in brief but non-blocking`,
     ``,
     `To compute the "id" field, concatenate these with "|" separators:`,
-    `  tester_id | biome | summary | file_path (or empty) | line_range (e.g. "10-20" or empty)`,
+    `  tester_id | biome | file_path (or empty) | line_range (e.g. "10-20" or empty)`,
     `Then SHA-256 hash that string (lowercase hex, 64 chars).`,
     ``,
     `═══════════════════════════════════════════════════════════════════════`,
@@ -254,6 +254,10 @@ export async function runTester(
   const stdoutPath = path.join(testerDir, "stdout.log");
   const stderrPath = path.join(testerDir, "stderr.log");
   const findingPath = path.join(testerDir, "finding.json");
+
+  // Bug 5 fix: remove any stale finding.json from a prior run so a passing
+  // re-run (which emits no file) can never be shadowed by old findings.
+  fs.rmSync(findingPath, { force: true });
 
   // Initialize log streams
   const stdoutStream = fs.createWriteStream(stdoutPath, { flags: "w" });
@@ -358,15 +362,34 @@ export async function runTester(
   if (fs.existsSync(findingPath)) {
     try {
       const raw = fs.readFileSync(findingPath, "utf-8");
-      finding = JSON.parse(raw) as Finding;
+      const parsed = JSON.parse(raw) as Finding;
+      // Bug 3 hardening: recompute the id framework-side at the ingest
+      // chokepoint — the LLM's hash arithmetic is irrelevant; determinism
+      // comes from findingId() over the stable fields (per NUTRIENTS §1).
+      parsed.id = findingId({
+        tester_id: parsed.tester_id,
+        biome: parsed.biome,
+        file_path: parsed.file_path,
+        line_range: parsed.line_range,
+      });
+      // B11: enforce the NUTRIENTS §1 guard at the single ingest chokepoint.
+      // Runs AFTER the id recompute so validateId checks our hash, not the
+      // LLM's. An out-of-union severity would otherwise flow into
+      // `counts[f.severity]++` (NaN) and aggregate as "minor".
+      validateFinding(parsed);
+      finding = parsed;
       exitCode = 1; // Finding present means assertion failed
     } catch (parseErr: any) {
-      // Malformed finding.json — log to stderr but don't crash
+      // Malformed or invalid finding.json — per the TesterResult contract
+      // this is a tester_error (2+), NOT a silent pass: a tester that
+      // emitted a file was trying to report a failure.
+      exitCode = 2;
       const errPath = path.join(testerDir, "parse-error.log");
       fs.writeFileSync(
         errPath,
-        `Failed to parse finding.json: ${parseErr?.message}\n`
+        `Failed to parse/validate finding.json: ${parseErr?.message}\n`
       );
+      logStderr(`[TESTER_ERROR] invalid finding.json: ${parseErr?.message}`);
     }
   }
 
