@@ -1,0 +1,41 @@
+# Mycelium Framework — VibeSpace LLC — The network provides.
+#
+# Eval fixture cultivation (lane-a-mini). Copied into a scratch trial dir by
+# the eval runner — never cultivated in place. Two depth-1 biomes (no
+# sub_agents → each biome is its own leaf), no blocked_by → single wave.
+#
+# IMPORTANT: this fixture must never ship a sporenet/ directory — a committed
+# sporenet/state.json with leaves marked done would make cultivate's F1
+# skip-done pass silently no-op every trial.
+
+organism:
+  name: eval-lane-a-mini
+  gating: contract-freeze
+  harvest_threshold: 0.8
+  upgrades:
+    - telemetry-emitter # writes .mycelium/events/<run_id>.jsonl — the contract judge's input
+    - cost-tracker # emits cost_recorded through the telemetry sink
+
+agents:
+  - id: docs-agent
+    scope: Write README.md and USAGE.md for the greet library per NUTRIENTS.md
+    branch: feat/docs-agent
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - documentation
+
+  - id: code-agent
+    scope: Write src/greet.js and src/index.js implementing greet(name) per NUTRIENTS.md
+    branch: feat/code-agent
+    blocked_by: []
+    blocks: []
+    capabilities:
+      - javascript
+
+merge_order:
+  - code-agent
+  - docs-agent
+
+budget:
+  maxUsd: 2

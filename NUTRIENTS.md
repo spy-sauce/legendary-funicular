@@ -19,7 +19,7 @@ export type Severity = "critical" | "major" | "minor";
 //   minor    → informational; included in brief but non-blocking
 
 export interface Finding {
-  id: string;            // sha256(tester_id + biome + summary + file_path + line_range)
+  id: string;            // sha256(tester_id + biome + file_path + line_range)
   tester_id: string;     // e.g., "tester.flow.talent"
   biome: string;         // production biome this finding maps to
   severity: Severity;
@@ -34,7 +34,7 @@ export interface Finding {
 }
 ```
 
-**ID determinism:** `id = sha256(tester_id + "|" + biome + "|" + summary + "|" + (file_path || "") + "|" + (line_range ? line_range.join("-") : ""))`. SHA-256 hex, lowercase. The same defect across `--autofix` iterations produces the same `id` so dedupe is automatic.
+**ID determinism:** `id = sha256(tester_id + "|" + biome + "|" + (file_path || "") + "|" + (line_range ? line_range.join("-") : ""))`. SHA-256 hex, lowercase. The same defect across `--autofix` iterations produces the same `id` so dedupe is automatic.
 
 **Writer contract:** `appendFinding(runDir: string, finding: Finding): void` — atomic append to `findings.jsonl`, one finding per line, UTF-8, `\n`-terminated. Dedupe by `id` against existing lines in the same file before append. Never throws on filesystem error — log to stderr and continue (mirrors telemetry-emitter pattern).
 

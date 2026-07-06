@@ -270,7 +270,8 @@ export function buildHealLoopSummary(
  * @param record - The current iteration record (after running)
  * @param maxIterations - Maximum allowed iterations
  * @param maxBudgetUsd - Maximum allowed budget
- * @param prevRecord - The previous iteration record (null for baseline)
+ * @param prevRecord - Unused since the NUTRIENTS §8 cond-4 fix (no-progress is
+ *   evaluated within the record); retained so the exported signature is stable.
  */
 export function evaluateTermination(
   record: IterationRecord,
@@ -294,11 +295,13 @@ export function evaluateTermination(
   }
 
   // Condition 4: no progress (findings_out >= findings_in with non-zero criticals)
-  // Only evaluate if we have a previous iteration to compare against
-  if (prevRecord !== null && record.criticals_out > 0) {
-    if (record.findings_out >= prevRecord.findings_out) {
-      return "no_progress";
-    }
+  // Per NUTRIENTS §8 cond 4 this compares within the record itself —
+  // findings_in already carries the prior iteration's (or baseline's) count,
+  // so no prevRecord is needed. The old prevRecord-gated comparison meant the
+  // condition could never fire on iteration 1 (baseline is not in the
+  // iterations array, so prevRecord was null) and compared the wrong field.
+  if (record.criticals_out > 0 && record.findings_out >= record.findings_in) {
+    return "no_progress";
   }
 
   return null;

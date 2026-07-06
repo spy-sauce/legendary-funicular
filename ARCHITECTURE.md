@@ -152,6 +152,12 @@ GitHub Actions step starts
         → dashboard DDP panel updates live
 ```
 
+### Two workflows, two targets (not a contradiction)
+- `.github/workflows/cultivate.yml` — the full **8-stage DDP pipeline** (merge-order → lint → typecheck → test → build → deploy-stg → smoke → deploy-prod) for **cultivated apps** (organisms grown from a brief).
+- `.github/workflows/ci.yml` — a **4-stage PR gate** (lint → typecheck → test → build) for **framework code itself** (PRs / pushes to this repo). It reuses the same DDP stage scripts but stops at the reproducible-locally stages; deploy stages are deferred until a prod instance exists.
+
+Same stage scripts, different subjects: cultivate.yml validates what the framework *grows*; ci.yml validates the framework that *does the growing*.
+
 ### Fleet query flow
 ```
 .mycelium/events/*.jsonl  (many runs, many organisms)

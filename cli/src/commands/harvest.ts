@@ -16,6 +16,7 @@ interface Agent {
   blocked_by: string[];
   blocks: string[];
   state?: string;
+  sub_agents?: Array<{ id: string }>;
 }
 
 export function registerHarvestCommand(program: Command): void {
@@ -110,9 +111,36 @@ export function registerHarvestCommand(program: Command): void {
         let isReady: boolean;
         if (sporenetHasState) {
           // Cultivation has run — trust sporenet/state.json.
-          // "done" means the leaf shipped its FRUIT_READY line; everything
-          // else (pending, growing, failed) is not ready to harvest.
-          isReady = leafStatusBySporenetId[agent.id] === "done";
+          // state.json may key by biome id (legacy depth-1 organisms) or by
+          // leaf id (depth-3 cellular organisms). Try biome match first; if
+          // none, roll up leaf statuses scoped to this biome.
+          const direct = leafStatusBySporenetId[agent.id];
+          if (direct !== undefined) {
+            isReady = direct === "done";
+          } else if (agent.sub_agents && agent.sub_agents.length > 0) {
+            // Cellular organism: state.json is keyed by leaf id, whose naming
+            // does NOT derive mechanically from the biome id (`audit-heal-loop`
+            // owns `audit.heal.iteration`). Roll up by the sub_agents the
+            // organism actually declares.
+            const statuses = agent.sub_agents.map(
+              (leaf) => leafStatusBySporenetId[leaf.id]
+            );
+            // Biome is ready iff at least one declared leaf is tracked AND
+            // every tracked leaf is done. No leaves tracked = not ready.
+            const tracked = statuses.filter((s) => s !== undefined);
+            isReady =
+              tracked.length > 0 && tracked.every((s) => s === "done");
+          } else {
+            const prefix = agent.id + ".";
+            const leafEntries = Object.entries(leafStatusBySporenetId).filter(
+              ([id]) => id.startsWith(prefix)
+            );
+            // Biome is ready iff at least one leaf is tracked AND every
+            // tracked leaf is done. No leaves tracked = not ready.
+            isReady =
+              leafEntries.length > 0 &&
+              leafEntries.every(([, status]) => status === "done");
+          }
         } else {
           // No cultivation yet — use yaml hint or unblocked-root heuristic.
           const blockers = agent.blocked_by || [];
@@ -192,6 +220,12 @@ export function registerHarvestCommand(program: Command): void {
         console.log(
           chalk.gray.italic("  Patience. The mycelium grows in its own time. 🌱")
         );
+        // B16: a missed threshold is a failed harvest — surface it in the
+        // exit code so ddp (which halts stages on non-zero exit) and CI can
+        // bail instead of proceeding to serve/deploy on unshipped work.
+        // exitCode (not process.exit) so the merge-order suggestion and
+        // cost rollup below still print.
+        process.exitCode = 1;
       }
 
       console.log();

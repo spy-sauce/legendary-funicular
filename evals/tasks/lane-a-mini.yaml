@@ -1,0 +1,34 @@
+# Mycelium Framework — VibeSpace LLC — The network provides.
+#
+# lane-a-mini — the Lane A canary. Full cultivate against the micro-fixture
+# at evals/fixtures/lane-a-mini (2 depth-1 biomes, telemetry-emitter +
+# cost-tracker wired), copied fresh into each trial dir.
+# Schema: cli/src/lib/eval/types.ts.
+
+id: lane-a-mini
+description: Canary — full cultivate of a 2-biome micro-cultivation (docs + code), telemetry event log checked against contract
+lane: A
+fixture:
+  path: evals/fixtures/lane-a-mini
+runs: 3
+budget:
+  max_usd: 2.50 # per trial
+  max_wall_sec: 1200
+judge:
+  # Both biomes delivered their headline artifacts.
+  - type: command
+    run: test -f README.md && test -f src/greet.js
+  # telemetry-emitter upgrade produced a well-formed JSONL event log.
+  # <run_id> resolves to the newest matching file in the trial dir.
+  - type: contract
+    schema: nutrients.event_schema
+    against: .mycelium/events/<run_id>.jsonl
+  # The greet contract actually landed in the code biome's output.
+  - type: grep
+    pattern: greet
+    files: src
+    min_matches: 1
+gates:
+  # Canary bar: at least one of k full-cultivation trials must pass.
+  pass_at_k: 1.0
+pinned_commit: 22351c3 # provenance — authored against this SHA; eval runs the CURRENT built CLI

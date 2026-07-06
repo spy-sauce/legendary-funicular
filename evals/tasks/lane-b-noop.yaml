@@ -1,0 +1,24 @@
+# Mycelium Framework — VibeSpace LLC — The network provides.
+#
+# lane-b-noop — runner smoke test. One leaf, one file. If this task can't
+# go 3/3, the eval runner (not the model) is broken. Schema: cli/src/lib/eval/types.ts.
+
+id: lane-b-noop
+description: Smoke test — single leaf writes exactly one asked-for file (hello.md)
+lane: B
+fixture:
+  hypha: evals/fixtures/lane-b-noop/HYPHA.md
+  nutrients: evals/fixtures/lane-b-noop/NUTRIENTS.md
+  scope: hello.md
+runs: 3
+budget:
+  max_usd: 0.50 # per trial
+  max_wall_sec: 600
+judge:
+  # Deterministic: the leaf wrote the one asked-for file and it is non-empty.
+  - type: command
+    run: test -s hello.md
+gates:
+  # Smoke-test bar: all trials must pass. Anything less is a runner defect.
+  pass_caret_k: 1.0
+pinned_commit: 22351c3 # provenance — authored against this SHA; eval runs the CURRENT built CLI

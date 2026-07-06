@@ -34,8 +34,8 @@ export type Severity = "critical" | "major" | "minor";
  */
 export interface Finding {
   /**
-   * Deterministic identifier: sha256(tester_id + "|" + biome + "|" + summary +
-   * "|" + (file_path || "") + "|" + (line_range ? line_range.join("-") : "")).
+   * Deterministic identifier: sha256(tester_id + "|" + biome + "|" +
+   * (file_path || "") + "|" + (line_range ? line_range.join("-") : "")).
    * SHA-256 hex, lowercase, 64 characters.
    *
    * The same defect across `--autofix` iterations produces the same `id` so
@@ -185,7 +185,6 @@ export interface AuditSummary {
 export interface FindingIdParts {
   tester_id: string;
   biome: string;
-  summary: string;
   file_path?: string;
   line_range?: [number, number];
 }
@@ -194,7 +193,7 @@ export interface FindingIdParts {
  * Generate a deterministic finding ID from the given parts.
  *
  * ID formula per NUTRIENTS.md §1:
- *   sha256(tester_id + "|" + biome + "|" + summary + "|" + (file_path || "") +
+ *   sha256(tester_id + "|" + biome + "|" + (file_path || "") +
  *          "|" + (line_range ? line_range.join("-") : ""))
  *
  * Returns lowercase hex, 64 characters.
@@ -206,7 +205,6 @@ export function findingId(parts: FindingIdParts): string {
   const segments = [
     parts.tester_id,
     parts.biome,
-    parts.summary,
     parts.file_path ?? "",
     parts.line_range ? parts.line_range.join("-") : "",
   ];

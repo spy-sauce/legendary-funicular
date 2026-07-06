@@ -432,11 +432,31 @@ async function runAudit(args: {
     );
     return { passed: false, exitCode: 2, summary: "no stack" };
   }
+  // B7: framework-internal (dogfood) cultivations have operator-authored
+  // NUTRIENTS with no app-stack appendix to diff against. Recognize the
+  // sentinel and pass through the gate with a note — previously the only
+  // path was `--skip-audit`, which bypasses the gate entirely exactly
+  // where the framework extends itself. Set `organism.stack:
+  // framework-internal` in mycelium.yaml (or pass --stack) to use this.
+  if (stackName === "framework-internal") {
+    console.log(
+      chalk.cyan("  ℹ framework-internal cultivation — no stack contract appendix applies.")
+    );
+    console.log(
+      chalk.gray("     NUTRIENTS.md is operator-authored; appendix diff skipped, freeze proceeds.")
+    );
+    return {
+      passed: true,
+      exitCode: 0,
+      summary: "framework-internal (operator-authored NUTRIENTS, no appendix)",
+    };
+  }
+
   const stack = getStack(stackName);
   if (!stack) {
     console.log(
       chalk.red(
-        `  ❌ Unknown stack "${stackName}". Available: ${Object.keys(STACKS).join(", ")}`
+        `  ❌ Unknown stack "${stackName}". Available: ${Object.keys(STACKS).join(", ")}, framework-internal`
       )
     );
     return { passed: false, exitCode: 2, summary: "unknown stack" };

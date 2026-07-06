@@ -23,6 +23,7 @@ import { registerUpgradesCommand } from "./commands/upgrades.js";
 import { registerIntegrateCommand } from "./commands/integrate.js";
 import { registerDdpCommand } from "./commands/ddp.js";
 import { registerAuditRunCommand } from "./commands/audit-run.js";
+import { registerEvalCommand } from "./commands/eval.js";
 
 const banner = boxen(
   chalk.magentaBright.bold("🍄 Mycelium") +
@@ -63,5 +64,6 @@ registerUpgradesCommand(program);
 registerIntegrateCommand(program);
 registerDdpCommand(program);
 registerAuditRunCommand(program);
+registerEvalCommand(program);
 
 program.parse();
