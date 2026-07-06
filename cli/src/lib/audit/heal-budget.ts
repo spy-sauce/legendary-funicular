@@ -284,10 +284,10 @@ interface TelemetryEvent {
  * Sum cost from cost_recorded events in a JSONL file for a specific run_id.
  *
  * @param eventsPath - Path to a .jsonl events file
- * @param runId - The run_id to filter by
+ * @param runId - The run_id to filter by, or null to sum across ALL runs
  * @returns Total usd_estimate for matching events
  */
-function sumCostFromFile(eventsPath: string, runId: string): number {
+function sumCostFromFile(eventsPath: string, runId: string | null): number {
   let total = 0;
   try {
     const content = fs.readFileSync(eventsPath, "utf-8");
@@ -295,7 +295,7 @@ function sumCostFromFile(eventsPath: string, runId: string): number {
     for (const line of lines) {
       try {
         const event = JSON.parse(line) as TelemetryEvent;
-        if (event.run_id === runId && event.kind === "cost_recorded") {
+        if ((runId === null || event.run_id === runId) && event.kind === "cost_recorded") {
           const data = event.data as CostRecordedData;
           if (typeof data.usd_estimate === "number") {
             total += data.usd_estimate;
@@ -334,6 +334,36 @@ export function extractCostFromEvents(
     for (const file of files) {
       if (file.endsWith(".jsonl")) {
         total += sumCostFromFile(path.join(eventsDir, file), runId);
+      }
+    }
+  } catch {
+    // Events dir doesn't exist — return 0
+  }
+
+  return total;
+}
+
+/**
+ * Total cost across ALL runs in the cultivation's telemetry events.
+ *
+ * The heal-loop's replants spawn `mycelium cultivate` subprocesses whose
+ * run_ids the loop never learns, so per-iteration cost is measured as the
+ * DELTA of this total taken before/after the iteration (B9 wiring).
+ * Returns 0 when the telemetry-emitter/cost-tracker upgrades aren't enabled
+ * in the cultivation — budget then degrades to iteration/no-progress caps.
+ *
+ * @param cultivationDir - Root of the cultivation being audited
+ * @returns Total usd_estimate across every run in the events dir
+ */
+export function extractTotalCostFromEvents(cultivationDir: string): number {
+  const eventsDir = path.join(cultivationDir, ".mycelium", "events");
+  let total = 0;
+
+  try {
+    const files = fs.readdirSync(eventsDir);
+    for (const file of files) {
+      if (file.endsWith(".jsonl")) {
+        total += sumCostFromFile(path.join(eventsDir, file), null);
       }
     }
   } catch {

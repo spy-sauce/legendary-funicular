@@ -26,6 +26,7 @@ import { composeBriefFix } from "./aggregator-brief.js";
 import { writeSummary } from "./aggregator-summary.js";
 import { writeAuditBlock, drainAuditStateWrites } from "./sporenet-integration.js";
 import { runHealLoop } from "./heal-loop.js";
+import { resolveBudget } from "./heal-budget.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -261,7 +262,11 @@ export async function runAuditOrchestrator(
   if (!noServe) {
     const sporenetDir = path.join(cultivationDir, "sporenet");
     if (fs.existsSync(sporenetDir)) {
-      writeAuditBlock(sporenetDir, {
+      // B19: writeAuditBlock appends sporenet/state.json to its stateDir arg
+      // itself — passing sporenetDir here made it look for
+      // sporenet/sporenet/state.json and silently bail; the audit block was
+      // never written at all. Pass the organism root.
+      writeAuditBlock(cultivationDir, {
         status: "running",
         audit_run_id: auditRunId,
         iteration: 0,
@@ -367,7 +372,8 @@ export async function runAuditOrchestrator(
   if (!noServe) {
     const sporenetDir = path.join(cultivationDir, "sporenet");
     if (fs.existsSync(sporenetDir)) {
-      writeAuditBlock(sporenetDir, {
+      // B19: organism root, not sporenetDir (see Step 4 note).
+      writeAuditBlock(cultivationDir, {
         status: testersFailed > 0 ? "failed" : "complete",
         audit_run_id: auditRunId,
         iteration: 0,
@@ -404,10 +410,18 @@ export async function runAuditOrchestrator(
         auditRunDir,
         cultivationDir,
         maxIterations: opts.maxIterations,
-        maxBudgetUsd: opts.maxBudgetUsd ?? Infinity,
+        // B9: resolve the cap per NUTRIENTS §9 precedence (flag > yaml >
+        // env > $50 default) instead of the old `?? Infinity`, which made
+        // --max-budget-usd a no-op and multi-iteration autofix unbounded.
+        maxBudgetUsd: resolveBudget(
+          opts.maxBudgetUsd,
+          readYamlBudgetMaxUsd(cultivationDir)
+        ),
         autofixBranch: opts.autofixBranch,
         concurrency,
         originalBriefPath: path.join(cultivationDir, "brief.md"),
+        // B12: lets the loop publish live per-iteration audit blocks.
+        auditRunId,
       },
       runTestersFn
     );
@@ -425,6 +439,22 @@ export async function runAuditOrchestrator(
 
     // Exit code: 0 if success (zero criticals), 2 if exhausted with criticals remaining
     const healExitCode: 0 | 1 | 2 | 3 = healResult.success ? 0 : 2;
+
+    // B12: finalize the audit block with the heal-loop's REAL outcome —
+    // Step 12 wrote iteration-0 baseline state before the loop started.
+    if (!noServe) {
+      writeAuditBlock(cultivationDir, {
+        status: healResult.success ? "complete" : "failed",
+        audit_run_id: auditRunId,
+        iteration: healResult.iterations.length,
+        findings_count: healResult.finalFindings.length,
+        by_severity: finalBySeverity,
+        biomes_affected: finalBiomesAffected,
+        last_run_at: new Date().toISOString(),
+        started_at: null, // No longer running
+      });
+      await drainAuditStateWrites();
+    }
 
     return {
       auditRunDir,
@@ -482,6 +512,24 @@ export async function runAuditOrchestrator(
     exitCode,
     regressions,
   };
+}
+
+/**
+ * Read `budget.maxUsd` from mycelium.yaml (regex extraction, same
+ * no-yaml-dep posture as readOrganismName below). Undefined when absent.
+ */
+function readYamlBudgetMaxUsd(cultivationDir: string): number | undefined {
+  const yamlPath = path.join(cultivationDir, "mycelium.yaml");
+  if (!fs.existsSync(yamlPath)) return undefined;
+  try {
+    const content = fs.readFileSync(yamlPath, "utf-8");
+    const match = content.match(/^\s*maxUsd:\s*([\d.]+)\s*$/m);
+    if (!match) return undefined;
+    const n = Number(match[1]);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
