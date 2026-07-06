@@ -12,7 +12,7 @@ const AGENT_TEMPLATE = (name: string): string => `// Mycelium Framework — Vibe
 // Agent: ${name}
 // State: SPORE (dormant — awaiting activation)
 //
-// Lifecycle:  SPORE -> GERMINATING -> HYPHAL_GROWTH -> FRUITING -> FRUIT_READY
+// Lifecycle:  SPORE → GERMINATING → GROWING → FLOWING → FRUITING → DORMANT
 //
 
 import type { AgentContext, AgentResult } from "@vibespace/mycelium-core";
