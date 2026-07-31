@@ -110,9 +110,23 @@ export function registerHarvestCommand(program: Command): void {
         let isReady: boolean;
         if (sporenetHasState) {
           // Cultivation has run — trust sporenet/state.json.
-          // "done" means the leaf shipped its FRUIT_READY line; everything
-          // else (pending, growing, failed) is not ready to harvest.
-          isReady = leafStatusBySporenetId[agent.id] === "done";
+          // state.json may key by biome id (legacy depth-1 organisms) or by
+          // leaf id (depth-3 cellular organisms). Try biome match first; if
+          // none, roll up leaf statuses scoped to this biome.
+          const direct = leafStatusBySporenetId[agent.id];
+          if (direct !== undefined) {
+            isReady = direct === "done";
+          } else {
+            const prefix = agent.id + ".";
+            const leafEntries = Object.entries(leafStatusBySporenetId).filter(
+              ([id]) => id.startsWith(prefix)
+            );
+            // Biome is ready iff at least one leaf is tracked AND every
+            // tracked leaf is done. No leaves tracked = not ready.
+            isReady =
+              leafEntries.length > 0 &&
+              leafEntries.every(([, status]) => status === "done");
+          }
         } else {
           // No cultivation yet — use yaml hint or unblocked-root heuristic.
           const blockers = agent.blocked_by || [];

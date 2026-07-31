@@ -30,6 +30,7 @@ import { readFindings, findingsPath } from "./findings-writer.js";
 import { aggregate, type AggregatedFindings } from "./aggregator.js";
 import { composeBriefFix } from "./aggregator-brief.js";
 import { resetBiomeLeaves } from "./sporenet-integration.js";
+import { invalidateCacheStoreIter } from "../../commands/cultivate.js";
 import {
   type IterationRecord,
   type HealLoopSummary,
@@ -475,6 +476,11 @@ export async function runHealLoop(
     if (terminationReason !== null) {
       break;
     }
+
+    // ── Iter-advance: invalidate cache entries from this iteration ────────
+    // Per NUTRIENTS §4: "when heal-loop advances iter, call invalidateIter(prevIter)"
+    // Called here, at the end of iter N, before the loop advances to iter N+1.
+    invalidateCacheStoreIter(iter);
   }
 
   // Default termination reason if loop exhausted iterations without explicit term

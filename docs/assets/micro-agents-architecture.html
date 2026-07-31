@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Micro-Agents — Read-Side v1 · Architecture &amp; Infra</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    color: #1c1a17; background: #fbf9f4; line-height: 1.5;
+    font-size: 10.5pt; margin: 0;
+  }
+  .mono { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; }
+  h1 { font-size: 23pt; margin: 0 0 2pt; letter-spacing: -0.4pt; }
+  h2 {
+    font-size: 14pt; margin: 22pt 0 6pt; padding-bottom: 3pt;
+    border-bottom: 1.5px solid #c9bfa8; color: #5a3e1b;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 11.5pt; margin: 14pt 0 4pt; color: #6b4a22; page-break-after: avoid; }
+  .seal {
+    display: inline-block; width: 30px; height: 30px; line-height: 30px;
+    text-align: center; border: 1.5px solid #5a3e1b; border-radius: 50%;
+    color: #5a3e1b; font-size: 15pt; vertical-align: middle; margin-right: 8px;
+  }
+  .sub { color: #6e655400; }
+  .meta { color: #7a7060; font-size: 9pt; margin: 4pt 0 0; }
+  .tag {
+    display:inline-block; font-size:8pt; letter-spacing:.5pt; text-transform:uppercase;
+    background:#ede4d0; color:#6b4a22; padding:1.5pt 6pt; border-radius:3px; margin-right:5pt;
+  }
+  pre {
+    background: #f3ede0; border: 1px solid #d8ccb2; border-left: 3px solid #9c7b3e;
+    padding: 9pt 11pt; font-family: "SF Mono", Menlo, monospace; font-size: 8.3pt;
+    line-height: 1.4; overflow-x: auto; border-radius: 3px; white-space: pre;
+    page-break-inside: avoid;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 9pt; page-break-inside: avoid; }
+  th { background: #ede4d0; color: #5a3e1b; text-align: left; padding: 5pt 7pt; border: 1px solid #d8ccb2; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .4pt; }
+  td { padding: 5pt 7pt; border: 1px solid #ddd2bb; vertical-align: top; }
+  tr:nth-child(even) td { background: #f6f1e6; }
+  .ok { color: #3f6b34; font-weight: 600; }
+  .warn { color: #9c6b1e; font-weight: 600; }
+  .kill { color: #8a3320; font-weight: 600; }
+  .callout {
+    background: #f1ece0; border: 1px solid #cdbf9f; border-radius: 4px;
+    padding: 8pt 11pt; margin: 10pt 0; font-size: 9.3pt; page-break-inside: avoid;
+  }
+  .callout b { color: #5a3e1b; }
+  .lede { font-size: 11pt; color: #3a342b; margin: 6pt 0 0; }
+  .footer { margin-top: 22pt; padding-top: 8pt; border-top: 1px solid #c9bfa8; color: #7a7060; font-size: 8.5pt; }
+  .two { display: flex; gap: 14pt; }
+  .two > div { flex: 1; }
+  ul { margin: 4pt 0 4pt 0; padding-left: 18pt; }
+  li { margin: 2pt 0; }
+  .pagebreak { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1><span class="seal">🍄</span>Micro-Agents — Read-Side v1</h1>
+<p class="lede">Architecture &amp; Infrastructure Design · Mycelium Framework</p>
+<p class="meta">VibeSpace LLC · Space Cowboy #9 · 2026-05-29 · Patent-pending ·
+companion to <span class="mono">docs/superpowers/specs/2026-05-29-micro-agents-readside-v1-design.md</span></p>
+<p style="margin-top:8pt">
+  <span class="tag">read-side</span>
+  <span class="tag">audit-run only</span>
+  <span class="tag">no cultivate.ts change</span>
+  <span class="tag">no new deps</span>
+  <span class="tag">measure-to-gate-v2</span>
+</p>
+
+<h2>1 · What this is, in one paragraph</h2>
+<p>PR #3 shipped micro-agents as <b>decorative state objects</b> — 2–4 spheres orbiting
+each leaf on the dashboard, doing no real work. The cache-network beneath them <b>is</b>
+real and wired. This design makes micros real as <b>read-side context-gatherers</b> inside
+the audit-run testers-pool: cheap (Haiku) read-only sub-sessions summarize a tester's
+input targets, those summaries fold into the tester's prompt, and the expensive (Opus)
+tester reads the compact summary instead of re-reading raw sources. Every micro call
+rides the <b>existing</b> content-addressed cache, so identical sub-jobs across testers
+are free. The whole thing is instrumented so its first real run answers one question:
+<b>does the cost model actually pay?</b> — which gates the more ambitious write-side v2.</p>
+
+<div class="callout">
+<b>The one-line invariant.</b> v1 saves money iff, across the pool with cache hits counted:
+<br><span class="mono">Σ(folded Opus input + Haiku input) &lt; Σ(baseline raw Opus input)</span>.
+<br>Input tokens only (near-deterministic) → a single before/after diff is honest, no N-run statistics.
+</div>
+
+<h2>2 · System architecture</h2>
+<pre>
+audit-run testers-pool          (cli/src/lib/audit/testers-pool.ts — existing fan-out)
+        │
+        │   for each tester, BEFORE its main assertion run:
+        ▼
+  runMicroFanout(tester, ctx)                     NEW  cli/src/lib/micro-agents/fanout.ts
+        │
+        ├─ 1. derivePlan(tester)                  NEW  pure · NO LLM
+        │        tester.INPUTS ──▶ 2–4 MicroSubJob[]   (capped by xorshift seeded count)
+        │
+        ├─ 2. worker micros  (2–4, concurrent via runWithConcurrency)
+        │        each:  query({ model:'haiku', tools:[Read,Grep,Glob], maxTurns:3 })
+        │        cache-checked individually:  store.get(cacheKey)  ──▶ FREE on cross-tester hit
+        │        output:  one compact summary of one input target          (read-only → no writes)
+        │
+        └─ 3. fold:  summaries ──▶ "## Gathered Context"  prepended to tester prompt
+        ▼
+  tester main query()             (testers-runner.ts:286 — model UNCHANGED = Opus-class)
+        step-1 instruction flipped:  "rely on Gathered Context; re-READ raw only if insufficient"
+        ──▶ consumes compact folded context instead of re-reading raw sources   ◀── THE SAVING
+        ──▶ emits findings JSONL exactly as today          (assertion contract untouched)
+</pre>
+
+<div class="two">
+<div>
+<h3>Reused verbatim (zero contract change)</h3>
+<ul>
+<li><span class="mono">cacheKey()</span> — sha256 content-addressed key</li>
+<li><span class="mono">makeCacheStore()</span> — LRU store + events</li>
+<li><span class="mono">runWithConcurrency()</span> — bounded fan-out</li>
+<li><span class="mono">cache.pulse</span> aggregator (1.4s) → state.json</li>
+<li>SDK <span class="mono">query()</span> · <span class="mono">activeSessions</span> shutdown set</li>
+</ul>
+</div>
+<div>
+<h3>Verified mechanism facts</h3>
+<ul>
+<li>SDK exposes <span class="mono">model:'haiku'|'opus'|...</span> (coreTypes.d.ts:347) — no fork</li>
+<li>Testers run on <b>default Opus-class</b> model (no <span class="mono">model</span> set @ :286) → real offload exists</li>
+<li>Read-only tools → <b>zero write-race</b> (no run8 #2/#3 exposure)</li>
+<li><span class="mono">derivePlan</span> pure → deterministic, testable</li>
+</ul>
+</div>
+</div>
+
+<h2>3 · Data contracts</h2>
+<pre>
+interface MicroSubJob {              interface MicroCallRecord {
+  id: string;        // stable slug    tester_id: string;
+  kind: "read"|"grep"|"summarize";    sub_job_id: string;
+  target: string;    // from INPUTS    cache_status: "hit" | "miss";
+  question: string;  // fixed tmpl     model: "haiku";
+}                                      input_tokens: number;     // 0 on hit
+                                       output_tokens: number;    // logged, not headlined
+                                       raw_target_bytes: number; // source the summary replaces
+                                     }
+</pre>
+<p class="meta">All additive to NUTRIENTS as a new <span class="mono">micro_call</span> event kind +
+these shapes. No existing field removed or renamed. <span class="mono">MicroState</span> gains
+optional real fields so the dashboard spheres reflect real work.</p>
+
+<div class="pagebreak"></div>
+
+<h2>4 · Measurement &amp; the v2 decision gate</h2>
+<p>v1's product is <b>evidence</b>, not savings. Two risks are promoted to first-class metrics:
+compression might be nominal (<b>Risk 1</b>); testers might re-read raw anyway (<b>Risk 2</b>).</p>
+
+<table>
+<tr><th>Metric</th><th>Formula</th><th>Tells us</th></tr>
+<tr><td><b>Net input-token delta</b> (headline)</td><td class="mono">Σ(folded Opus in + Haiku in) − Σ(baseline raw Opus in)</td><td>Did v1 pay?</td></tr>
+<tr><td>Dedup rate</td><td class="mono">cache hits / total micro calls</td><td>Cross-tester reuse</td></tr>
+<tr><td>Re-read rate</td><td class="mono">redundant raw Reads / folded targets</td><td><i>Why</i> it paid or didn't (Risk 2)</td></tr>
+<tr><td>Compression ratio</td><td class="mono">Σ summary tokens / Σ raw bytes</td><td>Summaries real or nominal (Risk 1)</td></tr>
+</table>
+
+<p>Baseline via a new <span class="mono">--no-micros</span> flag (additive, mirrors
+<span class="mono">--no-cache</span>): run once off, once on, diff <span class="mono">micro-metrics.json</span>.</p>
+
+<table>
+<tr><th>Outcome</th><th>Verdict</th></tr>
+<tr><td>Net delta &lt; 0 <b>and</b> re-read rate low</td><td class="ok">Read-side pays → scope write-side v2</td></tr>
+<tr><td>Net delta ≥ 0 <b>but</b> re-read rate high</td><td class="warn">Sabotaged by re-reads, not disproven → fix steering, re-measure</td></tr>
+<tr><td>Net delta ≥ 0 <b>and</b> low re-read <b>and</b> poor compression</td><td class="kill">Doesn't pay here → do NOT build v2 (cheap kill signal)</td></tr>
+</table>
+
+<div class="callout">
+<b>Known limitation.</b> The audit pool proves read-side is <i>safe</i> and measures
+<i>dedup</i> well, but testers do precise assertion work that resists summarization — so the
+pool may <i>under</i>-show <i>compression</i> vs. broad-synthesis cultivate leaves. A weak
+compression number here means "audit testers are the hardest case," not "read-side fails."
+The re-read metric disambiguates.
+</div>
+
+<h2>5 · Failure isolation</h2>
+<p>Governing rule: <b>a micro failure never fails or degrades the tester</b> — it falls back
+to baseline (reads raw itself).</p>
+<table>
+<tr><th>Failure</th><th>Handling</th><th>Event</th></tr>
+<tr><td>Worker throws / times out</td><td>Drop summary; tester re-reads that raw target</td><td class="mono">micro.work_failed</td></tr>
+<tr><td>Empty / garbage summary</td><td>Treated as no-summary (no quality check in v1 — v2's reviewer)</td><td class="mono">micro.work_empty</td></tr>
+<tr><td>derivePlan → 0 sub-jobs</td><td>Skip fan-out; tester runs as today; zero overhead</td><td class="mono">micro.plan_empty</td></tr>
+<tr><td>Over USD cap</td><td>Micros draw from tester's existing maxBudgetUsd; skip if exceeding</td><td class="mono">micro.budget_skipped</td></tr>
+</table>
+<p><b>Structural payoff of read-side:</b> read-only tools → a failed/interrupted micro
+leaves zero artifacts and zero git state. Nothing to roll back.</p>
+
+<h2>6 · Infra footprint &amp; rule compliance</h2>
+<div class="two">
+<div>
+<h3>New files</h3>
+<pre>cli/src/lib/micro-agents/
+  derive-plan.ts        NEW pure
+  fanout.ts             NEW orchestrator
+  metrics.ts            NEW pure
+  types.ts              NEW
+  spawn.ts / registry.ts EDIT additive
+  derive-plan.test.ts   NEW vitest
+  metrics.test.ts       NEW vitest</pre>
+</div>
+<div>
+<h3>Edited (audit-run only)</h3>
+<pre>cli/src/lib/audit/
+  testers-runner.ts  EDIT fanout + fold
+  testers-pool.ts    EDIT --no-micros + metrics
+cli/src/commands/
+  audit-run.ts       EDIT register flag
+
+cli/src/commands/cultivate.ts  UNTOUCHED</pre>
+</div>
+</div>
+<table>
+<tr><th>Rule</th><th>Status</th></tr>
+<tr><td>#2 cultivate.ts contract</td><td class="ok">✓ untouched</td></tr>
+<tr><td>#4 no new deps</td><td class="ok">✓ reuses SDK + cache + concurrency</td></tr>
+<tr><td>#5 framework tests</td><td class="warn">⚠ pure fns only (derive-plan, metrics) — security/ precedent</td></tr>
+<tr><td>#9 state.json shape</td><td class="ok">✓ additive optional MicroState fields</td></tr>
+<tr><td>#10 Upgrade interface</td><td class="ok">✓ untouched</td></tr>
+</table>
+
+<div class="footer">
+Mycelium · VibeSpace LLC · "The network provides." · Read-side v1 is the instrument;
+the write-side thin-LLM coding agent (<span class="mono">docs/micro-agents-vision.md</span>) is the destination.
+</div>
+
+</body>
+</html>

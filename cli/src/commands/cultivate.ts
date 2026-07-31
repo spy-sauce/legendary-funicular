@@ -28,6 +28,15 @@ import {
   runAfterLeaf,
   runOnCrash,
 } from "../lib/upgrades/hooks.js";
+import {
+  makeCacheStoreWithMissRecording,
+  cacheKey,
+  emitCacheEvent,
+  stopPulseAggregator,
+  writeCachePulse,
+  type CacheStoreInternal,
+  type CacheEvent,
+} from "../lib/cache-network/index.js";
 
 interface SubAgent {
   id: string;
@@ -65,6 +74,110 @@ interface LeafResult {
   logPath?: string;
 }
 
+/**
+ * Cached SDK call payload — stored in the cache-network for replay.
+ * Contains all data needed to replay a successful leaf without calling the SDK.
+ */
+interface CachedLeafPayload {
+  artifacts: string[];
+  textChunks: string[];
+  inputTokens: number;
+}
+
+// ── Cache-network module-level state ────────────────────────────────────
+// Shared across all leaves in a single cultivate run. Initialized when
+// cultivate starts (if caching enabled), cleared on exit.
+
+let _cacheStore: CacheStoreInternal | null = null;
+let _cacheEventsPath: string | null = null;
+let _cacheEnabled = true;
+let _currentIter = 0;
+
+/**
+ * Timer for periodic writeCachePulse to sporenet/state.json.
+ * NUTRIENTS §3: cache.pulse aggregation at 1.4s cadence.
+ * NUTRIENTS §5: writes additive cache block to state.json.
+ */
+let _cachePulseTimerId: ReturnType<typeof setInterval> | null = null;
+
+/** Cached stateDir for the pulse writer (set at cultivate start). */
+let _cacheStateDir: string | null = null;
+
+/** Pulse interval in milliseconds — 1.4s per NUTRIENTS §3. */
+const CACHE_PULSE_INTERVAL_MS = 1400;
+
+/**
+ * Start the state.json cache-pulse writer on a 1.4s interval.
+ * Writes cache stats to sporenet/state.json so the dashboard sees live data.
+ */
+function startCachePulseTimer(stateDir: string): void {
+  if (_cachePulseTimerId !== null) {
+    return; // Already running
+  }
+
+  _cacheStateDir = stateDir;
+
+  _cachePulseTimerId = setInterval(() => {
+    if (_cacheStore && _cacheStateDir) {
+      const stats = _cacheStore.stats();
+      writeCachePulse(_cacheStateDir, {
+        hits: stats.hits,
+        misses: stats.misses,
+        entries: stats.entries,
+        capacity: _cacheStore.capacity(),
+      });
+    }
+  }, CACHE_PULSE_INTERVAL_MS);
+
+  // Don't keep the process alive just for pulse writes
+  if (typeof _cachePulseTimerId === "object" && "unref" in _cachePulseTimerId) {
+    _cachePulseTimerId.unref();
+  }
+}
+
+/**
+ * Stop the state.json cache-pulse writer timer.
+ * Flushes one final pulse before stopping.
+ */
+function stopCachePulseTimer(): void {
+  if (_cachePulseTimerId === null) {
+    return;
+  }
+
+  // Flush final pulse before stopping
+  if (_cacheStore && _cacheStateDir) {
+    const stats = _cacheStore.stats();
+    writeCachePulse(_cacheStateDir, {
+      hits: stats.hits,
+      misses: stats.misses,
+      entries: stats.entries,
+      capacity: _cacheStore.capacity(),
+    });
+  }
+
+  clearInterval(_cachePulseTimerId);
+  _cachePulseTimerId = null;
+  _cacheStateDir = null;
+}
+
+/**
+ * Invalidate all cache entries from a specific heal-loop iteration.
+ *
+ * Called by heal-loop iter-advance handler per NUTRIENTS §4:
+ * "when heal-loop advances iter, call `invalidateIter(prevIter)` from the
+ * cultivate iter-advance handler."
+ *
+ * This function operates on the module-level _cacheStore if it exists.
+ * No-op if cache is disabled or store not initialized.
+ *
+ * @param iter - The iteration number whose entries should be evicted
+ */
+export function invalidateCacheStoreIter(iter: number): void {
+  if (_cacheStore) {
+    _cacheStore.invalidateIter(iter);
+  }
+}
+
 export function registerCultivateCommand(program: Command): void {
   program
     .command("cultivate")
@@ -87,6 +200,11 @@ export function registerCultivateCommand(program: Command): void {
     .option(
       "--no-push",
       "Auto-commit but do not push to origin (default: push)"
+    )
+    .option(
+      "--no-cache",
+      "Skip cache-network wrapper (default: cache ON)",
+      false
     )
     .action(async (opts) => {
       const configPath = path.join(process.cwd(), "mycelium.yaml");
@@ -254,6 +372,44 @@ export function registerCultivateCommand(program: Command): void {
         return;
       }
 
+      // ── Cache-network initialization ──────────────────────────────
+      // Commander inverts --no-cache → opts.cache === false when set.
+      // Default is cache ON (opts.cache === true or undefined).
+      _cacheEnabled = opts.cache !== false;
+      _currentIter = organism.iter ?? 0;
+
+      if (_cacheEnabled) {
+        const organismName = organism.name ?? "organism";
+        const eventsDir = path.join(process.cwd(), ".mycelium", "events");
+        _cacheEventsPath = path.join(eventsDir, `${organismName}.jsonl`);
+
+        // Create cache store with 1000 entry capacity. Events path enables
+        // automatic cache.hit emission on get() per NUTRIENTS §4.
+        _cacheStore = makeCacheStoreWithMissRecording({
+          capacity: 1000,
+          eventsPath: _cacheEventsPath,
+        });
+
+        // Start the state.json pulse writer (writes cache stats every 1.4s)
+        // per NUTRIENTS §3 and §5. The timer is started after ensureSporenetState
+        // has seeded sporenet/state.json, so the file exists for pulse writes.
+        startCachePulseTimer(process.cwd());
+
+        console.log(
+          chalk.gray("  🧊 Cache-network: ") +
+            chalk.cyan("enabled") +
+            chalk.gray(` (capacity: 1000, iter: ${_currentIter})`)
+        );
+      } else {
+        _cacheStore = null;
+        _cacheEventsPath = null;
+        console.log(
+          chalk.gray("  🧊 Cache-network: ") +
+            chalk.yellow("disabled (--no-cache)")
+        );
+      }
+      console.log();
+
       // ── Cultivation: spawn each wave with a concurrency limit ─────
       installShutdownHook();
       console.log(chalk.magentaBright("  🌱 Cultivating...\n"));
@@ -328,6 +484,17 @@ export function registerCultivateCommand(program: Command): void {
       // dashboard with a stale view.
       await drainLeafStateWrites();
 
+      // ── Cache-network cleanup ─────────────────────────────────────
+      // Stop the pulse aggregator timer so the process can exit cleanly.
+      // This also flushes any pending pulse event. Stop the state.json
+      // pulse writer (writeCachePulse) to avoid timer leaks.
+      if (_cacheEnabled) {
+        stopCachePulseTimer();
+        stopPulseAggregator();
+        _cacheStore = null;
+        _cacheEventsPath = null;
+      }
+
       // ── Report ─────────────────────────────────────────────────────
       summary(allResults, organism);
     });
@@ -357,6 +524,12 @@ function installShutdownHook(): void {
   if (sigintInstalled) return;
   sigintInstalled = true;
   const shutdown = async () => {
+    // Stop cache-network timers on interrupt to avoid leaking handles
+    if (_cacheEnabled) {
+      stopCachePulseTimer();
+      stopPulseAggregator();
+    }
+
     const count = activeSessions.size;
     if (count === 0) {
       process.exit(130);
@@ -482,6 +655,101 @@ async function cultivateLeaf(
   const maxBudgetUsd = readMaxBudgetUsd(config);
   let budgetExceeded: { spent: number } | null = null;
 
+  // ── Cache-network lookup ────────────────────────────────────────
+  // Derive cache key from prompt + contract hash. Check cache before
+  // spawning SDK session. On hit: skip SDK, use cached payload.
+  // On miss: proceed with SDK, cache result after stream completes.
+  const contractHash = config.contractHash ?? "unfrozen";
+  const cacheKeyValue = _cacheEnabled && _cacheStore
+    ? cacheKey({ tool_name: "claude-agent-sdk", args: prompt, contract_hash: contractHash })
+    : null;
+
+  if (_cacheEnabled && _cacheStore && cacheKeyValue && _cacheEventsPath) {
+    const hit = _cacheStore.get(cacheKeyValue);
+    if (hit) {
+      // Cache hit — store.get() already emitted cache.hit event per NUTRIENTS §4
+      const cached = hit.payload as CachedLeafPayload;
+      logLine({ event: "cache_hit", key_hash: cacheKeyValue.slice(0, 12) });
+
+      // Replay cached data into local state
+      artifacts.push(...cached.artifacts);
+      leafTextChunks.push(...cached.textChunks);
+
+      spinner.text =
+        chalk.cyan(`🧊 ${leaf.id}`) +
+        chalk.gray(` — cache hit (${cached.artifacts.length} files)`);
+
+      // Skip to the post-stream success path (extract synopsis, commit, etc.)
+      const leafSynopsis = extractSynopsis(leafTextChunks.join("\n"));
+      const commitResult = await commitQueue.enqueue(async () => {
+        return autoCommitLeaf(
+          leaf,
+          targetDir,
+          artifacts,
+          (config as any)._push !== false,
+          leafSynopsis
+        );
+      });
+      const commitMsg = commitResult?.message ?? null;
+      const commitSha = commitResult?.sha ?? null;
+
+      const updates: Record<string, any> = {
+        status: "done",
+        completed_at: new Date().toISOString(),
+        duration_seconds: Math.round(((Date.now() - started) / 1000) * 10) / 10,
+        files_produced: Array.from(new Set(artifacts)).length,
+        cache_hit: true,
+      };
+      if (commitSha) {
+        updates.commit = commitSha;
+      }
+
+      let synopsis: string | null = null;
+      if (updates.commit) {
+        try {
+          const body = execFileSync(
+            "git",
+            ["-C", targetDir, "log", "-1", "--format=%B", updates.commit],
+            { encoding: "utf-8", maxBuffer: GIT_MAX_BUFFER }
+          );
+          synopsis = extractSynopsis(body);
+        } catch {}
+      }
+      if (!synopsis) synopsis = leafSynopsis;
+      if (!synopsis) synopsis = leaf.scope || "";
+      updates.synopsis = synopsis;
+
+      writeLeafState(targetDir, leaf.id, updates);
+
+      const ms = Date.now() - started;
+      logLine({ event: "fruit_ready", artifacts, ms, commit: commitMsg, cache_hit: true });
+      logStream.end();
+      spinner.succeed(
+        chalk.green(`🧊 ${leaf.id}`) +
+          chalk.gray(
+            ` CACHE_HIT (${artifacts.length} files, ${(ms / 1000).toFixed(1)}s)` +
+              (commitMsg ? ` · ${commitMsg}` : "")
+          )
+      );
+      return { leaf, success: true, artifacts, ms, logPath };
+    } else {
+      // Cache miss — emit event per NUTRIENTS §3, record miss for stats
+      _cacheStore.recordMiss();
+      emitCacheEvent(
+        {
+          type: "cache.miss",
+          ts: new Date().toISOString(),
+          leaf_id: leaf.id,
+          key_hash: cacheKeyValue.slice(0, 12),
+        },
+        _cacheEventsPath
+      );
+      logLine({ event: "cache_miss", key_hash: cacheKeyValue.slice(0, 12) });
+    }
+  }
+
+  // ── SDK session (cache miss or cache disabled) ────────────────────
+  let inputTokens = 0;
   let stream: any;
   try {
     stream = query({
@@ -515,12 +783,32 @@ async function cultivateLeaf(
             leafTextChunks.push(b.text);
           }
         }
-      } else if (
-        msg.type === "result" &&
-        (msg as any).subtype === "error_max_budget_usd"
-      ) {
-        budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
+      } else if (msg.type === "result") {
+        if ((msg as any).subtype === "error_max_budget_usd") {
+          budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
+        }
+        // Capture input tokens from result for cache storage
+        const usage = (msg as any).usage;
+        if (usage?.input_tokens) {
+          inputTokens = usage.input_tokens;
+        }
       }
+    }
+
+    // ── Cache store after successful stream completion ──────────────
+    if (_cacheEnabled && _cacheStore && cacheKeyValue) {
+      _cacheStore.set(
+        cacheKeyValue,
+        {
+          artifacts: [...artifacts],
+          textChunks: [...leafTextChunks],
+          inputTokens,
+        } as CachedLeafPayload,
+        inputTokens,
+        leaf.id,
+        _currentIter
+      );
+      logLine({ event: "cache_set", key_hash: cacheKeyValue.slice(0, 12), inputTokens });
     }
 
     if (budgetExceeded) {
