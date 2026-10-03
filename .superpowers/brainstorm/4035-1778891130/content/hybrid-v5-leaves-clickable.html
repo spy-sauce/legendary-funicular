@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mycelium · live demo · v5 (leaves clickable)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#060912;--ink-2:#0A0E18;--ink-3:#11161F;
+  --rule:#1A2030;--rule-2:#232B3D;
+  --ice:#E8EEF5;--ice-2:#A8B4C5;--ice-3:#6A7585;--ice-4:#404B5C;
+  --cryo:#7AE5FF;--cryo-glow:rgba(122,229,255,0.18);
+  --life-germ:#B7A8E8;--life-grow:#7BC9C0;--life-flow:#8BB8E0;--life-fruit:#D9C390;--life-dorm:#5A6471;
+  --sev-warn:#D9B85A;--sev-alert:#E08A5C;--sev-crit:#DB5C6E;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { background:var(--ink); color:var(--ice); height:100%; }
+body { font-family:'Geist',sans-serif; font-size:13px; font-weight:300; overflow:hidden; position:relative; -webkit-font-smoothing:antialiased; letter-spacing:0.005em; }
+body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:9999; opacity:0.025; background-image:url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='1' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); mix-blend-mode:screen; }
+
+.frame { display:grid; grid-template-rows:auto auto 1fr auto; height:100vh; }
+
+.titlebar { display:flex; align-items:center; justify-content:space-between; padding:14px 32px; border-bottom:0.5px solid var(--rule); background:linear-gradient(180deg,var(--ink-2),var(--ink)); }
+.brand { display:flex; align-items:baseline; gap:18px; }
+.brand .seal { font-family:'Geist',sans-serif; font-weight:200; font-size:22px; letter-spacing:0.02em; color:var(--ice); display:flex; align-items:baseline; gap:8px; }
+.brand .seal::before { content:''; display:inline-block; width:7px; height:7px; background:var(--cryo); box-shadow:0 0 14px var(--cryo); margin-right:4px; transform:translateY(-2px); }
+.brand .seal strong { color:var(--cryo); font-weight:300; }
+.brand .stamp { font-family:'Geist Mono',monospace; font-size:10px; font-weight:400; letter-spacing:0.18em; text-transform:uppercase; color:var(--ice-3); padding-left:18px; border-left:0.5px solid var(--rule-2); display:flex; align-items:center; height:20px; }
+.titlebar-right { display:flex; align-items:center; gap:24px; font-family:'Geist Mono',monospace; font-size:11px; }
+.heartbeat-wrap { display:flex; gap:10px; align-items:center; }
+.heartbeat { width:6px; height:6px; border-radius:50%; background:var(--cryo); box-shadow:0 0 10px var(--cryo); animation:qubit 1.6s ease-in-out infinite; }
+@keyframes qubit { 0%,100%{opacity:0.4; transform:scale(0.9)} 50%{opacity:1; transform:scale(1.15)} }
+.uptime { color:var(--ice-2); font-weight:400; }
+
+.metrics { display:grid; grid-template-columns:repeat(5,1fr); border-bottom:0.5px solid var(--rule); background:var(--ink-2); }
+.metric { padding:16px 26px 18px; border-right:0.5px solid var(--rule); position:relative; }
+.metric:last-child { border-right:none; }
+.metric .ml { font-family:'Geist Mono',monospace; font-size:9px; font-weight:400; letter-spacing:0.2em; text-transform:uppercase; color:var(--ice-3); margin-bottom:8px; }
+.metric .mv { font-family:'Geist',sans-serif; font-weight:200; font-size:32px; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; line-height:1; color:var(--ice); }
+.metric .mv.cryo { color:var(--cryo); text-shadow:0 0 22px var(--cryo-glow); }
+.metric .mv.warn { color:var(--sev-warn); } .metric .mv.crit { color:var(--sev-crit); }
+.metric .ms { font-family:'Geist Mono',monospace; font-size:10px; color:var(--ice-3); margin-top:6px; letter-spacing:0.04em; }
+.metric .mtick { position:absolute; top:0; left:0; height:1px; background:var(--cryo); opacity:0.5; }
+
+.alert-ribbon { display:none; padding:9px 32px; background:linear-gradient(90deg,rgba(219,92,110,0.18),rgba(219,92,110,0.03)); border-top:0.5px solid rgba(219,92,110,0.6); border-bottom:0.5px solid rgba(219,92,110,0.6); font-family:'Geist Mono',monospace; font-size:12px; color:#F0BAC4; letter-spacing:0.02em; align-items:center; gap:14px; }
+.alert-ribbon.show { display:flex; }
+.alert-ribbon .badge { background:rgba(219,92,110,0.22); padding:2px 8px; font-size:9px; letter-spacing:0.2em; text-transform:uppercase; border:0.5px solid rgba(219,92,110,0.5); }
+
+.body { display:grid; grid-template-columns:1fr 320px; overflow:hidden; min-height:0; }
+.stage { position:relative; background:var(--ink); overflow:hidden; border-right:0.5px solid var(--rule); }
+.stage canvas { position:absolute; inset:0; width:100%!important; height:100%!important; display:block; cursor:grab; }
+.stage canvas:active { cursor:grabbing; }
+
+.stage-meta { position:absolute; top:16px; left:22px; z-index:5; font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ice-3); pointer-events:none; }
+.stage-meta .label { display:block; font-family:'Geist',sans-serif; font-weight:200; font-size:15px; letter-spacing:-0.005em; text-transform:none; color:var(--ice-2); margin-top:3px; }
+
+.legend { position:absolute; top:18px; right:22px; z-index:5; display:flex; gap:14px; font-family:'Geist Mono',monospace; font-size:10px; color:var(--ice-3); letter-spacing:0.04em; pointer-events:none; }
+.legend .litem { display:flex; align-items:center; gap:6px; }
+.legend .ldot { width:8px; height:8px; border-radius:50%; display:inline-block; border:0.5px solid currentColor; background:transparent; }
+
+.dimbar { position:absolute; top:60px; right:22px; z-index:5; font-family:'Geist Mono',monospace; font-size:9px; color:var(--ice-3); letter-spacing:0.18em; text-transform:uppercase; padding:8px 12px; border:0.5px solid var(--rule-2); background:var(--ink-2); pointer-events:none; }
+.dimbar .row { display:flex; gap:8px; align-items:center; }
+.dimbar .ax.live { color:var(--cryo); }
+
+.zoom-cluster { position:absolute; bottom:22px; left:22px; z-index:5; display:flex; align-items:center; background:var(--ink-2); border:0.5px solid var(--rule-2); font-family:'Geist Mono',monospace; font-size:11px; }
+.zoom-btn { background:transparent; border:none; border-right:0.5px solid var(--rule-2); color:var(--ice-2); cursor:pointer; padding:8px 12px; font-family:inherit; font-size:13px; }
+.zoom-btn:last-of-type { border-right:none; }
+.zoom-btn:hover { background:var(--ink-3); color:var(--cryo); }
+.zoom-readout { padding:0 14px; color:var(--ice-3); letter-spacing:0.04em; min-width:138px; }
+.zoom-readout strong { color:var(--cryo); font-weight:400; }
+.zoom-readout em { font-style:italic; color:var(--ice-2); }
+.cam-reset { background:transparent; border:0.5px solid var(--rule-2); color:var(--ice-3); cursor:pointer; padding:8px 12px; font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; margin-left:8px; }
+.cam-reset:hover { color:var(--cryo); border-color:var(--cryo); }
+
+.psi-cluster { position:absolute; bottom:22px; left:50%; transform:translateX(-50%); z-index:5; background:var(--ink-2); border:0.5px solid var(--rule-2); padding:8px 16px; display:flex; align-items:center; gap:12px; font-family:'Geist Mono',monospace; font-size:10px; color:var(--ice-3); letter-spacing:0.14em; text-transform:uppercase; }
+.psi-cluster .psi-label { color:var(--cryo); }
+.psi-cluster input[type=range] { -webkit-appearance:none; appearance:none; width:200px; height:1px; background:linear-gradient(to right, var(--cryo) 0%, var(--rule-2) 50%, var(--cryo) 100%); outline:none; }
+.psi-cluster input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:9px; height:18px; background:var(--cryo); border:1px solid var(--ink); cursor:pointer; box-shadow:0 0 12px var(--cryo); }
+.psi-cluster .psi-val { color:var(--ice-2); min-width:60px; text-align:right; font-weight:400; letter-spacing:0.04em; }
+.psi-cluster .psi-auto { background:transparent; border:0.5px solid var(--rule-2); color:var(--ice-3); cursor:pointer; padding:3px 8px; font-family:inherit; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; }
+.psi-cluster .psi-auto.on { color:var(--cryo); border-color:var(--cryo); }
+
+.specimen-card { position:absolute; bottom:84px; right:22px; z-index:6; width:260px; background:var(--ink-2); border:0.5px solid var(--rule-2); padding:14px 16px; opacity:0; transform:translateY(8px); transition:opacity 0.18s ease, transform 0.18s ease; pointer-events:none; }
+.specimen-card.show { opacity:1; transform:translateY(0); }
+.specimen-card .card-eyebrow { font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ice-3); }
+.specimen-card .card-name { font-family:'Geist',sans-serif; font-weight:300; font-size:18px; letter-spacing:-0.01em; margin:4px 0 6px; color:var(--ice); }
+.specimen-card .card-sub { font-family:'Geist Mono',monospace; font-size:10px; color:var(--ice-3); margin-bottom:8px; }
+.specimen-card .hint { font-family:'Geist Mono',monospace; font-size:9px; color:var(--cryo); letter-spacing:0.18em; text-transform:uppercase; }
+
+.inspect {
+  position:absolute; top:60px; left:22px; z-index:7;
+  width:420px; max-height:calc(100% - 130px);
+  background:var(--ink-2);
+  border:0.5px solid var(--rule-2);
+  opacity:0; transform:translateX(-8px);
+  transition:opacity 0.22s ease, transform 0.22s ease;
+  pointer-events:none;
+  display:flex; flex-direction:column;
+}
+.inspect.open { opacity:1; transform:translateX(0); pointer-events:auto; }
+.inspect-head { padding:14px 18px; border-bottom:0.5px solid var(--rule); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.inspect-head .h-eyebrow { font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ice-3); margin-bottom:3px; }
+.inspect-head .h-title { font-family:'Geist',sans-serif; font-weight:300; font-size:20px; letter-spacing:-0.01em; color:var(--ice); }
+.inspect-head .h-tag { font-family:'Geist Mono',monospace; font-size:11px; color:var(--ice-3); margin-top:4px; letter-spacing:0.06em; }
+.inspect-head .h-actions { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+.inspect-head .h-state { display:flex; align-items:center; gap:8px; font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; padding:4px 10px; border:0.5px solid; align-self:flex-start; }
+.inspect-head .x-close, .inspect-head .x-back { background:transparent; border:0.5px solid var(--rule-2); color:var(--ice-3); cursor:pointer; padding:3px 10px; font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; }
+.inspect-head .x-close:hover { color:var(--sev-warn); border-color:var(--sev-warn); }
+.inspect-head .x-back:hover { color:var(--cryo); border-color:var(--cryo); }
+
+.inspect-body { padding:14px 18px 16px; overflow-y:auto; flex:1; }
+.inspect-body::-webkit-scrollbar { width:4px; } .inspect-body::-webkit-scrollbar-thumb { background:var(--rule-2); }
+.i-section { margin-bottom:14px; padding-bottom:12px; border-bottom:0.5px dashed var(--rule); }
+.i-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+.i-section h5 { font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ice-3); margin-bottom:8px; font-weight:400; }
+.i-row { display:grid; grid-template-columns:auto 1fr; gap:10px; padding:3px 0; font-family:'Geist Mono',monospace; font-size:11px; }
+.i-row .k { color:var(--ice-3); letter-spacing:0.06em; }
+.i-row .v { color:var(--ice); }
+.i-row .v.dim { color:var(--ice-2); }
+.i-prose {
+  font-family:'Geist',sans-serif;
+  font-size:13px; font-weight:300; line-height:1.55;
+  color:var(--ice-2);
+  padding:6px 0 0;
+}
+
+.leaf-list { display:flex; flex-direction:column; }
+.leaf-row {
+  display:grid; grid-template-columns:14px 1fr auto auto;
+  gap:8px; padding:6px 0;
+  font-family:'Geist Mono',monospace; font-size:11px;
+  border-left:1.5px solid transparent;
+  padding-left:9px;
+  cursor:pointer;
+  border-bottom:0.5px dashed transparent;
+}
+.leaf-row:hover { background:rgba(122,229,255,0.04); }
+.leaf-row.current { background:rgba(122,229,255,0.08); border-left-color:var(--cryo); }
+.leaf-row.s-fruit { border-left-color:var(--life-fruit); }
+.leaf-row.s-grow  { border-left-color:var(--life-grow); }
+.leaf-row.s-flow  { border-left-color:var(--life-flow); }
+.leaf-row.s-germ  { border-left-color:var(--life-germ); }
+.leaf-row.s-dorm  { border-left-color:var(--life-dorm); }
+.leaf-row .dot { font-family:inherit; font-size:11px; }
+.leaf-row .name { color:var(--ice); }
+.leaf-row .name .scope { display:block; font-size:9px; color:var(--ice-3); margin-top:2px; line-height:1.5; }
+.leaf-row .dur { color:var(--ice-3); font-size:10px; }
+.leaf-row .commit { color:var(--ice-3); font-size:10px; }
+
+.io-list .io-row { font-family:'Geist Mono',monospace; font-size:11px; padding:3px 0; color:var(--ice-2); }
+.io-list .io-row .arrow { color:var(--cryo); font-size:11px; }
+.io-list .io-row .neigh { color:var(--ice); }
+.io-list .io-row .payload { color:var(--ice-3); }
+
+.file-list { font-family:'Geist Mono',monospace; font-size:10px; color:var(--ice-2); }
+.file-list .file-row { padding:2px 0; }
+.file-list .file-row::before { content:'·'; color:var(--ice-3); margin-right:6px; }
+
+.rail { display:flex; flex-direction:column; background:var(--ink-2); overflow:hidden; min-height:0; }
+.rail-section { padding:16px 22px; border-bottom:0.5px solid var(--rule); }
+.rail-section:last-of-type { border-bottom:none; flex:1; }
+.rail-h { font-family:'Geist',sans-serif; font-weight:200; font-size:16px; letter-spacing:-0.005em; color:var(--ice); margin-bottom:12px; display:flex; justify-content:space-between; align-items:baseline; }
+.rail-h .count { font-family:'Geist Mono',monospace; font-size:10px; font-weight:400; color:var(--ice-3); letter-spacing:0.16em; }
+.providers .prow { display:grid; grid-template-columns:14px 1fr auto; align-items:center; gap:10px; padding:7px 0; border-bottom:0.5px dashed var(--rule); }
+.providers .prow:last-child { border-bottom:none; }
+.providers .pdot { width:8px; height:8px; border-radius:50%; border:0.5px solid; }
+.providers .pdot.up { background:var(--life-grow); box-shadow:0 0 6px var(--life-grow); }
+.providers .pdot.down { background:var(--sev-crit); box-shadow:0 0 6px var(--sev-crit); }
+.providers .pname { font-family:'Geist Mono',monospace; font-size:11px; color:var(--ice-2); }
+.providers .platency { font-family:'Geist Mono',monospace; font-size:10px; color:var(--ice-3); }
+.providers .platency.slow { color:var(--sev-warn); }
+.agents .arow { display:flex; align-items:center; justify-content:space-between; padding:6px 0; cursor:pointer; border-bottom:0.5px dashed transparent; }
+.agents .arow:hover { background:rgba(122,229,255,0.04); }
+.agents .arow.pinned { background:rgba(122,229,255,0.08); border-bottom-color:var(--cryo); }
+.agents .alabel { font-size:12px; color:var(--ice-2); font-weight:400; }
+.agents .arow.pinned .alabel { color:var(--cryo); }
+.agents .apill { font-family:'Geist Mono',monospace; font-size:9px; letter-spacing:0.14em; text-transform:uppercase; padding:3px 9px; border-radius:1px; border:0.5px solid; }
+
+.feedbar { border-top:0.5px solid var(--rule); background:var(--ink-2); display:grid; grid-template-columns:1fr auto; align-items:center; padding:12px 22px 4px; gap:16px; }
+.feedbar h4 { font-family:'Geist',sans-serif; font-weight:200; font-size:15px; letter-spacing:-0.005em; color:var(--ice); }
+.feedbar h4 .tail { font-family:'Geist Mono',monospace; font-size:10px; font-weight:400; color:var(--ice-3); letter-spacing:0.16em; margin-left:10px; }
+.filters { display:flex; }
+.fbtn { font-family:'Geist Mono',monospace; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; padding:4px 11px; background:transparent; border:none; border-right:0.5px solid var(--rule); color:var(--ice-3); cursor:pointer; }
+.fbtn:last-child { border-right:none; }
+.fbtn:hover { color:var(--ice-2); }
+.fbtn.active { color:var(--cryo); }
+.fbtn.active::before { content:'·'; margin-right:5px; color:var(--cryo); }
+
+.feed { background:var(--ink); border-top:0.5px solid var(--rule); height:158px; overflow-y:auto; font-family:'Geist Mono',monospace; font-size:11px; padding:6px 22px 14px; }
+.feed::-webkit-scrollbar { width:4px; } .feed::-webkit-scrollbar-thumb { background:var(--rule-2); }
+.fline { display:grid; grid-template-columns:14px 78px 150px 1fr; gap:12px; padding:3px 0; border-left:1.5px solid transparent; padding-left:10px; }
+.fline.sev-warn  { border-left-color:var(--sev-warn); }
+.fline.sev-alert { border-left-color:var(--sev-alert); }
+.fline.sev-crit  { border-left-color:var(--sev-crit); background:rgba(219,92,110,0.06); }
+.ficon { color:var(--ice-3); text-align:center; }
+.fts { color:var(--ice-3); } .fsrc { color:var(--ice-2); } .fmsg { color:var(--ice); }
+.fline.sev-crit .fmsg { color:#F0BAC4; }
+
+.boot-overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--ink); z-index:10; font-family:'Geist Mono',monospace; font-size:10px; color:var(--ice-3); letter-spacing:0.2em; text-transform:uppercase; }
+.boot-overlay .spinner { width:24px; height:24px; border:0.5px solid var(--rule-2); border-top-color:var(--cryo); border-radius:50%; animation:spin 1s linear infinite; margin-bottom:14px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.boot-overlay.hidden { display:none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="frame">
+
+  <div class="titlebar">
+    <div class="brand">
+      <div class="seal">mycelium<strong>·live</strong></div>
+      <div class="stamp">organism · audit-run · gate · contract-freeze · t = 0.012 K · ψ-coupled</div>
+    </div>
+    <div class="titlebar-right">
+      <div class="heartbeat-wrap"><span class="heartbeat"></span><span class="uptime" id="uptime">00:00:00</span></div>
+    </div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="mtick" style="width:94%"></div><div class="ml">Coherence</div><div class="mv cryo" id="m-health">94%</div><div class="ms">4 of 4 providers · 1 decohering</div></div>
+    <div class="metric"><div class="ml">Qubits · States</div><div class="mv" id="m-agents">6 · 22</div><div class="ms" id="m-agents-sub">— active · — done</div></div>
+    <div class="metric"><div class="ml">Energy · 24h</div><div class="mv" id="m-cost">$0.000</div><div class="ms" id="m-tokens">0 tokens</div></div>
+    <div class="metric"><div class="ml">Measurements</div><div class="mv" id="m-events">0</div><div class="ms">events processed</div></div>
+    <div class="metric"><div class="ml">Anomalies</div><div class="mv" id="m-alerts">0</div><div class="ms" id="m-alerts-sub">stable</div></div>
+  </div>
+
+  <div class="alert-ribbon" id="alert-ribbon">
+    <span class="badge">anomaly</span><span id="alert-text">Latency 3.2× above baseline — possible provider degradation</span>
+  </div>
+
+  <div class="body">
+    <div class="stage" id="stage">
+      <div class="stage-meta">array · 5d projection · webgl<span class="label">superposition manifold</span></div>
+
+      <div class="legend">
+        <span class="litem" style="color:var(--life-germ)"><span class="ldot"></span>germ</span>
+        <span class="litem" style="color:var(--life-grow)"><span class="ldot"></span>grow</span>
+        <span class="litem" style="color:var(--life-flow)"><span class="ldot"></span>flow</span>
+        <span class="litem" style="color:var(--life-fruit)"><span class="ldot"></span>fruit</span>
+        <span class="litem" style="color:var(--life-dorm)"><span class="ldot"></span>dorm</span>
+      </div>
+
+      <div class="dimbar"><div class="row"><span class="ax live">x</span><span class="ax live">y</span><span class="ax live">z</span><span class="ax live">t</span><span class="ax live">ψ</span></div></div>
+
+      <div class="zoom-cluster">
+        <button class="zoom-btn" id="zoom-out">−</button>
+        <div class="zoom-readout"><strong id="zoom-level">lattice</strong> · <em id="zoom-tip">click qubit or leaf · scroll to zoom</em></div>
+        <button class="zoom-btn" id="zoom-in">+</button>
+        <button class="cam-reset" id="cam-reset">reset</button>
+      </div>
+
+      <div class="psi-cluster">
+        <span class="psi-label">ψ</span>
+        <input type="range" id="psi-slider" min="0" max="1000" value="500">
+        <span class="psi-val" id="psi-val">+0.000</span>
+        <button class="psi-auto on" id="psi-auto">auto</button>
+      </div>
+
+      <div class="specimen-card" id="specimen">
+        <div class="card-eyebrow" id="sp-eyebrow">qubit</div>
+        <div class="card-name" id="sp-name">—</div>
+        <div class="card-sub" id="sp-sub"></div>
+        <div class="hint">click to pin</div>
+      </div>
+
+      <div class="inspect" id="inspect">
+        <div class="inspect-head" id="i-head"></div>
+        <div class="inspect-body" id="i-body"></div>
+      </div>
+
+      <div class="boot-overlay" id="boot"><div class="spinner"></div>cooling · ψ-coupling…</div>
+    </div>
+
+    <aside class="rail">
+      <div class="rail-section providers">
+        <div class="rail-h">Providers <span class="count">4 ·  link</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">anthropic</span><span class="platency">142ms</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">ollama_local</span><span class="platency">88ms</span></div>
+        <div class="prow"><span class="pdot down"></span><span class="pname">openai</span><span class="platency slow">4,212ms</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">google</span><span class="platency">230ms</span></div>
+      </div>
+      <div class="rail-section agents">
+        <div class="rail-h">Qubits <span class="count">6</span></div>
+        <div id="rail-agents"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="feedbar">
+    <h4>Measurement log<span class="tail">— newest at bottom</span></h4>
+    <div class="filters">
+      <button class="fbtn active" data-f="all">all</button>
+      <button class="fbtn" data-f="lifecycle">lifecycle</button>
+      <button class="fbtn" data-f="nutrient">entanglement</button>
+      <button class="fbtn" data-f="cost">energy</button>
+      <button class="fbtn" data-f="health">coherence</button>
+      <button class="fbtn" data-f="anomaly">anomaly</button>
+    </div>
+  </div>
+  <div class="feed" id="feed"></div>
+
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const css = getComputedStyle(document.documentElement);
+const cryo = css.getPropertyValue('--cryo').trim();
+const LIFE = {
+  germ:  new THREE.Color(css.getPropertyValue('--life-germ').trim()),
+  grow:  new THREE.Color(css.getPropertyValue('--life-grow').trim()),
+  flow:  new THREE.Color(css.getPropertyValue('--life-flow').trim()),
+  fruit: new THREE.Color(css.getPropertyValue('--life-fruit').trim()),
+  dorm:  new THREE.Color(css.getPropertyValue('--life-dorm').trim()),
+};
+const LIFE_CSS = {
+  germ:  css.getPropertyValue('--life-germ').trim(),
+  grow:  css.getPropertyValue('--life-grow').trim(),
+  flow:  css.getPropertyValue('--life-flow').trim(),
+  fruit: css.getPropertyValue('--life-fruit').trim(),
+  dorm:  css.getPropertyValue('--life-dorm').trim(),
+};
+
+// REAL audit-run leaf data (22 leaves, with synopsis)
+const LEAVES_RAW = [
+  { biome:'audit-findings', id:'audit.findings.type',       scope:'Finding interface + Severity union per NUTRIENTS §1', files:['cli/src/lib/audit/findings.ts'], dur:120.3, commit:'64bde0e', tokens:1840, synopsis:'Defines the core data shape for quality-check results so automated tests can report issues consistently across the system.' },
+  { biome:'audit-findings', id:'audit.findings.writer',     scope:'appendFinding + readFindings + dedupe by id (sha256); atomic append', files:['cli/src/lib/audit/findings-writer.ts'], dur:163.6, commit:'e34b8f9', tokens:2620, synopsis:'Stores and retrieves finding records from disk. Idempotent appends; duplicate ids skipped automatically.' },
+  { biome:'audit-findings', id:'audit.findings.validate',   scope:'validateFinding runtime guard (severity union, id length, ISO-8601 ts)', files:['cli/src/lib/audit/findings-validate.ts','cli/src/lib/audit/findings.test.ts'], dur:151.3, commit:'0d04efd', tokens:2480, synopsis:'Validates findings at the boundary so the dashboard and downstream biomes only ever see well-formed data.' },
+  { biome:'audit-testers',  id:'audit.testers.types',       scope:'TesterDef interface + TesterResult interface per NUTRIENTS §4', files:['cli/src/lib/audit/testers.ts'], dur:93.7, commit:'1d95b2f', tokens:1480, synopsis:'Defines the shape of a tester definition and its result envelope.' },
+  { biome:'audit-testers',  id:'audit.testers.loader',      scope:'loadTesters scans hyphae/HYPHA-TEST-*.md; parses CACHE HEADER per NUTRIENTS §6', files:['cli/src/lib/audit/testers-loader.ts'], dur:256.6, commit:'87efb62', tokens:4140, synopsis:'Scans the cultivation directory for HYPHA-TEST markdown files and parses their CACHE HEADER blocks into TesterDefs.' },
+  { biome:'audit-testers',  id:'audit.testers.runner',      scope:'runTester spawns Claude Agent SDK session w/ Read+Bash tool budget', files:['cli/src/lib/audit/testers-runner.ts','cli/src/lib/audit/testers-runner.test.ts'], dur:292.9, commit:'bc4ba8c', tokens:4810, synopsis:'Spawns a Claude Agent SDK session per tester with a tightly scoped tool budget. Records pass/fail.' },
+  { biome:'audit-testers',  id:'audit.testers.pool',        scope:'testers-pool.ts imports runWithConcurrency from cli/src/lib/concurrency.ts', files:['cli/src/lib/audit/testers-pool.ts'], dur:149.5, commit:'c125c7c', tokens:2240, synopsis:'Drives parallel tester execution with bounded concurrency.' },
+  { biome:'audit-testers',  id:'audit.testers.examples',    scope:'examples/hyphae-test/HYPHA-TEST-*.md stubs for loader validation', files:['examples/hyphae-test/HYPHA-TEST-types.md','examples/hyphae-test/HYPHA-TEST-tokens.md','examples/hyphae-test/HYPHA-TEST-flow-talent.md'], dur:73.6, commit:'f732732', tokens:1180, synopsis:'Three example HYPHA-TEST files showing the contract the loader expects.' },
+  { biome:'audit-aggregator', id:'audit.aggregator.aggregate', scope:'aggregate(findings) → AggregatedFindings — pure, deterministic per NUTRIENTS §5', files:['cli/src/lib/audit/aggregator.ts'], dur:139.8, commit:'78eefa7', tokens:2080, synopsis:'Groups findings by biome with deterministic ordering. Pure function — no I/O.' },
+  { biome:'audit-aggregator', id:'audit.aggregator.brief',     scope:'composeBriefFix prepends only_biomes + Active findings to brief.md', files:['cli/src/lib/audit/aggregator-brief.ts'], dur:150.3, commit:'df90780', tokens:2250, synopsis:'Composes the brief-fix.md — the directive cultivate reads on the next heal iteration.' },
+  { biome:'audit-aggregator', id:'audit.aggregator.summary',   scope:'writeSummary emits audit/<ts>/summary.json per NUTRIENTS §2', files:['cli/src/lib/audit/aggregator-summary.ts'], dur:138.5, commit:'5e67612', tokens:2060, synopsis:'Writes a structured audit summary JSON used by sporenet + downstream tooling.' },
+  { biome:'audit-cli',     id:'audit.cli.command',          scope:'cli/src/commands/audit-run.ts — Commander entry per NUTRIENTS §7 flag surface', files:['cli/src/commands/audit-run.ts'], dur:304.3, commit:'0095e83', tokens:5040, synopsis:'Top-level mycelium audit-run command. Defines the flag surface frozen in NUTRIENTS §7.' },
+  { biome:'audit-cli',     id:'audit.cli.orchestrator',     scope:'Wire loadTesters → runTestersInPool → aggregate → composeBriefFix → writeSummary', files:['cli/src/lib/audit/orchestrator.ts'], dur:332.1, commit:'4e22794', tokens:5520, synopsis:'Composes all the audit-run pipeline stages into a single sequential flow.' },
+  { biome:'audit-cli',     id:'audit.cli.scaffold',         scope:'mycelium audit-run scaffold-tester <biome> subcommand', files:['cli/src/lib/audit/scaffold-tester.ts','cli/src/lib/audit/scaffold-tester.test.ts','docs/audit-run-tester-authoring.md'], dur:221.6, commit:'17ecd7e', tokens:3650, synopsis:'Generates a HYPHA-TEST scaffold from any biome HYPHA so operators can author testers fast.' },
+  { biome:'audit-cli',     id:'audit.cli.exit',             scope:'exit codes per NUTRIENTS §7: 0/1/2/3 for clean/findings/exhausted/tester-error', files:['cli/src/commands/audit-run.ts'], dur:96, commit:'2f80119', tokens:1490, synopsis:'Surfaces exit codes that map cleanly to CI use: 0 clean, 1 findings, 2 budget exhausted, 3 tester error.' },
+  { biome:'audit-heal-loop', id:'audit.heal.loop',          scope:'iterate spawn mycelium cultivate --only-biome per critical biome', files:['cli/src/lib/audit/heal-loop.ts'], dur:226, commit:'df74da8', tokens:3760, synopsis:'The autofix loop — spawns cultivate to patch each critical biome until findings clear or budget runs out.' },
+  { biome:'audit-heal-loop', id:'audit.heal.iteration',     scope:'writeIteration persists IterationRecord under audit/<ts>/iterations/<n>/', files:['cli/src/lib/audit/heal-iteration.ts'], dur:121.6, commit:'881602a', tokens:2010, synopsis:'Persists the receipt for each heal iteration: spawned biomes, before/after findings, decision.' },
+  { biome:'audit-heal-loop', id:'audit.heal.budget',        scope:'autofix budget enforcement; --max-budget-usd, --max-iterations', files:['cli/src/lib/audit/heal-budget.ts'], dur:189, commit:'7a44b22', tokens:3140, synopsis:'Enforces token+USD budgets across heal iterations.' },
+  { biome:'audit-heal-loop', id:'audit.heal.autofix',       scope:'optional autofix branch creation; switch-and-commit pattern', files:['cli/src/lib/audit/autofix-branch.ts'], dur:172, commit:'9d3f0a1', tokens:2870, synopsis:'Creates a dedicated autofix branch so cultivate commits land on a separate feature ref.' },
+  { biome:'audit-sporenet', id:'audit.sporenet.write',      scope:'writeAuditBlock — extends state.json with audit { findings_count, exit_code, summary_path }', files:['cli/src/lib/audit/sporenet-integration.ts'], dur:155.9, commit:'a39c8eb', tokens:2310, synopsis:'Extends sporenet/state.json with an audit block so the dashboard sees fresh audit results.' },
+  { biome:'audit-sporenet', id:'audit.sporenet.reset',      scope:'resetBiomeLeaves flips matching leaves done→pending before each spawnCultivate', files:['cli/src/lib/audit/sporenet-integration.ts'], dur:142, commit:'b18d502', tokens:2150, synopsis:'Unblocks heal-loop replants by re-setting target biome leaves to pending so cultivate.ts re-spawns them.' },
+  { biome:'audit-sporenet', id:'audit.sporenet.lock',       scope:'serialized promise chain + atomic temp/rename so parallel writes never lose updates', files:['cli/src/lib/audit/sporenet-integration.ts'], dur:128, commit:'c92e811', tokens:1930, synopsis:'Serializes writes to state.json so concurrent heal iterations never race.' },
+];
+
+const BIOMES = [
+  { id:'audit-findings',   tag:'q[0]', state:'fruit', contracts:'§1', provider:'anthropic · claude-opus-4-7', synopsis:'Owns the Finding shape contract + read/write/validate primitives.' },
+  { id:'audit-testers',    tag:'q[1]', state:'grow',  contracts:'§4 · §6', provider:'anthropic · claude-opus-4-7', synopsis:'Loads and runs the HYPHA-TEST tester pool — the input source for findings.' },
+  { id:'audit-aggregator', tag:'q[2]', state:'flow',  contracts:'§2 · §5', provider:'anthropic · claude-opus-4-7', synopsis:'Sorts findings, composes brief-fix.md, writes the per-run summary.json.' },
+  { id:'audit-heal-loop',  tag:'q[3]', state:'grow',  contracts:'§8', provider:'anthropic · claude-opus-4-7', synopsis:'The autofix engine — re-spawns cultivate on critical biomes until clean or budget exhausted.' },
+  { id:'audit-sporenet',   tag:'q[4]', state:'germ',  contracts:'§3', provider:'anthropic · claude-haiku-4-5', synopsis:'Bridges audit-run to the live dashboard via state.json extensions.' },
+  { id:'audit-cli',        tag:'q[5]', state:'dorm',  contracts:'§7', provider:'anthropic · claude-opus-4-7', synopsis:'The public CLI surface — the command, its flags, the orchestration, and exit codes.' },
+];
+BIOMES.forEach(b => {
+  b.leafObjs = LEAVES_RAW.filter(l => l.biome === b.id).map(l => ({
+    ...l, state: 'pending', progress: 0, startedAt: null, completedAt: null,
+  }));
+  b.currentLeafIdx = -1;
+  b.io = []; b.tokensSoFar = 0; b.costSoFar = 0; b.wallStart = null; b.recentEvents = [];
+});
+
+const ROUTING = [
+  ['audit-findings','audit-aggregator'],['audit-findings','audit-heal-loop'],
+  ['audit-findings','audit-sporenet'],['audit-findings','audit-testers'],
+  ['audit-testers','audit-cli'],['audit-testers','audit-findings'],
+  ['audit-aggregator','audit-findings'],['audit-aggregator','audit-heal-loop'],
+  ['audit-aggregator','audit-cli'],['audit-cli','audit-findings'],
+  ['audit-cli','audit-aggregator'],['audit-heal-loop','audit-findings'],
+  ['audit-sporenet','audit-findings'],
+];
+const NUTRIENTS = {
+  'audit-findings->audit-aggregator':  'Finding[] (validated)',
+  'audit-findings->audit-heal-loop':   'critical Findings[]',
+  'audit-findings->audit-sporenet':    'findings_count + exit_code',
+  'audit-findings->audit-testers':     'Finding writer hook',
+  'audit-testers->audit-cli':          'TesterResult[]',
+  'audit-testers->audit-findings':     'TesterResult → appendFinding',
+  'audit-aggregator->audit-findings':  'AggregatedFindings ref',
+  'audit-aggregator->audit-heal-loop': 'critical only_biomes',
+  'audit-aggregator->audit-cli':       'summary.json path',
+  'audit-cli->audit-findings':         'cultivationDir',
+  'audit-cli->audit-aggregator':       'brief.md ref',
+  'audit-heal-loop->audit-findings':   'iteration state',
+  'audit-sporenet->audit-findings':    'state.json snapshot',
+};
+
+const state = {
+  events:[], eventCount:0, feedFilter:'all', alerts:[],
+  hover:null,             // { kind:'biome'|'leaf', id, biome? }
+  pinned:null,            // { kind:'biome'|'leaf', biomeId, leafId? }
+  startTime: Date.now(),
+  totalCost:0, totalTokens:0,
+  flows: new Map(),
+  psi: 0, psiAuto: true, psiManual: 0,
+  cameraTarget: new THREE.Vector3(0,0,0),
+};
+
+// ────────── three.js core ──────────
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+scene.background = null;
+scene.fog = new THREE.FogExp2(0x060912, 0.025);
+const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 200);
+const initialCam = new THREE.Vector3(0, 7, 14);
+camera.position.copy(initialCam);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+stage.appendChild(renderer.domElement);
+function fitRenderer() {
+  const r = stage.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', fitRenderer); fitRenderer();
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.enableZoom = false; controls.enablePan = false;
+controls.minDistance = 1.5; controls.maxDistance = 30;
+controls.minPolarAngle = 0.15; controls.maxPolarAngle = Math.PI * 0.78;
+controls.target.set(0,0,0);
+
+// ────────── hex lattice ──────────
+{
+  const r = 0.52, w = r * Math.sqrt(3), h = r * 1.5;
+  const pos = [];
+  const range = 14;
+  for (let row = -range; row <= range; row++) {
+    for (let col = -range; col <= range; col++) {
+      const x = col * w + (row % 2 ? w/2 : 0);
+      const z = row * h;
+      if (Math.sqrt(x*x + z*z) > range * 1.05) continue;
+      for (let i = 0; i < 6; i++) {
+        const a1 = (Math.PI/3) * i + Math.PI/6;
+        const a2 = (Math.PI/3) * (i+1) + Math.PI/6;
+        pos.push(x + Math.cos(a1)*r, -2.2, z + Math.sin(a1)*r);
+        pos.push(x + Math.cos(a2)*r, -2.2, z + Math.sin(a2)*r);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  scene.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x1A2030, transparent: true, opacity: 0.45 })));
+}
+{
+  const m = new THREE.Mesh(new THREE.RingGeometry(6.5, 6.55, 96, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(cryo), transparent: true, opacity: 0.18, side: THREE.DoubleSide }));
+  m.rotation.x = -Math.PI/2; m.position.y = -2.18; scene.add(m);
+}
+
+// ────────── biome positions ──────────
+const ringR = 4.8;
+BIOMES.forEach((b, i) => {
+  const a = (i / BIOMES.length) * Math.PI * 2;
+  const yWobble = (i % 2 === 0 ? 0.35 : -0.35);
+  b.basePos = new THREE.Vector3(Math.cos(a) * ringR, yWobble, Math.sin(a) * ringR);
+  b.angle = a;
+  b.spin = Math.random() * Math.PI * 2;
+  b.spinRate = (0.4 + Math.random() * 0.4) * (Math.random() < 0.5 ? 1 : -1);
+});
+
+// ────────── helpers ──────────
+function makeBlochWire(color, opacity=0.85) {
+  const g = new THREE.Group();
+  const r = 0.5;
+  const ringGeo = new THREE.TorusGeometry(r, 0.005, 6, 64);
+  const matBright = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+  const matDim    = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opacity * 0.6 });
+  g.add(new THREE.Mesh(ringGeo, matBright));
+  const m1 = new THREE.Mesh(ringGeo, matDim); m1.rotation.x = Math.PI/2; g.add(m1);
+  const m2 = new THREE.Mesh(ringGeo, matDim); m2.rotation.y = Math.PI/2; g.add(m2);
+  const vecGeo = new THREE.BufferGeometry();
+  vecGeo.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, r,0,0], 3));
+  const vecMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+  const vector = new THREE.Line(vecGeo, vecMat); g.add(vector);
+  const headMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), headMat); head.position.set(r,0,0); g.add(head);
+  const pipMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+  const pip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 12), pipMat); g.add(pip);
+  g.userData = { materials: [matBright, matDim, vecMat, headMat, pipMat], vector, head, pip };
+  return g;
+}
+
+function makeTextSprite(text, size = 40, color = '#A8B4C5') {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 80;
+  const cx = c.getContext('2d');
+  cx.font = `400 ${size}px "Geist Mono", monospace`;
+  cx.fillStyle = color; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText(text, c.width/2, c.height/2);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// ────────── biome assembly ──────────
+const BRANCHES = 3;
+BIOMES.forEach(b => {
+  b.group = new THREE.Group(); b.group.position.copy(b.basePos); scene.add(b.group);
+
+  b.mainWire = makeBlochWire(LIFE[b.state], 0.95);
+  b.group.add(b.mainWire);
+
+  b.ghosts = [];
+  for (let g = 0; g < BRANCHES; g++) {
+    const ghost = makeBlochWire(LIFE[b.state], 0.20);
+    ghost.userData.offsetSeed = {
+      ax: Math.random()*Math.PI*2, ay: Math.random()*Math.PI*2, az: Math.random()*Math.PI*2,
+      mag: 0.65 + Math.random()*0.45, freq: 0.7 + Math.random()*0.7,
+    };
+    b.group.add(ghost); b.ghosts.push(ghost);
+  }
+
+  // ── LEAVES — bigger, labeled, clickable ──
+  b.leafMeshes = [];
+  b.leafObjs.forEach((leaf, i) => {
+    const lg = new THREE.Group();
+
+    // 1. wireframe icosphere (bigger now)
+    const sphereGeo = new THREE.IcosahedronGeometry(0.13, 1);
+    const wireGeo = new THREE.WireframeGeometry(sphereGeo);
+    const wireMat = new THREE.LineBasicMaterial({ color: LIFE.dorm, transparent: true, opacity: 0 });
+    const wire = new THREE.LineSegments(wireGeo, wireMat);
+    lg.add(wire);
+
+    // 2. fill sphere (visible at close zoom, also the raycaster target)
+    const fillMat = new THREE.MeshBasicMaterial({ color: LIFE.dorm, transparent: true, opacity: 0 });
+    const fill = new THREE.Mesh(new THREE.SphereGeometry(0.10, 12, 12), fillMat);
+    fill.userData = { kind:'leaf', leafId: leaf.id, biomeId: b.id };
+    lg.add(fill);
+
+    // 3. inner bright core
+    const coreMat = new THREE.MeshBasicMaterial({ color: LIFE.dorm, transparent: true, opacity: 0 });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), coreMat);
+    lg.add(core);
+
+    // 4. thin dashed trace from biome center to leaf
+    const traceGeo = new THREE.BufferGeometry();
+    traceGeo.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, 0,0,0], 3));
+    const traceMat = new THREE.LineDashedMaterial({ color: LIFE.dorm, transparent: true, opacity: 0, dashSize: 0.06, gapSize: 0.04 });
+    const trace = new THREE.Line(traceGeo, traceMat); trace.computeLineDistances();
+    lg.add(trace);
+
+    // 5. label sprite — short name (id with biome prefix stripped)
+    const shortName = leaf.id.replace(`${b.id.replace('audit-','audit.')}.`, '').replace('audit.', '');
+    const labelTex = makeTextSprite(shortName, 36, '#E8EEF5');
+    const labelMat = new THREE.SpriteMaterial({ map: labelTex, transparent: true, opacity: 0, depthTest: false });
+    const label = new THREE.Sprite(labelMat);
+    label.scale.set(0.78, 0.12, 1);
+    label.position.set(0, -0.22, 0);
+    lg.add(label);
+
+    // 6. pin halo (hidden until selected)
+    const haloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cryo), transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+    const halo = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.21, 32, 1), haloMat);
+    lg.add(halo);
+
+    b.group.add(lg);
+
+    // orbit params — bigger radius now
+    const n = b.leafObjs.length;
+    const theta = (i / n) * Math.PI * 2;
+    const phi = (Math.random() - 0.5) * 0.8;
+    b.leafMeshes.push({
+      group: lg, wire, fill, core, trace, traceGeo, label, halo,
+      wireMat, fillMat, coreMat, traceMat, labelMat, haloMat,
+      theta, phi,
+      rr: 1.3 + Math.random() * 0.15,
+      orbitSpeed: 0.22 + Math.random() * 0.3,
+      vOff: Math.random() * Math.PI * 2,
+      leaf,
+    });
+  });
+
+  // ground shadow
+  const shadow = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.5, 32, 1), new THREE.MeshBasicMaterial({ color: LIFE[b.state], transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+  shadow.rotation.x = -Math.PI/2; shadow.position.set(b.basePos.x, -2.17, b.basePos.z); scene.add(shadow); b.shadow = shadow;
+
+  // collapse ring
+  const ringMat = new THREE.MeshBasicMaterial({ color: LIFE[b.state], transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.51, 64, 1), ringMat);
+  b.group.add(ring); b.collapseRing = { mesh: ring, mat: ringMat, t: 0 };
+
+  // pin halo for biome
+  const pinHaloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(cryo), transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+  const pinHalo = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.66, 64, 1), pinHaloMat);
+  b.group.add(pinHalo); b.pinHalo = { mesh: pinHalo, mat: pinHaloMat };
+
+  // biome label
+  const lbl = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(b.id, 36, '#A8B4C5'), transparent: true, opacity: 0.95, depthTest: false }));
+  lbl.scale.set(2.8, 0.42, 1); lbl.position.y = -1.0; b.group.add(lbl); b.label = lbl;
+
+  // tag label below biome label
+  const tagLbl = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(b.tag, 28, '#6A7585'), transparent: true, opacity: 0.85, depthTest: false }));
+  tagLbl.scale.set(1.6, 0.26, 1); tagLbl.position.y = -1.28; b.group.add(tagLbl); b.tagLabel = tagLbl;
+
+  // hit mesh
+  b.hitMesh = b.mainWire.userData.pip;
+  b.hitMesh.userData = { kind:'biome', biomeId: b.id };
+});
+
+// center fiducial
+{
+  const g = new THREE.Group();
+  const r1 = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.005, 6, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(cryo), transparent: true, opacity: 0.7 })); r1.rotation.x = Math.PI/2;
+  const r2 = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.005, 6, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(cryo), transparent: true, opacity: 0.4 })); r2.rotation.x = Math.PI/2;
+  const crossGeo = new THREE.BufferGeometry();
+  crossGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+    -0.5,0,0, -0.15,0,0,  0.15,0,0, 0.5,0,0,
+     0,0,-0.5, 0,0,-0.15, 0,0,0.15, 0,0,0.5,
+     0,-0.5,0, 0,-0.15,0, 0,0.15,0, 0,0.5,0
+  ], 3));
+  g.add(r1, r2, new THREE.LineSegments(crossGeo, new THREE.LineBasicMaterial({ color: new THREE.Color(cryo), transparent: true, opacity: 0.55 })));
+  scene.add(g);
+}
+
+// edges
+const edges = [];
+ROUTING.forEach(([fid, tid]) => {
+  const f = BIOMES.find(b => b.id === fid), t = BIOMES.find(b => b.id === tid);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([f.basePos.x,f.basePos.y,f.basePos.z, t.basePos.x,t.basePos.y,t.basePos.z], 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x232B3D, transparent: true, opacity: 0.55 });
+  scene.add(new THREE.Line(geo, mat));
+  edges.push({ from: f, to: t, mat, geo, key: `${fid}->${tid}` });
+});
+
+// packets
+const packetGroup = new THREE.Group(); scene.add(packetGroup);
+const packets = [];
+function spawnPacket(edge, bright) {
+  const trail = []; const trailGroup = new THREE.Group();
+  for (let i = 0; i < 6; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.06 - i*0.007, 8, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(cryo), transparent: true, opacity: bright ? (0.95 - i*0.13) : (0.5 - i*0.07), blending: THREE.AdditiveBlending, depthWrite: false }));
+    trail.push(m); trailGroup.add(m);
+  }
+  packetGroup.add(trailGroup);
+  packets.push({ edge, trail, trailGroup, t: 0, speed: bright ? 0.014 : 0.005 + Math.random()*0.005, lifeRemaining: 1.0 });
+}
+edges.forEach(e => { spawnPacket(e, false); spawnPacket(e, false); });
+
+// dust
+{
+  const N = 380; const positions = new Float32Array(N*3);
+  for (let i=0;i<N;i++) { positions[3*i]= (Math.random()-0.5)*26; positions[3*i+1]=(Math.random()-0.5)*12; positions[3*i+2]=(Math.random()-0.5)*26; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xA8B4C5, size: 0.018, transparent: true, opacity: 0.3, depthWrite: false })));
+}
+
+// ────────── raycaster — biomes always; leaves when close ──────────
+const raycaster = new THREE.Raycaster();
+raycaster.params.Mesh = { threshold: 0.05 };
+const ndc = new THREE.Vector2();
+const biomeHits = BIOMES.map(b => b.hitMesh);
+const allLeafHits = BIOMES.flatMap(b => b.leafMeshes.map(lm => lm.fill));
+
+let leafHittable = false; // set each frame based on zoom
+
+renderer.domElement.addEventListener('pointermove', e => {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((e.clientX - r.left) / r.width)  *  2 - 1;
+  ndc.y = ((e.clientY - r.top)  / r.height) * -2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  const targets = leafHittable ? [...allLeafHits, ...biomeHits] : biomeHits;
+  const hits = raycaster.intersectObjects(targets, false);
+  let hov = null;
+  if (hits.length) {
+    const u = hits[0].object.userData;
+    if (u.kind === 'leaf') hov = { kind:'leaf', leafId: u.leafId, biomeId: u.biomeId };
+    else if (u.kind === 'biome') hov = { kind:'biome', biomeId: u.biomeId };
+  }
+  if (JSON.stringify(hov) !== JSON.stringify(state.hover)) {
+    state.hover = hov;
+    updateHoverCard(hov);
+  }
+});
+renderer.domElement.addEventListener('pointerleave', () => {
+  state.hover = null; document.getElementById('specimen').classList.remove('show');
+});
+
+let downPos = null;
+renderer.domElement.addEventListener('pointerdown', e => { downPos = {x:e.clientX, y:e.clientY}; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downPos) return;
+  const dx = e.clientX - downPos.x, dy = e.clientY - downPos.y;
+  const moved = Math.sqrt(dx*dx + dy*dy);
+  downPos = null;
+  if (moved > 4) return; // drag, not click
+  if (state.hover) {
+    if (state.hover.kind === 'leaf') {
+      pinLeaf(state.hover.biomeId, state.hover.leafId);
+    } else {
+      const isAlreadyPinnedBiome = state.pinned && state.pinned.kind === 'biome' && state.pinned.biomeId === state.hover.biomeId;
+      pinBiome(isAlreadyPinnedBiome ? null : state.hover.biomeId);
+    }
+  } else {
+    pinNothing();
+  }
+});
+window.addEventListener('keydown', e => { if (e.key === 'Escape') pinNothing(); });
+
+function updateHoverCard(hov) {
+  const card = document.getElementById('specimen');
+  if (!hov) { card.classList.remove('show'); return; }
+  if (hov.kind === 'leaf') {
+    const leaf = LEAVES_RAW.find(l => l.id === hov.leafId);
+    if (!leaf) return;
+    document.getElementById('sp-eyebrow').textContent = 'leaf';
+    document.getElementById('sp-name').textContent = leaf.id;
+    document.getElementById('sp-sub').textContent = leaf.scope.slice(0, 80) + (leaf.scope.length > 80 ? '…' : '');
+  } else {
+    const b = BIOMES.find(x => x.id === hov.biomeId);
+    document.getElementById('sp-eyebrow').textContent = 'qubit';
+    document.getElementById('sp-name').textContent = b.id;
+    document.getElementById('sp-sub').textContent = `${b.tag}  ·  ${b.leafObjs.length} leaves  ·  ${b.contracts}`;
+  }
+  card.classList.add('show');
+}
+
+// ────────── pin: biome / leaf / nothing ──────────
+function pinNothing() {
+  state.pinned = null;
+  document.getElementById('inspect').classList.remove('open');
+  BIOMES.forEach(b => {
+    b.pinHalo.mat.opacity = 0;
+    b.leafMeshes.forEach(lm => lm.haloMat.opacity = 0);
+  });
+  state.cameraTarget.set(0,0,0);
+  document.querySelectorAll('.agents .arow').forEach(r => r.classList.remove('pinned'));
+}
+
+function pinBiome(id) {
+  if (!id) return pinNothing();
+  state.pinned = { kind:'biome', biomeId: id };
+  const b = BIOMES.find(x => x.id === id);
+  BIOMES.forEach(x => {
+    x.pinHalo.mat.opacity = x.id === id ? 0.4 : 0;
+    x.leafMeshes.forEach(lm => lm.haloMat.opacity = 0);
+  });
+  state.cameraTarget.copy(b.basePos);
+  document.querySelectorAll('.agents .arow').forEach(r => r.classList.toggle('pinned', r.dataset.id === id));
+  document.getElementById('specimen').classList.remove('show');
+  renderInspectBiome(b);
+  document.getElementById('inspect').classList.add('open');
+}
+
+function pinLeaf(biomeId, leafId) {
+  state.pinned = { kind:'leaf', biomeId, leafId };
+  const b = BIOMES.find(x => x.id === biomeId);
+  const lm = b.leafMeshes.find(m => m.leaf.id === leafId);
+  // dim other biomes' halos but keep parent biome halo on
+  BIOMES.forEach(x => {
+    x.pinHalo.mat.opacity = x.id === biomeId ? 0.2 : 0;
+    x.leafMeshes.forEach(m => m.haloMat.opacity = (x.id === biomeId && m.leaf.id === leafId) ? 0.7 : 0);
+  });
+  // camera target = parent biome position + leaf offset
+  const target = b.basePos.clone();
+  state.cameraTarget.copy(target);
+  document.querySelectorAll('.agents .arow').forEach(r => r.classList.toggle('pinned', r.dataset.id === biomeId));
+  document.getElementById('specimen').classList.remove('show');
+  renderInspectLeaf(b, lm.leaf);
+  document.getElementById('inspect').classList.add('open');
+}
+
+// ────────── inspect renderers ──────────
+function renderInspectBiome(b) {
+  const head = document.getElementById('i-head');
+  head.innerHTML = `
+    <div>
+      <div class="h-eyebrow">qubit · pinned</div>
+      <div class="h-title">${b.id}</div>
+      <div class="h-tag">register ${b.tag} · contracts ${b.contracts}</div>
+    </div>
+    <div class="h-actions">
+      <button class="x-close" id="i-close">esc</button>
+      <div class="h-state" style="color:${LIFE_CSS[b.state]}; border-color:${LIFE_CSS[b.state]};">${b.state}</div>
+    </div>
+  `;
+  document.getElementById('i-close').addEventListener('click', pinNothing);
+
+  const body = document.getElementById('i-body');
+  const cur = b.currentLeafIdx >= 0 ? b.leafObjs[b.currentLeafIdx] : null;
+
+  body.innerHTML = `
+    <div class="i-section">
+      <h5>synopsis</h5>
+      <div class="i-prose">${b.synopsis}</div>
+    </div>
+    <div class="i-section">
+      <h5>identity</h5>
+      <div class="i-row"><span class="k">contracts owned</span><span class="v dim">${b.contracts}</span></div>
+      <div class="i-row"><span class="k">leaves planned</span><span class="v">${b.leafObjs.length}</span></div>
+      <div class="i-row"><span class="k">leaves done</span><span class="v">${b.leafObjs.filter(l => l.state === 'done').length}</span></div>
+      <div class="i-row"><span class="k">provider</span><span class="v">${b.provider}</span></div>
+    </div>
+
+    <div class="i-section">
+      <h5>current focus</h5>
+      ${cur ? `
+        <div class="i-row"><span class="k">leaf</span><span class="v">${cur.id}</span></div>
+        <div class="i-row"><span class="k">scope</span><span class="v dim">${cur.scope}</span></div>
+        <div class="i-row"><span class="k">phase</span><span class="v" style="color:${LIFE_CSS[b.state]}">${b.state}</span></div>
+        <div class="i-row"><span class="k">progress</span><span class="v">${(cur.progress*100).toFixed(0)}%</span></div>
+      ` : `<div class="i-row"><span class="k">idle</span><span class="v dim">no leaf active</span></div>`}
+    </div>
+
+    <div class="i-section">
+      <h5>leaf queue · click to inspect</h5>
+      <div class="leaf-list" id="i-leaf-list"></div>
+    </div>
+
+    <div class="i-section">
+      <h5>recent nutrient flow</h5>
+      <div class="io-list" id="i-io"></div>
+    </div>
+
+    <div class="i-section">
+      <h5>files produced</h5>
+      <div class="file-list" id="i-files"></div>
+    </div>
+
+    <div class="i-section">
+      <h5>cost</h5>
+      <div class="i-row"><span class="k">tokens</span><span class="v" id="i-tokens">${b.tokensSoFar.toLocaleString()}</span></div>
+      <div class="i-row"><span class="k">usd</span><span class="v" id="i-cost">$${b.costSoFar.toFixed(4)}</span></div>
+      <div class="i-row"><span class="k">wall time</span><span class="v" id="i-wall">${b.wallStart ? ((Date.now() - b.wallStart) / 1000).toFixed(1) + 's' : '—'}</span></div>
+    </div>
+  `;
+
+  // leaf rows
+  const list = document.getElementById('i-leaf-list');
+  list.innerHTML = b.leafObjs.map((l, i) => {
+    const stateClass = l.state === 'done' ? 's-fruit' : l.state === 'active' ? `s-${b.state}` : 's-dorm';
+    const cur = (i === b.currentLeafIdx) ? ' current' : '';
+    const dot = l.state === 'done' ? '●' : l.state === 'active' ? '◐' : '○';
+    const dur = l.state === 'done' ? `${l.dur.toFixed(0)}s` : l.state === 'active' ? `${(l.progress*100).toFixed(0)}%` : '—';
+    const commit = l.state === 'done' ? l.commit : '';
+    return `<div class="leaf-row ${stateClass}${cur}" data-leaf="${l.id}">
+      <span class="dot" style="color:${LIFE_CSS[l.state === 'done' ? 'fruit' : l.state === 'active' ? b.state : 'dorm']}">${dot}</span>
+      <span class="name">${l.id}<span class="scope">${l.scope}</span></span>
+      <span class="dur">${dur}</span>
+      <span class="commit">${commit}</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.leaf-row').forEach(r => r.addEventListener('click', () => pinLeaf(b.id, r.dataset.leaf)));
+
+  // I/O
+  const ioEl = document.getElementById('i-io');
+  if (b.io.length === 0) ioEl.innerHTML = `<div class="io-row" style="color:var(--ice-3)">no flows yet</div>`;
+  else ioEl.innerHTML = b.io.slice(-6).reverse().map(io =>
+    `<div class="io-row"><span class="arrow">${io.dir === 'out' ? '→' : '←'}</span><span class="neigh">${io.neigh}</span>  <span class="payload">${io.payload}</span></div>`
+  ).join('');
+
+  // files
+  const fileEl = document.getElementById('i-files');
+  const allFiles = b.leafObjs.filter(l => l.state === 'done').flatMap(l => l.files);
+  fileEl.innerHTML = allFiles.length === 0
+    ? `<div class="file-row" style="color:var(--ice-3)">none yet</div>`
+    : allFiles.map(f => `<div class="file-row">${f}</div>`).join('');
+}
+
+function renderInspectLeaf(b, leaf) {
+  const head = document.getElementById('i-head');
+  const stateLabel = leaf.state === 'done' ? 'fruit' : leaf.state === 'active' ? b.state : 'pending';
+  const stateCol = LIFE_CSS[leaf.state === 'done' ? 'fruit' : leaf.state === 'active' ? b.state : 'dorm'];
+  head.innerHTML = `
+    <div>
+      <div class="h-eyebrow">leaf · pinned · owned by ${b.id}</div>
+      <div class="h-title">${leaf.id}</div>
+      <div class="h-tag">${b.tag}.leaf · ${leaf.files.length} file${leaf.files.length>1?'s':''}</div>
+    </div>
+    <div class="h-actions">
+      <button class="x-back" id="i-back">↑ qubit</button>
+      <div class="h-state" style="color:${stateCol}; border-color:${stateCol};">${stateLabel}</div>
+    </div>
+  `;
+  document.getElementById('i-back').addEventListener('click', () => pinBiome(b.id));
+
+  const body = document.getElementById('i-body');
+  const progressStr = leaf.state === 'done' ? '100% · committed' : leaf.state === 'active' ? `${(leaf.progress*100).toFixed(0)}% · ${b.state}` : 'pending';
+
+  body.innerHTML = `
+    <div class="i-section">
+      <h5>synopsis</h5>
+      <div class="i-prose">${leaf.synopsis || '—'}</div>
+    </div>
+
+    <div class="i-section">
+      <h5>scope</h5>
+      <div class="i-prose" style="font-family:'Geist Mono',monospace; font-size:11px; color:var(--ice);">${leaf.scope}</div>
+    </div>
+
+    <div class="i-section">
+      <h5>execution</h5>
+      <div class="i-row"><span class="k">status</span><span class="v" style="color:${stateCol}">${progressStr}</span></div>
+      <div class="i-row"><span class="k">duration</span><span class="v">${leaf.state === 'done' ? leaf.dur.toFixed(1) + 's' : leaf.state === 'active' && leaf.startedAt ? ((Date.now() - leaf.startedAt)/1000).toFixed(1) + 's elapsed' : '—'}</span></div>
+      <div class="i-row"><span class="k">commit</span><span class="v">${leaf.state === 'done' ? leaf.commit : '—'}</span></div>
+      <div class="i-row"><span class="k">tokens</span><span class="v">${leaf.tokens.toLocaleString()}${leaf.state === 'done' ? '' : ' (est.)'}</span></div>
+      <div class="i-row"><span class="k">est. cost</span><span class="v">$${(leaf.tokens * 0.000018).toFixed(4)}</span></div>
+    </div>
+
+    <div class="i-section">
+      <h5>artifacts</h5>
+      <div class="file-list">${leaf.files.map(f => `<div class="file-row">${f}</div>`).join('')}</div>
+    </div>
+
+    <div class="i-section">
+      <h5>parent qubit</h5>
+      <div class="i-row"><span class="k">biome</span><span class="v">${b.id}</span></div>
+      <div class="i-row"><span class="k">register</span><span class="v dim">${b.tag}</span></div>
+      <div class="i-row"><span class="k">contracts</span><span class="v dim">${b.contracts}</span></div>
+      <div class="i-row"><span class="k">provider</span><span class="v dim">${b.provider}</span></div>
+    </div>
+
+    <div class="i-section">
+      <h5>last events</h5>
+      <div class="io-list" id="i-leaf-events"></div>
+    </div>
+  `;
+
+  const evEl = document.getElementById('i-leaf-events');
+  const myEvents = state.events.filter(e => e.message && e.message.includes(leaf.id)).slice(-6).reverse();
+  evEl.innerHTML = myEvents.length
+    ? myEvents.map(e => `<div class="io-row"><span class="arrow">·</span><span class="neigh">${e.shortType}</span>  <span class="payload">${e.message.slice(0,70)}${e.message.length>70?'…':''}</span></div>`).join('')
+    : `<div class="io-row" style="color:var(--ice-3)">no events yet</div>`;
+}
+
+// keep pinned panel fresh
+function refreshPinned() {
+  if (!state.pinned) return;
+  const b = BIOMES.find(x => x.id === state.pinned.biomeId);
+  if (state.pinned.kind === 'biome') renderInspectBiome(b);
+  else {
+    const leaf = b.leafObjs.find(l => l.id === state.pinned.leafId);
+    if (leaf) renderInspectLeaf(b, leaf);
+  }
+}
+
+// ────────── zoom (taken over from OrbitControls) ──────────
+const zoomLevels = ['lattice','qubits','amplitudes'];
+const zoomDistances = { lattice: 14, qubits: 7.5, amplitudes: 2.8 };
+let zoomIdx = 0;
+let zoomDistanceTarget = zoomDistances.lattice;
+let zoomDistanceCurrent = 14;
+function setZoom(name) {
+  zoomIdx = zoomLevels.indexOf(name);
+  zoomDistanceTarget = zoomDistances[name];
+  document.getElementById('zoom-level').textContent = name;
+}
+document.getElementById('zoom-in').onclick = () => { if (zoomIdx < 2) setZoom(zoomLevels[zoomIdx + 1]); };
+document.getElementById('zoom-out').onclick = () => { if (zoomIdx > 0) setZoom(zoomLevels[zoomIdx - 1]); };
+document.getElementById('cam-reset').onclick = () => {
+  camera.position.copy(initialCam); controls.target.set(0,0,0); state.cameraTarget.set(0,0,0); setZoom('lattice');
+};
+renderer.domElement.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoomDistanceTarget = Math.max(1.5, Math.min(28, zoomDistanceTarget + e.deltaY * 0.015));
+  let nearest = 'lattice';
+  if (zoomDistanceTarget < (zoomDistances.qubits + zoomDistances.amplitudes) / 2) nearest = 'amplitudes';
+  else if (zoomDistanceTarget < (zoomDistances.lattice + zoomDistances.qubits) / 2) nearest = 'qubits';
+  document.getElementById('zoom-level').textContent = nearest;
+  zoomIdx = zoomLevels.indexOf(nearest);
+}, { passive: false });
+
+// ψ slider
+const psiSlider = document.getElementById('psi-slider');
+const psiValEl = document.getElementById('psi-val');
+const psiAutoBtn = document.getElementById('psi-auto');
+psiSlider.addEventListener('input', () => {
+  state.psiAuto = false; psiAutoBtn.classList.remove('on');
+  state.psiManual = (parseFloat(psiSlider.value) / 1000) * Math.PI * 2;
+});
+psiAutoBtn.addEventListener('click', () => {
+  state.psiAuto = !state.psiAuto; psiAutoBtn.classList.toggle('on', state.psiAuto);
+});
+
+// ────────── render loop ──────────
+const clock = new THREE.Clock();
+function render() {
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+
+  if (state.psiAuto) {
+    state.psi += dt * 0.45;
+    psiSlider.value = String(((state.psi % (Math.PI * 2)) / (Math.PI * 2)) * 1000);
+  } else state.psi = state.psiManual;
+  const psiNorm = ((state.psi / (Math.PI * 2)) % 1 + 1) % 1;
+  psiValEl.textContent = (psiNorm < 0.5 ? '+' : '-') + (Math.abs(psiNorm - 0.5) * 2).toFixed(3);
+
+  controls.target.lerp(state.cameraTarget, 0.06);
+  zoomDistanceCurrent += (zoomDistanceTarget - zoomDistanceCurrent) * 0.07;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  camera.position.copy(controls.target).add(dir.multiplyScalar(zoomDistanceCurrent));
+
+  // closeness controls leaf visibility & hittability
+  const closeness = THREE.MathUtils.smoothstep(zoomDistanceCurrent, 9, 3);
+  const ghostBoost = THREE.MathUtils.smoothstep(zoomDistanceCurrent, 12, 5);
+  leafHittable = closeness > 0.15;
+
+  // biomes
+  BIOMES.forEach(b => {
+    const jx = Math.sin(t*7 + b.angle*11) * 0.012;
+    const jy = Math.cos(t*8 + b.angle*9) * 0.012;
+    const jz = Math.sin(t*6 + b.angle*13) * 0.012;
+    b.group.position.set(b.basePos.x + jx, b.basePos.y + jy, b.basePos.z + jz);
+
+    b.spin += b.spinRate * dt * 0.7;
+    const r = 0.5;
+    const vx = Math.cos(b.spin)*r, vy = Math.sin(b.spin*0.7)*r*0.6, vz = Math.sin(b.spin)*r;
+    const vec = b.mainWire.userData.vector;
+    const pos = vec.geometry.attributes.position.array;
+    pos[3] = vx; pos[4] = vy; pos[5] = vz; vec.geometry.attributes.position.needsUpdate = true;
+    b.mainWire.userData.head.position.set(vx, vy, vz);
+
+    const col = LIFE[b.state];
+    b.mainWire.userData.materials.forEach(m => m.color.copy(col));
+    b.shadow.material.color.copy(col);
+
+    b.ghosts.forEach((ghost, gi) => {
+      const seed = ghost.userData.offsetSeed;
+      const phaseOffset = (gi + 1) * (Math.PI * 2 / (BRANCHES + 1));
+      const ψ = state.psi + phaseOffset;
+      ghost.position.set(
+        Math.sin(ψ * seed.freq + seed.ax) * seed.mag,
+        Math.cos(ψ * seed.freq * 1.3 + seed.ay) * seed.mag * 0.6,
+        Math.sin(ψ * seed.freq * 0.7 + seed.az) * seed.mag,
+      );
+      ghost.userData.materials.forEach((m, mi) => {
+        const base = mi === 1 ? 0.18 * 0.6 : 0.18;
+        m.opacity = base + ghostBoost * 0.30;
+        m.color.copy(col);
+      });
+      const gSpin = b.spin + phaseOffset;
+      const gx = Math.cos(gSpin)*r, gy = Math.sin(gSpin*0.7)*r*0.6, gz = Math.sin(gSpin)*r;
+      const gVec = ghost.userData.vector;
+      const gp = gVec.geometry.attributes.position.array;
+      gp[3] = gx; gp[4] = gy; gp[5] = gz; gVec.geometry.attributes.position.needsUpdate = true;
+      ghost.userData.head.position.set(gx, gy, gz);
+    });
+
+    if (b.collapseRing.t > 0) {
+      b.collapseRing.t = Math.max(0, b.collapseRing.t - dt * 1.4);
+      const sc = 0.5 + (1 - b.collapseRing.t) * 1.6;
+      b.collapseRing.mesh.scale.set(sc, sc, sc);
+      b.collapseRing.mat.opacity = b.collapseRing.t * 0.7;
+      b.collapseRing.mesh.lookAt(camera.position);
+      b.collapseRing.mat.color.copy(col);
+    }
+    b.pinHalo.mesh.lookAt(camera.position);
+
+    // leaves
+    b.leafMeshes.forEach((lm) => {
+      const angle = lm.theta + t * lm.orbitSpeed * 0.3;
+      const wobble = Math.sin(t * 0.7 + lm.vOff) * 0.15;
+      const lx = Math.cos(angle) * lm.rr;
+      const ly = Math.sin(lm.phi + wobble) * lm.rr * 0.55;
+      const lz = Math.sin(angle) * lm.rr;
+      lm.group.position.set(lx, ly, lz);
+
+      // pulse for active leaves
+      const leafState = lm.leaf.state;
+      const isHover = state.hover && state.hover.kind === 'leaf' && state.hover.leafId === lm.leaf.id;
+      const isPinned = state.pinned && state.pinned.kind === 'leaf' && state.pinned.leafId === lm.leaf.id;
+      let scale = 1;
+      if (leafState === 'active') scale = 1 + Math.sin(t * 2.5 + lm.vOff) * 0.15;
+      if (isHover) scale *= 1.25;
+      if (isPinned) scale *= 1.35;
+      lm.group.scale.setScalar(scale);
+
+      const leafCol = LIFE[leafState === 'pending' ? 'dorm' : leafState === 'done' ? 'fruit' : b.state];
+      lm.wireMat.color.copy(leafCol);
+      lm.fillMat.color.copy(leafCol);
+      lm.coreMat.color.copy(leafCol);
+      lm.traceMat.color.copy(leafCol);
+
+      lm.wireMat.opacity = closeness * 0.85;
+      lm.fillMat.opacity = closeness * (leafState === 'pending' ? 0.18 : leafState === 'done' ? 0.45 : 0.62);
+      lm.coreMat.opacity = closeness * (leafState === 'pending' ? 0 : 0.95);
+      lm.traceMat.opacity = closeness * 0.35;
+      lm.labelMat.opacity = closeness * (isHover || isPinned ? 1 : 0.75);
+
+      const tp = lm.traceGeo.attributes.position.array;
+      tp[0] = 0; tp[1] = 0; tp[2] = 0;
+      tp[3] = lx; tp[4] = ly; tp[5] = lz;
+      lm.traceGeo.attributes.position.needsUpdate = true;
+      lm.trace.computeLineDistances();
+
+      // label faces camera
+      lm.label.lookAt(camera.position);
+      // halo faces camera
+      lm.halo.lookAt(camera.position);
+    });
+  });
+
+  // edges + endpoints
+  const nowMs = Date.now();
+  edges.forEach(e => {
+    const flowing = state.flows.has(e.key) || state.flows.has(`${e.to.id}->${e.from.id}`);
+    if (flowing) { e.mat.color.set(cryo); e.mat.opacity = 0.85; }
+    else { e.mat.color.setHex(0x232B3D); e.mat.opacity = 0.55; }
+    const pos = e.geo.attributes.position.array;
+    pos[0] = e.from.group.position.x; pos[1] = e.from.group.position.y; pos[2] = e.from.group.position.z;
+    pos[3] = e.to.group.position.x;   pos[4] = e.to.group.position.y;   pos[5] = e.to.group.position.z;
+    e.geo.attributes.position.needsUpdate = true;
+  });
+  for (const [k, exp] of state.flows.entries()) if (exp < nowMs) state.flows.delete(k);
+
+  // packets
+  for (let i = packets.length - 1; i >= 0; i--) {
+    const p = packets[i];
+    p.t += p.speed; if (p.t > 1) p.t -= 1;
+    p.trail.forEach((m, idx) => {
+      const tt = Math.max(0, p.t - idx * 0.012);
+      const f = p.edge.from.group.position, to = p.edge.to.group.position;
+      m.position.set(f.x*(1-tt) + to.x*tt, f.y*(1-tt) + to.y*tt, f.z*(1-tt) + to.z*tt);
+    });
+    if (p.lifeRemaining < 1) {
+      p.lifeRemaining -= dt * 0.5;
+      if (p.lifeRemaining <= 0) { packetGroup.remove(p.trailGroup); packets.splice(i, 1); }
+      else p.trail.forEach(m => m.material.opacity *= 0.97);
+    }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(render);
+}
+
+requestAnimationFrame(() => {
+  render();
+  setTimeout(() => document.getElementById('boot').classList.add('hidden'), 100);
+});
+
+// ────────── cultivation simulator ──────────
+function rid(){ return Math.random().toString(36).slice(2,8); }
+function rpick(a){ return a[Math.floor(Math.random()*a.length)]; }
+
+const FILE_PHASES = [
+  l => `${l.id} · reading NUTRIENTS contract`,
+  l => `${l.id} · spawning Claude Agent SDK session`,
+  l => `${l.id} · drafting ${l.files[0]}`,
+  l => l.files[1] ? `${l.id} · drafting ${l.files[1]}` : `${l.id} · refining ${l.files[0]}`,
+  l => `${l.id} · running tsc --noEmit (pre-check)`,
+  l => `${l.id} · staging ${l.files.length} file${l.files.length>1?'s':''}`,
+];
+
+function startNextLeaf(b) {
+  const next = b.leafObjs.findIndex(l => l.state === 'pending');
+  if (next < 0) {
+    b.state = 'dorm'; b.currentLeafIdx = -1;
+    pushEvent({ category:'lifecycle', source:b.id, severity:'info', shortType:`${b.id} · all leaves fruited`, message:`${b.id} → dormant`, _biome:b });
+    return;
+  }
+  b.currentLeafIdx = next; b.state = 'germ';
+  const leaf = b.leafObjs[next];
+  leaf.state = 'active'; leaf.startedAt = Date.now(); leaf.progress = 0;
+  if (!b.wallStart) b.wallStart = Date.now();
+  b.collapseRing.t = 1;
+  pushEvent({ category:'lifecycle', source:b.id, severity:'info', shortType:`leaf · prepared`, message:`${leaf.id} · prepared  →  ${leaf.scope.slice(0,60)}${leaf.scope.length>60?'…':''}`, _biome:b });
+}
+
+function progressActiveLeaf(b) {
+  const leaf = b.leafObjs[b.currentLeafIdx]; if (!leaf) return;
+  leaf.progress += 0.16 + Math.random() * 0.10;
+  if (leaf.progress < 0.15) b.state = 'germ';
+  else if (leaf.progress < 0.65) b.state = 'grow';
+  else if (leaf.progress < 0.92) b.state = 'flow';
+  const phaseIdx = Math.min(FILE_PHASES.length - 1, Math.floor(leaf.progress * FILE_PHASES.length));
+  if (Math.random() < 0.5) pushEvent({ category:'lifecycle', source:b.id, severity:'info', shortType:`leaf · ${b.state}`, message: FILE_PHASES[phaseIdx](leaf), _biome:b });
+  if (leaf.progress >= 1) {
+    leaf.state = 'done'; leaf.completedAt = Date.now();
+    b.tokensSoFar += leaf.tokens; b.costSoFar += leaf.tokens * 0.000018;
+    state.totalTokens += leaf.tokens; state.totalCost += leaf.tokens * 0.000018;
+    b.collapseRing.t = 1;
+    pushEvent({ category:'lifecycle', source:b.id, severity:'info', shortType:`leaf · fruited`, message:`${leaf.id} · fruited  ${leaf.files.length} file${leaf.files.length>1?'s':''}  ${leaf.dur.toFixed(1)}s  committed ${leaf.commit}`, _biome:b });
+    setTimeout(() => emitNutrient(b), 250);
+    setTimeout(() => startNextLeaf(b), 800 + Math.random()*1200);
+    b.state = 'fruit';
+  }
+}
+
+function emitNutrient(b) {
+  const downstream = ROUTING.filter(([f]) => f === b.id); if (!downstream.length) return;
+  const [, to] = rpick(downstream);
+  const k = `${b.id}->${to}`;
+  const payload = NUTRIENTS[k] || 'state';
+  state.flows.set(k, Date.now() + 2400);
+  const edge = edges.find(e => e.key === k || e.key === `${to}->${b.id}`);
+  if (edge) spawnPacket(edge, true);
+  b.io.push({ dir:'out', neigh:to, payload, t:Date.now() });
+  const toB = BIOMES.find(x => x.id === to); if (toB) toB.io.push({ dir:'in', neigh:b.id, payload, t:Date.now() });
+  pushEvent({ category:'nutrient', source:b.id, severity:'info', shortType:'entangle · pair', message:`${b.id} ⟷ ${to}  nutrient: ${payload}  fidelity:${(0.7+Math.random()*0.28).toFixed(2)}`, _flow:{from:b.id,to} });
+}
+
+function pushEvent(e) {
+  e.id = rid();
+  state.events.push(e); if (state.events.length > 200) state.events.shift();
+  state.eventCount++;
+  if (e._biome) e._biome.recentEvents.push(e);
+  updateRail(); renderFeed(); renderMetrics();
+  refreshPinned();
+}
+
+function externalTick() {
+  const r = Math.random();
+  if (r < 0.18) {
+    const provs = ['anthropic','openai','ollama_local','google'];
+    const p = rpick(provs); const healthy = Math.random() > 0.1;
+    pushEvent({ category:'health', source:p, severity: healthy?'info':'warn', shortType:'coherence · pulse', message:`${p}  ${healthy ? Math.round(120+Math.random()*200) : Math.round(4000+Math.random()*3000)}ms${healthy?'':'  T2 collapse'}` });
+  } else if (r < 0.24) {
+    const stages = ['merge-order','lint','typecheck','test','build','deploy-stg','smoke','deploy-prod'];
+    const s = rpick(stages); const started = Math.random() < 0.5;
+    pushEvent({ category:'lifecycle', source:'ddp', severity:'info', shortType: started?'gate · entered':'gate · cleared', message:`${s} ${started?'entered':'cleared  '+Math.round(Math.random()*9000)+'ms'}` });
+  } else if (r < 0.27) {
+    const anomalies = [
+      { msg:'Latency 3.2× above baseline — provider drift', sev:'warn' },
+      { msg:'Energy 4.1× above baseline — runaway loop', sev:'alert' },
+      { msg:'14 states prepared in 30s — fork instability', sev:'crit' },
+      { msg:'7 auth failures in 120s — credential probe', sev:'crit' },
+    ];
+    const a = rpick(anomalies);
+    const e = { category:'anomaly', source:'organism', severity:a.sev, shortType:'anomaly · detected', message:a.msg, kind:'alert' };
+    state.alerts.push(e); showAlertRibbon(e);
+    setTimeout(() => { state.alerts = state.alerts.filter(x => x !== e); if (state.alerts.length === 0) hideAlertRibbon(); }, 15000);
+    pushEvent(e);
+  }
+}
+
+function bootCultivation() { BIOMES.forEach((b, i) => setTimeout(() => startNextLeaf(b), i*600 + Math.random()*400)); }
+function biomeTick() {
+  BIOMES.forEach(b => { if (b.currentLeafIdx >= 0 && b.leafObjs[b.currentLeafIdx].state === 'active') progressActiveLeaf(b); });
+  externalTick();
+}
+
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  const filtered = state.feedFilter === 'all' ? state.events : state.events.filter(e => e.category === state.feedFilter);
+  const last = filtered.slice(-80);
+  feed.innerHTML = last.map(e => {
+    const d = new Date();
+    const ts = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
+    let sevCls = '';
+    if (e.severity === 'warn') sevCls = 'sev-warn';
+    if (e.severity === 'alert') sevCls = 'sev-alert';
+    if (e.severity === 'crit')  sevCls = 'sev-crit';
+    const icon = e.category === 'lifecycle' ? '|·⟩' : e.category === 'nutrient' ? '⟷' : e.category === 'cost' ? '⊕' : e.category === 'health' ? '∿' : e.category === 'anomaly' ? '!' : '·';
+    return `<div class="fline ${sevCls}"><span class="ficon">${icon}</span><span class="fts">${ts}</span><span class="fsrc">${e.source}</span><span class="fmsg">${e.message}</span></div>`;
+  }).join('');
+  feed.scrollTop = feed.scrollHeight;
+}
+document.querySelectorAll('.fbtn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active'); state.feedFilter = b.dataset.f; renderFeed();
+  });
+});
+
+function renderMetrics() {
+  document.getElementById('m-events').textContent = state.eventCount.toLocaleString();
+  document.getElementById('m-alerts').textContent = state.alerts.length;
+  document.getElementById('m-alerts-sub').textContent = state.alerts.length === 0 ? 'stable' : `last: ${state.alerts[state.alerts.length-1].message.slice(0,40)}…`;
+  const am = document.getElementById('m-alerts');
+  am.className = 'mv ' + (state.alerts.length === 0 ? 'cryo' : state.alerts.some(a=>a.severity==='crit') ? 'crit' : 'warn');
+  document.getElementById('m-cost').textContent = '$' + state.totalCost.toFixed(3);
+  document.getElementById('m-tokens').textContent = state.totalTokens.toLocaleString() + ' tokens';
+  const active = BIOMES.filter(b => b.state !== 'dorm' && b.state !== 'fruit').length;
+  const done = BIOMES.reduce((s,b) => s + b.leafObjs.filter(l => l.state==='done').length, 0);
+  const total = BIOMES.reduce((s,b) => s + b.leafObjs.length, 0);
+  document.getElementById('m-agents').textContent = `${BIOMES.length} · ${total}`;
+  document.getElementById('m-agents-sub').textContent = `${active} active · ${done} done`;
+}
+
+function updateRail() {
+  const railEl = document.getElementById('rail-agents');
+  railEl.innerHTML = BIOMES.map(b => `
+    <div class="arow ${state.pinned && state.pinned.biomeId === b.id ? 'pinned' : ''}" data-id="${b.id}">
+      <span class="alabel">${b.id}</span>
+      <span class="apill" style="color:${LIFE_CSS[b.state]}; border-color:${LIFE_CSS[b.state]};">${b.state}</span>
+    </div>
+  `).join('');
+  railEl.querySelectorAll('.arow').forEach(r => {
+    r.addEventListener('click', () => {
+      const id = r.dataset.id;
+      const isAlready = state.pinned && state.pinned.kind === 'biome' && state.pinned.biomeId === id;
+      pinBiome(isAlready ? null : id);
+    });
+  });
+}
+
+function showAlertRibbon(e) { const r = document.getElementById('alert-ribbon'); document.getElementById('alert-text').textContent = e.message; r.classList.add('show'); }
+function hideAlertRibbon() { document.getElementById('alert-ribbon').classList.remove('show'); }
+
+setInterval(() => {
+  const s = Math.floor((Date.now() - state.startTime) / 1000);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  document.getElementById('uptime').textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}, 1000);
+
+updateRail();
+renderMetrics();
+bootCultivation();
+setInterval(biomeTick, 900 + Math.random()*600);
+</script>
+</body>
+</html>

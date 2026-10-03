@@ -13,6 +13,7 @@
 - **0.2 built this session** — `mycelium eval` implemented (phases 1–3 of `docs/mycelium-eval-spec.md`).
 - **1.2 in motion** — audit-run bugs 2/3/5 fixed this session; the consolidated tracker now lives at **`docs/BUGS.md`** (open/fixed/pending-validation/closed, with newly-found engine + heal-loop bugs).
 - **The `:480` anchor is STALE** — post-`22351c3`, the Claude Agent SDK `query()` call sits at `cultivate.ts:598`, inside `cultivateLeaf`. **Re-anchor refusal gate #1 to the symbol** (the `query()` call in `cultivateLeaf`), not the line number.
+- **2026-07-08: 0.2 COMPLETE — refusal gate #1 is OPEN.** All three eval baselines run (3/3 each, pass^k 1.0) and accepted: lane-b-noop $0.36, lane-b-telemetry $0.48, lane-a-mini $0.47. The first end-to-end run surfaced + fixed **B20** (`cost_recorded` never emitted — cultivateLeaf dropped SDK usage; see `docs/BUGS.md`). Chokepoint work (Router phase 1, PR #3 cache rework) may now proceed with regression attribution.
 
 ---
 

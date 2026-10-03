@@ -63,6 +63,13 @@ interface LeafResult {
   error?: string;
   ms: number;
   logPath?: string;
+  // SDK final-result metadata, threaded through so afterLeaf upgrades
+  // (cost-tracker) can see it — without this, cost_recorded never fires
+  // and every downstream cost consumer (heal-budget, eval Lane A, ddp
+  // rollups) reads $0.
+  usage?: unknown;
+  model?: string | null;
+  total_cost_usd?: number | null;
 }
 
 export function registerCultivateCommand(program: Command): void {
@@ -674,6 +681,9 @@ async function cultivateLeaf(
 
   const maxBudgetUsd = readMaxBudgetUsd(config);
   let budgetExceeded: { spent: number } | null = null;
+  let sdkUsage: unknown = null;
+  let sdkModel: string | null = null;
+  let sdkCostUsd: number | null = null;
 
   let stream: any;
   try {
@@ -691,6 +701,7 @@ async function cultivateLeaf(
     for await (const msg of stream) {
       logLine({ event: "sdk_msg", msg });
       if (msg.type === "assistant") {
+        if ((msg as any).message?.model) sdkModel = (msg as any).message.model;
         const blocks = (msg as any).message?.content ?? [];
         for (const b of blocks) {
           if (b.type === "tool_use") {
@@ -708,11 +719,15 @@ async function cultivateLeaf(
             leafTextChunks.push(b.text);
           }
         }
-      } else if (
-        msg.type === "result" &&
-        (msg as any).subtype === "error_max_budget_usd"
-      ) {
-        budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
+      } else if (msg.type === "result") {
+        // Capture final-result usage/cost for afterLeaf upgrades regardless
+        // of subtype — the budget-exceeded path still wants its spend known.
+        if ((msg as any).usage) sdkUsage = (msg as any).usage;
+        const cost = Number((msg as any).total_cost_usd);
+        if (Number.isFinite(cost)) sdkCostUsd = cost;
+        if ((msg as any).subtype === "error_max_budget_usd") {
+          budgetExceeded = { spent: Number((msg as any).total_cost_usd) || 0 };
+        }
       }
     }
 
@@ -819,7 +834,16 @@ async function cultivateLeaf(
             (commitMsg ? ` · ${commitMsg}` : "")
         )
     );
-    return { leaf, success: true, artifacts, ms, logPath };
+    return {
+      leaf,
+      success: true,
+      artifacts,
+      ms,
+      logPath,
+      usage: sdkUsage,
+      model: sdkModel,
+      total_cost_usd: sdkCostUsd,
+    };
   } catch (err: any) {
     const ms = Date.now() - started;
     const errMsg = err?.message ?? String(err);
@@ -847,6 +871,9 @@ async function cultivateLeaf(
       error: errMsg,
       ms,
       logPath,
+      usage: sdkUsage,
+      model: sdkModel,
+      total_cost_usd: sdkCostUsd,
     };
   } finally {
     // 0.1: tear down the leaf's worktree. The commit (and its feat/<id>

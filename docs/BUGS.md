@@ -14,9 +14,19 @@
 
 ## Open
 
-*(empty as of 2026-07-02 — see Fixed-this-session below. Two OPEN DECISIONS remain, operator-gated:*
+*(empty as of 2026-07-08 — B20 found and fixed this session, see below. Two OPEN DECISIONS remain, operator-gated:*
 *1. a distinct `setup_failed` termination reason would extend the frozen NUTRIENTS §8 union — until amended, autofix branch-setup failure still reports `no_progress` (loudly logged);*
 *2. B8 shared-tree race validation needs a real overlapping-artifact cultivation run.)*
+
+---
+
+## Fixed-this-session (2026-07-08)
+
+### B20 — `cost_recorded` NEVER emitted by any cultivation: cultivateLeaf dropped the SDK final-result usage, so cost-tracker's `extractUsage` always returned null
+- **Severity:** high (silent — same "dead cost path" family as B9) · **Anchor:** `cli/src/commands/cultivate.ts` (SDK stream loop + `LeafResult`), `cli/src/upgrades/cost-tracker.ts:64` (`extractUsage`) · **Status:** fixed-this-session (tsc/build/vitest verified + live lane-a-mini eval rerun — see `evals`/BACKLOG.md)
+- **Found by:** first end-to-end `mycelium eval` run (2026-07-08). lane-a-mini went 3/3 but recorded $0.0000 with the runner's honest note "no cost_recorded events — fixture should enable telemetry-emitter + cost-tracker upgrades". The upgrades WERE enabled; telemetry-emitter emitted 5 lifecycle events, cost-tracker emitted nothing.
+- **Root cause:** the `for await` stream loop in `cultivateLeaf` inspected result messages ONLY for `subtype === "error_max_budget_usd"`; the final result message's `usage` / `total_cost_usd` / model were never captured, and `LeafResult` had no fields to carry them. `runAfterLeaf` therefore handed cost-tracker a result with no usage in any of its four probed locations → silent no-op by design. **Blast radius:** eval Lane A cost capture, ddp/harvest cost rollups (`extractTotalCostFromEvents` sums cost_recorded), and the B9 heal-budget fix — whose per-iteration cost delta reads these events — all degraded to $0; the $50 autofix cap could only trip via the SDK's own `error_max_budget_usd`, never via measured spend.
+- **Fix:** stream loop captures `usage` + `total_cost_usd` from every result message (not just budget errors) and the model id from assistant messages; `LeafResult` gains additive optional `usage` / `model` / `total_cost_usd` threaded through both success and failure returns (a failed leaf still burned tokens). No public-contract change (flags/prompt/CommitQueue untouched); `LeafResultLike` untouched — cost-tracker's existing `r?.usage` probe now hits.
 
 ---
 
@@ -100,12 +110,17 @@
 
 ---
 
-## Likely-fixed-pending-validation
+## Closed (live-validated 2026-07-23 — knot-validation fixture run)
+
+> A purpose-built 5-leaf, 2-wave live cultivation (`knot-validation`, scratchpad fixture,
+> $0.48 total) behaviorally validated the whole worktree-isolation follow-up set in one
+> run. Observed evidence per bug below; `mycelium ledger` reconciled the run afterward.
 
 ### B8 — PR #3 shared-tree commit races: `dashboard.canvas.multiverse` artifact-path attribution mismatch + four `dashboard.cli.*` leaves "0 files committed"
-- **Severity:** medium · **Anchor:** `origin/feat/dashboard-cache-net:HANDOFF.md` (open follow-ups 5-6/7); root cause site was the shared-tree artifact staging removed by `22351c3` · **Status:** likely-fixed-by-0.1, pending live validation
+- **Severity:** medium · **Anchor:** `origin/feat/dashboard-cache-net:HANDOFF.md` (open follow-ups 5-6/7); root cause site was the shared-tree artifact staging removed by `22351c3` · **Status:** CLOSED — live-validated 2026-07-23
 - **Root cause:** all leaves shared one working tree; per-leaf `git add <artifacts>` raced, so overlapping/mis-attributed artifact paths produced empty commits or wrong-branch attribution (same family as run8's talent-onboarding loss). Worktree isolation per leaf (backlog **0.1**, commit `22351c3`, this branch) removes the shared tree entirely.
-- **Validation plan:** run a small multi-leaf cultivation that intentionally declares overlapping artifact paths; confirm loud merge conflict instead of silent loss, then move to Closed. (Caveat: the dashboard code itself still lives only on the unmerged PR #3 branch.)
+- **Validation observed:** two same-wave leaves (`conflict-a`/`conflict-b`) deliberately wrote different content to `src/shared.txt`. Result: loud merge conflict, not silent loss — `conflict-a` integrated (`alpha` on HEAD), `conflict-b` ended `status:"conflicted"`, `integrated:false`, `conflict_files:["src/shared.txt"]`, cultivate exit 1. (Caveat stands: the PR #3 dashboard code itself still lives only on that unmerged branch.)
+- **B13 observed:** wave-2 leaf forked post-wave-1 HEAD, `src/greeting.txt` = writer's line + editor's appended line, clean merge. **B14 observed:** Bash-only leaf (0 Write/Edit artifacts, "0 files produced" claim) still committed `src/bash-made.txt` via the `privateTree` `git add -A` path — file present in commit `79508f0` and on HEAD. **B15 observed:** exit 1 + `conflicted` state as above. **B20 observed:** 4 `cost_recorded` events, one per successful leaf, real `usd_estimate` values ($0.4085 run total). BUGS entries above updated from dry-run-verified to live-validated accordingly.
 
 ---
 

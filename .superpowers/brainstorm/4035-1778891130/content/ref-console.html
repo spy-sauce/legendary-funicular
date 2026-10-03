@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mycelium operator console (port of mycelium-dashboard_1.jsx)</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --color-background-primary: #FAF9F5;
+  --color-background-secondary: #F2F0EA;
+  --color-text-primary: #1F1E1B;
+  --color-text-secondary: #6B6A66;
+  --color-text-tertiary: #94928C;
+  --color-border-tertiary: #DDDAD2;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --border-radius-md: 6px;
+  --border-radius-lg: 10px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--color-background-primary); color: var(--color-text-primary); font-family: var(--font-sans); padding: 24px 28px; max-width: 1100px; margin: 0 auto; font-size: 14px; }
+@keyframes meshpulse { 0%,100%{opacity:.2} 50%{opacity:.5} }
+@keyframes flowsignal { to{stroke-dashoffset:-16} }
+@keyframes alertring { 0%,100%{opacity:.1; r:120} 50%{opacity:.35; r:140} }
+@keyframes fadein { from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)} }
+.title-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+.title-name { font-size: 18px; font-weight: 500; }
+.title-org { font-size: 12px; color: var(--color-text-tertiary); margin-left: 8px; }
+.status-pill { display: flex; align-items: center; gap: 8px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #639922; display: inline-block; }
+.uptime { font-size: 12px; color: var(--color-text-secondary); font-family: var(--font-mono); }
+.metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+.metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 16px; min-width: 0; }
+.metric .label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
+.metric .value { font-size: 22px; font-weight: 500; line-height: 1.2; }
+.metric .sub { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; }
+.alert-row { background: #FCEBEB; border: 0.5px solid #A32D2D; border-radius: var(--border-radius-md); padding: 10px 14px; margin-bottom: 16px; animation: fadein .3s ease; }
+.alert-row.hidden { display: none; }
+.alert-row .alert-inner { display: flex; align-items: center; gap: 8px; }
+.alert-text { font-size: 13px; font-weight: 500; color: #791F1F; }
+.mesh-wrap { background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 16px; margin-bottom: 20px; }
+.lower { display: grid; grid-template-columns: 1fr 220px; gap: 16px; }
+.feed-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.feed-title { font-size: 14px; font-weight: 500; }
+.filters { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+.filter-btn { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 0.5px solid var(--color-border-tertiary); background: transparent; color: var(--color-text-secondary); cursor: pointer; font-family: var(--font-sans); }
+.filter-btn.active { background: var(--color-text-primary); color: var(--color-background-primary); border-color: transparent; }
+.feed { max-height: 320px; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; line-height: 1.8; }
+.feed-row { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; padding-left: 8px; border-left: 2px solid transparent; margin-bottom: 1px; }
+.feed-row.sev-warn { border-left-color: #854F0B; }
+.feed-row.sev-alert { border-left-color: #993C1D; }
+.feed-row.sev-critical { border-left-color: #A32D2D; }
+.feed-row.cat-security { background: #FAECE7; border-radius: 4px; }
+.feed-icon { flex-shrink: 0; width: 14px; text-align: center; }
+.feed-ts { color: var(--color-text-tertiary); flex-shrink: 0; width: 56px; }
+.feed-source { color: var(--color-text-secondary); flex-shrink: 0; width: 72px; }
+.feed-msg { flex: 1; color: var(--color-text-primary); }
+.rail .rail-title { font-size: 14px; font-weight: 500; display: block; margin-bottom: 10px; }
+.rail .rail-title.spaced { margin-top: 20px; }
+.rail .provider-row, .rail .agent-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.rail .agent-row { padding: 5px 0; border-bottom: none; }
+.provider-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.provider-name { font-size: 12px; flex: 1; }
+.provider-latency { font-size: 11px; font-family: var(--font-mono); color: var(--color-text-secondary); }
+.provider-latency.slow { color: #BA7517; }
+.state-pill { font-size: 10px; padding: 1px 8px; border-radius: 99px; border: 0.5px solid; }
+.empty { color: var(--color-text-tertiary); padding: 16px; font-family: var(--font-sans); }
+</style>
+</head>
+<body>
+
+<div class="title-row">
+  <div>
+    <span class="title-name">Mycelium organism</span>
+    <span class="title-org">mfautomation</span>
+  </div>
+  <div class="status-pill"><span class="status-dot" id="status-dot"></span><span class="uptime" id="uptime">00:00:00</span></div>
+</div>
+
+<div class="metrics">
+  <div class="metric"><div class="label">Organism health</div><div class="value" id="m-health" style="color:#639922">100%</div></div>
+  <div class="metric"><div class="label">Active agents</div><div class="value" id="m-agents">0</div><div class="sub">of 6 total</div></div>
+  <div class="metric"><div class="label">Cost (24h)</div><div class="value" id="m-cost">$0.000</div><div class="sub" id="m-tokens">0 tokens</div></div>
+  <div class="metric"><div class="label">Events</div><div class="value" id="m-events">0</div><div class="sub">processed</div></div>
+  <div class="metric"><div class="label">Alerts</div><div class="value" id="m-alerts">0</div><div class="sub" id="m-alerts-sub">clear</div></div>
+</div>
+
+<div class="alert-row hidden" id="alert-row">
+  <div class="alert-inner"><span style="font-size:14px;">⚠</span><span class="alert-text" id="alert-text"></span></div>
+</div>
+
+<div class="mesh-wrap">
+  <svg id="mesh" viewBox="0 0 680 400" style="width:100%;height:auto;">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </marker>
+    </defs>
+    <g id="mesh-edges"></g>
+    <g id="mesh-flows"></g>
+    <g id="mesh-nodes"></g>
+    <circle id="alert-ring" cx="340" cy="200" r="120" fill="none" stroke="#A32D2D" stroke-width="0.5" opacity="0" style="animation:alertring 2s ease-in-out infinite;"/>
+  </svg>
+</div>
+
+<div class="lower">
+  <div>
+    <div class="feed-header">
+      <span class="feed-title">Event stream</span>
+      <div class="filters" id="filters"></div>
+    </div>
+    <div class="feed" id="feed"><div class="empty">Waiting for events…</div></div>
+  </div>
+  <div class="rail">
+    <span class="rail-title">Provider health</span>
+    <div id="provider-rail"></div>
+    <span class="rail-title spaced">Agent states</span>
+    <div id="agent-rail"></div>
+  </div>
+</div>
+
+<script>
+const LIFECYCLE_COLORS = {
+  germinating: { bg: "#EEEDFE", text: "#3C3489", border: "#534AB7" },
+  growing:     { bg: "#E1F5EE", text: "#085041", border: "#0F6E56" },
+  flowing:     { bg: "#E6F1FB", text: "#0C447C", border: "#185FA5" },
+  fruiting:    { bg: "#FAEEDA", text: "#633806", border: "#854F0B" },
+  dormant:     { bg: "#F1EFE8", text: "#444441", border: "#5F5E5A" },
+};
+const SEVERITY_COLORS = {
+  info:     { bg: "#E6F1FB", text: "#0C447C", border: "#185FA5" },
+  warn:     { bg: "#FAEEDA", text: "#633806", border: "#854F0B" },
+  alert:    { bg: "#FAECE7", text: "#712B13", border: "#993C1D" },
+  critical: { bg: "#FCEBEB", text: "#791F1F", border: "#A32D2D" },
+};
+const CATEGORY_ICONS = { lifecycle:"●", nutrient:"→", health:"♥", cost:"▲", security:"⚠", routing:"⇄", organism:"☉" };
+const AGENTS = [
+  { id:"architect", label:"Architect", provider:"Claude",  x:170, y:140 },
+  { id:"code",      label:"Code",      provider:"Ollama",  x:340, y: 90 },
+  { id:"review",    label:"Review",    provider:"Claude",  x:510, y:140 },
+  { id:"triage",    label:"Triage",    provider:"Haiku",   x:100, y:280 },
+  { id:"deploy",    label:"Deploy",    provider:"GPT-4o",  x:340, y:310 },
+  { id:"test",      label:"Test",      provider:"Gemini",  x:570, y:280 },
+];
+
+const state = {
+  events: [], agentStates: {}, providerHealth: {}, activeFlows: [], alerts: [],
+  totalCost: 0, totalTokens: 0, eventCount: 0, feedFilter: "all", uptime: 0, startTime: Date.now(),
+};
+
+function rid() { return Math.random().toString(36).slice(2,10); }
+function rpick(a) { return a[Math.floor(Math.random()*a.length)]; }
+
+function generateEvent() {
+  const providers = ["anthropic","openai","ollama_local","google"];
+  const states = ["germinating","growing","flowing","fruiting","dormant"];
+  const r = Math.random();
+  if (r < 0.3) {
+    return { id:rid(), category:"lifecycle", event_type:`lifecycle.${rpick(states)}`, source:rpick(AGENTS).id, severity:"info", data:{ provider:rpick(providers) }, timestamp: Date.now()/1000 };
+  } else if (r < 0.5) {
+    const provider = rpick(providers);
+    const healthy = Math.random() > 0.08;
+    return { id:rid(), category:"health", event_type:"health.pulse", source:provider, severity: healthy?"info":"warn",
+      data:{ healthy, latency_ms: Math.round(healthy ? 120+Math.random()*200 : 4000+Math.random()*3000), error: healthy?null:"Timeout" }, timestamp:Date.now()/1000 };
+  } else if (r < 0.7) {
+    return { id:rid(), category:"cost", event_type:"cost.recorded", source:rpick(AGENTS).id, severity:"info",
+      data:{ provider:rpick(providers), cost_usd: Math.round(Math.random()*50)/10000, tokens: Math.floor(500+Math.random()*4000) }, timestamp:Date.now()/1000 };
+  } else if (r < 0.85) {
+    const from = rpick(AGENTS).id; let to = rpick(AGENTS).id; while (to === from) to = rpick(AGENTS).id;
+    return { id:rid(), category:"nutrient", event_type:"nutrient.flow", source:from, severity:"info",
+      data:{ from, to, score: Math.round(Math.random()*950)/1000 }, timestamp:Date.now()/1000 };
+  } else if (r < 0.93) {
+    return { id:rid(), category:"routing", event_type:"routing.failover", source:rpick(AGENTS).id, severity:"warn",
+      data:{ from_provider:rpick(providers), to_provider:rpick(providers) }, timestamp:Date.now()/1000 };
+  } else {
+    const types = [
+      { event_type:"anomaly.latency_spike", severity:"warn", data:{ provider:rpick(providers), latency_ms: 8000+Math.floor(Math.random()*7000), message:"Latency 3.2× above baseline — possible degradation" } },
+      { event_type:"anomaly.cost_surge",    severity:"alert", data:{ agent:rpick(AGENTS).id, cost_usd: 0.08, message:"Cost 4.1× above baseline — possible runaway loop" } },
+      { event_type:"anomaly.spawn_flood",   severity:"critical", data:{ spawn_count_30s: 14, message:"14 agents spawned in 30s — possible fork bomb" } },
+      { event_type:"anomaly.auth_probe",    severity:"critical", data:{ provider:rpick(providers), failures_120s: 7, message:"7 auth failures in 120s — credential compromise?" } },
+    ];
+    const t = rpick(types);
+    return { id:rid(), category:"security", event_type:t.event_type, source:"organism", severity:t.severity, data:t.data, timestamp:Date.now()/1000 };
+  }
+}
+
+function processEvent(e) {
+  state.events.push(e); if (state.events.length > 200) state.events.shift();
+  state.eventCount++;
+  if (e.category === "lifecycle") {
+    const s = e.event_type.split(".").pop();
+    state.agentStates[e.source] = s;
+  }
+  if (e.event_type === "health.pulse") state.providerHealth[e.source] = e.data;
+  if (e.event_type === "nutrient.flow") {
+    const flow = { from:e.data.from, to:e.data.to, score:e.data.score, id:rid() };
+    state.activeFlows.push(flow); if (state.activeFlows.length > 5) state.activeFlows.shift();
+    setTimeout(() => { state.activeFlows = state.activeFlows.filter(f => f.id !== flow.id); renderMesh(); }, 3000);
+  }
+  if (e.category === "security") {
+    state.alerts.push(e); if (state.alerts.length > 20) state.alerts.shift();
+    setTimeout(() => { state.alerts = state.alerts.filter(a => a.id !== e.id); renderAlerts(); }, 30000);
+  }
+  if (e.event_type === "cost.recorded") { state.totalCost += e.data.cost_usd||0; state.totalTokens += e.data.tokens||0; }
+  renderAll();
+}
+
+function buildEdges() {
+  const out = [];
+  for (let i=0;i<AGENTS.length;i++) for (let j=i+1;j<AGENTS.length;j++) out.push({ from:AGENTS[i], to:AGENTS[j] });
+  return out;
+}
+const EDGES = buildEdges();
+
+function renderMesh() {
+  const edges = document.getElementById("mesh-edges");
+  const flows = document.getElementById("mesh-flows");
+  const nodes = document.getElementById("mesh-nodes");
+  const ring = document.getElementById("alert-ring");
+  let s = "";
+  EDGES.forEach(c => {
+    const isFlow = state.activeFlows.some(f => (f.from===c.from.id&&f.to===c.to.id)||(f.from===c.to.id&&f.to===c.from.id));
+    s += `<line x1="${c.from.x}" y1="${c.from.y}" x2="${c.to.x}" y2="${c.to.y}" stroke="${isFlow?'#5DCAA5':'var(--color-border-tertiary)'}" stroke-width="${isFlow?1.5:0.5}" opacity="${isFlow?0.8:0.2}" ${isFlow?'style="animation:meshpulse 1.5s ease-in-out infinite;"':''}/>`;
+  });
+  edges.innerHTML = s;
+  let f = "";
+  state.activeFlows.forEach(flow => {
+    const fr = AGENTS.find(a=>a.id===flow.from), to = AGENTS.find(a=>a.id===flow.to);
+    if (!fr||!to) return;
+    f += `<line x1="${fr.x}" y1="${fr.y}" x2="${to.x}" y2="${to.y}" stroke="#5DCAA5" stroke-width="2" opacity="0.9" stroke-dasharray="4 4" marker-end="url(#arr)" style="animation:flowsignal 1s linear infinite;"/>`;
+  });
+  flows.innerHTML = f;
+  let n = "";
+  AGENTS.forEach(a => {
+    const st = state.agentStates[a.id] || "dormant";
+    const c = LIFECYCLE_COLORS[st];
+    n += `<g><circle cx="${a.x}" cy="${a.y}" r="36" fill="${c.bg}" stroke="${c.border}" stroke-width="0.5"/>`;
+    n += `<text x="${a.x}" y="${a.y-8}" text-anchor="middle" dominant-baseline="central" style="font-size:13px;font-weight:500;fill:${c.text};">${a.label}</text>`;
+    n += `<text x="${a.x}" y="${a.y+8}" text-anchor="middle" dominant-baseline="central" style="font-size:11px;fill:${c.text};opacity:0.7;">${a.provider}</text>`;
+    n += `<text x="${a.x}" y="${a.y+52}" text-anchor="middle" style="font-size:11px;fill:var(--color-text-secondary);">${st}</text></g>`;
+  });
+  nodes.innerHTML = n;
+  ring.style.opacity = state.alerts.length > 0 ? "" : "0";
+}
+
+function renderMetrics() {
+  const healthy = Object.values(state.providerHealth).filter(p=>p.healthy).length;
+  const total = Math.max(Object.keys(state.providerHealth).length, 1);
+  const hp = Math.round((healthy/total)*100);
+  const active = Object.values(state.agentStates).filter(s=>s!=="dormant").length;
+  const m = document.getElementById("m-health"); m.textContent = hp+"%"; m.style.color = hp>=80?"#639922":hp>=50?"#EF9F27":"#E24B4A";
+  document.getElementById("m-agents").textContent = active;
+  document.getElementById("m-cost").textContent = "$"+state.totalCost.toFixed(3);
+  document.getElementById("m-tokens").textContent = state.totalTokens.toLocaleString()+" tokens";
+  document.getElementById("m-events").textContent = state.eventCount.toLocaleString();
+  document.getElementById("m-alerts").textContent = state.alerts.length;
+  const am = document.getElementById("m-alerts"); am.style.color = state.alerts.length>0 ? "#A32D2D" : "var(--color-text-primary)";
+  document.getElementById("m-alerts-sub").textContent = state.alerts.length>0 ? (state.alerts[state.alerts.length-1]?.event_type?.split(".").pop() || "") : "clear";
+  document.getElementById("status-dot").style.background = hp>=80?"#639922":hp>=50?"#EF9F27":"#E24B4A";
+}
+
+function renderAlerts() {
+  const row = document.getElementById("alert-row");
+  if (state.alerts.length === 0) { row.classList.add("hidden"); return; }
+  const a = state.alerts[state.alerts.length-1];
+  const sev = SEVERITY_COLORS[a.severity] || SEVERITY_COLORS.info;
+  row.style.background = sev.bg; row.style.borderColor = sev.border;
+  document.getElementById("alert-text").style.color = sev.text;
+  document.getElementById("alert-text").textContent = a.data?.message || a.event_type;
+  row.classList.remove("hidden");
+}
+
+function renderFeed() {
+  const feed = document.getElementById("feed");
+  const filtered = state.feedFilter === "all" ? state.events : state.events.filter(e=>e.category===state.feedFilter);
+  const display = filtered.slice(-40);
+  if (display.length === 0) { feed.innerHTML = '<div class="empty">Waiting for events…</div>'; return; }
+  let s = "";
+  display.forEach(e => {
+    const sev = SEVERITY_COLORS[e.severity] || SEVERITY_COLORS.info;
+    const icon = CATEGORY_ICONS[e.category] || "○";
+    const t = new Date(e.timestamp*1000);
+    const ts = String(t.getHours()).padStart(2,"0")+":"+String(t.getMinutes()).padStart(2,"0")+":"+String(t.getSeconds()).padStart(2,"0");
+    const sevClass = e.severity!=="info" ? `sev-${e.severity}` : "";
+    const catClass = e.category==="security" ? "cat-security" : "";
+    const msg = (e.data?.message || e.event_type)
+      + (e.data?.latency_ms && e.category!=="security" ? ` ${Math.round(e.data.latency_ms)}ms` : "")
+      + (e.data?.cost_usd ? ` $${e.data.cost_usd.toFixed(4)}` : "")
+      + (e.data?.score ? ` score:${e.data.score.toFixed(2)}` : "");
+    s += `<div class="feed-row ${sevClass} ${catClass}">
+      <span class="feed-icon" style="color:${sev.text}">${icon}</span>
+      <span class="feed-ts">${ts}</span>
+      <span class="feed-source">${e.source}</span>
+      <span class="feed-msg" style="${e.category==='security'?`color:${sev.text}`:''}">${msg}</span>
+    </div>`;
+  });
+  feed.innerHTML = s;
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function renderRail() {
+  let p = "";
+  Object.entries(state.providerHealth).forEach(([id, d]) => {
+    p += `<div class="provider-row">
+      <span class="provider-dot" style="background:${d.healthy?'#639922':'#E24B4A'}"></span>
+      <span class="provider-name">${id}</span>
+      <span class="provider-latency ${d.latency_ms>1000?'slow':''}">${Math.round(d.latency_ms)}ms</span>
+    </div>`;
+  });
+  document.getElementById("provider-rail").innerHTML = p || '<div class="empty" style="font-size:11px;padding:6px 0;">awaiting pulses…</div>';
+  let a = "";
+  AGENTS.forEach(ag => {
+    const st = state.agentStates[ag.id] || "dormant";
+    const c = LIFECYCLE_COLORS[st];
+    a += `<div class="agent-row">
+      <span class="provider-name">${ag.label}</span>
+      <span class="state-pill" style="background:${c.bg};color:${c.text};border-color:${c.border};">${st}</span>
+    </div>`;
+  });
+  document.getElementById("agent-rail").innerHTML = a;
+}
+
+function renderFilters() {
+  const wrap = document.getElementById("filters");
+  const opts = ["all","lifecycle","nutrient","health","cost","security","routing"];
+  wrap.innerHTML = opts.map(o => `<button class="filter-btn ${state.feedFilter===o?'active':''}" data-f="${o}">${o}</button>`).join("");
+  wrap.querySelectorAll("button").forEach(b => b.addEventListener("click", () => { state.feedFilter = b.dataset.f; renderFilters(); renderFeed(); }));
+}
+
+function renderAll() { renderMetrics(); renderAlerts(); renderMesh(); renderFeed(); renderRail(); }
+
+function tick() {
+  processEvent(generateEvent());
+  setTimeout(tick, 800 + Math.random()*1500);
+}
+
+setInterval(() => {
+  state.uptime = Math.floor((Date.now()-state.startTime)/1000);
+  const h = Math.floor(state.uptime/3600), m = Math.floor((state.uptime%3600)/60), sec = state.uptime%60;
+  document.getElementById("uptime").textContent = String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(sec).padStart(2,"0");
+}, 1000);
+
+renderFilters();
+renderAll();
+tick();
+</script>
+</body>
+</html>

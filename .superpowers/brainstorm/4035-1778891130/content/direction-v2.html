@@ -1,0 +1,44 @@
+<h2>Which direction is the dashboard aiming?</h2>
+<p class="subtitle">The two real reference files, live. Click each "Open full" to see them at proper size in a new tab. Then pick — or say "neither" and I'll sketch a hybrid.</p>
+
+<div class="cards" data-multiselect>
+  <div class="card" data-choice="canvas" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0;background:#000;position:relative;height:260px;overflow:hidden;">
+      <iframe src="/files/ref-canvas.html" style="border:0;width:200%;height:520px;transform:scale(0.5);transform-origin:0 0;pointer-events:none;" scrolling="no"></iframe>
+      <div style="position:absolute;top:8px;right:8px;display:flex;gap:6px;">
+        <a href="/files/ref-canvas.html" target="_blank" style="background:rgba(0,0,0,0.7);color:#00FFB2;text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;border:1px solid #00FFB2;font-family:monospace;">Open full ↗</a>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Network Canvas <span style="font-weight:400;color:var(--color-text-tertiary);font-size:12px;">— file 1, as-is</span></h3>
+      <p>Hero canvas. Curved hyphae, glowing core, animated nutrient packets. Bloom-branded neon-on-black. Hover any node → bottom-left info panel. Single immersive screen.</p>
+      <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px;"><strong>Tradeoff:</strong> beautiful and demo-ready · low information density · not built for debugging at 2am.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="console" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:0;background:#FAF9F5;position:relative;height:260px;overflow:hidden;">
+      <iframe src="/files/ref-console.html" style="border:0;width:200%;height:520px;transform:scale(0.5);transform-origin:0 0;pointer-events:none;" scrolling="no"></iframe>
+      <div style="position:absolute;top:8px;right:8px;display:flex;gap:6px;">
+        <a href="/files/ref-console.html" target="_blank" style="background:rgba(255,255,255,0.9);color:#1F1E1B;text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;border:0.5px solid #DDDAD2;font-family:monospace;">Open full ↗</a>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Operator Console <span style="font-weight:400;color:var(--color-text-tertiary);font-size:12px;">— file 2, ported to standalone HTML</span></h3>
+      <p>Metric strip · alert ribbon · SVG mesh w/ lifecycle-tinted nodes · scrolling categorized event feed · provider health + agent-state rails. Light, paper, dense. Built for operating.</p>
+      <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:8px;"><strong>Tradeoff:</strong> answers "what's wrong right now" · less poetic · fixed 6-agent SVG layout doesn't scale to a real organism with 50+ leaves.</p>
+    </div>
+  </div>
+</div>
+
+<div class="options" style="margin-top:20px;">
+  <div class="option" data-choice="hybrid-after" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Neither alone — sketch a hybrid after you've seen both</h3>
+      <p>e.g. canvas hero as the centerpiece with operator chrome (metric strip, event feed, alert ribbon) around it. I'll mock it up once you tell me which half is load-bearing.</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Click to vote (multi-select on). Or type the answer in the terminal — including "actually it should be more like…"</p>

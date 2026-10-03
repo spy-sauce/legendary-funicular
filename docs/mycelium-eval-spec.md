@@ -6,6 +6,28 @@
 
 ---
 
+## As-shipped addendum — 2026-07-08
+
+> Phases 1–3 shipped 2026-07-02 (`mycelium eval`; see `evals/README.md`). The body
+> below is the historical spec and is **not** rewritten. Where it disagrees with the
+> implementation, the frozen contract `cli/src/lib/eval/types.ts` wins. Known
+> superseded points:
+>
+> - **Gate keys:** the shipped/loader-enforced names are `pass_at_k` / `pass_caret_k`.
+>   The body's `pass_at_3` / `pass_caret_3` keys (Task YAML example below) are stale —
+>   tasks using them fail validation.
+> - **Trial isolation:** worktree-per-trial (architecture diagram + "Every trial runs
+>   in `git worktree add …`") was deliberately overridden. Post-backlog-0.1, cultivate
+>   owns repo-global worktrees/`feat/<leaf>` branches; trials instead run in scratch
+>   dirs under gitignored `.mycelium/evals/` (git-init'd fixture copies for Lane A).
+>   Rationale in `evals/README.md` §"Trial isolation".
+> - **`pinned_commit`:** provenance only, recorded into `summary.json`; the runner
+>   executes the CURRENT built CLI, no checkout.
+> - **Chokepoint anchor:** `cultivate.ts:480` moved to `:598` post-`22351c3` — anchor
+>   to the symbol (the `query()` call inside `cultivateLeaf`), not the line.
+
+---
+
 ## Context
 
 Mycelium has zero formal reliability data today. The discipline is `tsc --noEmit`

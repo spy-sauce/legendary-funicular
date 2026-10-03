@@ -1,0 +1,76 @@
+<h2>Maui-as-Product — the "everything is a biome on the bus" architecture</h2>
+<p class="subtitle">Names are placeholders. Read the SEAMS, not the labels. Does this topology match your mental model?</p>
+
+<style>
+  .arch { font-family: -apple-system, system-ui, sans-serif; max-width: 1100px; margin: 0 auto; }
+  .layer { border: 2px solid #2a2a3a; border-radius: 12px; padding: 14px 16px; margin: 14px 0; background: #14141c; position: relative; }
+  .layer-label { position: absolute; top: -11px; left: 16px; background: #1E9EBF; color: #04121a; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 2px 10px; border-radius: 6px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .node { flex: 1; min-width: 130px; background: #1d1d28; border: 1px solid #34344a; border-radius: 8px; padding: 10px 12px; }
+  .node h4 { margin: 0 0 4px; font-size: 13px; color: #e8e8f0; }
+  .node p { margin: 0; font-size: 11px; color: #9a9ab0; line-height: 1.4; }
+  .bus { background: linear-gradient(90deg,#0d3a47,#1E9EBF22,#0d3a47); border: 2px dashed #1E9EBF; text-align: center; padding: 18px; }
+  .bus h3 { margin: 0 0 4px; color: #5fd3ec; font-size: 16px; }
+  .bus p { margin: 0; font-size: 12px; color: #b8d8e0; }
+  .arrow { text-align: center; color: #1E9EBF; font-size: 20px; margin: -6px 0; }
+  .adapter { background: #2a1d10; border-color: #6b4a1f; }
+  .adapter h4 { color: #f0c890; }
+  .note { font-size: 11px; color: #777; font-style: italic; margin-top: 4px; }
+  .seam { color: #f0c890; font-weight: 700; }
+</style>
+
+<div class="arch">
+
+  <div class="layer">
+    <span class="layer-label">Front-door biomes (transport — receive intent)</span>
+    <div class="row">
+      <div class="node"><h4>📱 iMessage / phone</h4><p>v1. Injects a <b>nutrient</b> (intent) onto the bus. Carries reply-channel + caller identity.</p></div>
+      <div class="node"><h4>💬 CC session</h4><p>Operator at the terminal. Same injection, but full control.</p></div>
+      <div class="node"><h4>🌐 future: web / email / API</h4><p>Each new channel = one more front-door biome. No core change.</p></div>
+    </div>
+    <p class="note">A front door doesn't decide WHAT to do — it just puts well-formed intent on the bus.</p>
+  </div>
+
+  <div class="arrow">▼ &nbsp; intent nutrient</div>
+
+  <div class="layer">
+    <span class="layer-label">Triage / sizing (the only "smart" router)</span>
+    <div class="row">
+      <div class="node"><h4>🔍 Lookup</h4><p>Cheap. One model call or one RAG query. Answer & done.</p></div>
+      <div class="node"><h4>🧰 Menu pick</h4><p>Dispatch to ONE capability-biome (draft, recon, send email…).</p></div>
+      <div class="node"><h4>🌍 Build-anything</h4><p>Spin up a <b>Mycelium cultivation</b> — N agents, fan-out, compose.</p></div>
+    </div>
+    <p class="note">Sizing happens ONCE, here. Mis-sizing is the expensive failure. Gate big spend → confirm over the same front door.</p>
+  </div>
+
+  <div class="arrow">▼ &nbsp; routed work</div>
+
+  <div class="bus">
+    <h3>⚡ THE BUS &nbsp;<span style="font-weight:400;font-size:12px">(today: BIOME BUS :9450 · concept integrated later)</span></h3>
+    <p>Peer-to-peer nutrient flow. Every box above & below speaks ONE protocol. No central node. This is the reusable seam.</p>
+  </div>
+
+  <div class="arrow">▲▼ &nbsp; nutrient request / response</div>
+
+  <div class="layer">
+    <span class="layer-label">Capability biomes (the 789 + RAGs — DO things)</span>
+    <div class="row">
+      <div class="node adapter"><h4>🔌 HTTP-service adapter</h4><p>Wraps a Frank service (research, recon, comp-intel…) as a biome. <span class="seam">Write once.</span></p></div>
+      <div class="node adapter"><h4>🔌 RAG adapter</h4><p>Wraps a Frank RAG / research-archive query as a biome. <span class="seam">Write once.</span></p></div>
+      <div class="node adapter"><h4>🔌 MCP adapter</h4><p>Wraps any MCP tool as a biome. <span class="seam">Write once.</span></p></div>
+      <div class="node adapter"><h4>🔌 cap-reg discovery</h4><p>Biomes register/announce capabilities so triage can find them at runtime.</p></div>
+    </div>
+    <p class="note">THE REUSABILITY: you don't integrate 789 things. You write ~4 protocol adapters. Every capability becomes orchestratable for free.</p>
+  </div>
+
+  <div class="arrow">▼ &nbsp; cultivation fan-out reaches back to capability biomes</div>
+
+  <div class="layer">
+    <span class="layer-label">Orchestration grammar (Mycelium — stays at CLI level, full control)</span>
+    <div class="row">
+      <div class="node"><h4>🌰 plant → freeze → cultivate → harvest</h4><p>Decompose goal → HYPHAE, fan out N leaves + sub-leaves, compose FRUIT. The control you don't want to abstract away.</p></div>
+      <div class="node"><h4>🍄 leaves call capability biomes</h4><p>A leaf's toolset = capability-biomes on the bus. Cultivation + fleet finally compose.</p></div>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,155 @@
+<h2>Maui-as-Product — v3 (terminology key + curated promotion)</h2>
+<p class="subtitle">Resolved: cultivations run privately by default; becoming a reusable biome requires an approval gate. The bus stays curated.</p>
+
+<style>
+  .arch { font-family: -apple-system, system-ui, sans-serif; max-width: 1180px; margin: 0 auto; }
+
+  /* terminology key */
+  .key { background:#101018; border:1px solid #2a2a3a; border-radius:12px; padding:14px 18px; margin:8px 0 20px; }
+  .key h3 { margin:0 0 10px; font-size:13px; color:#5fd3ec; letter-spacing:.05em; text-transform:uppercase; }
+  .key-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px 24px; }
+  .key-item { font-size:11.5px; color:#9a9ab0; line-height:1.45; }
+  .key-item b { color:#e8e8f0; }
+  .key-item .em { color:#1E9EBF; }
+
+  .layer { border:2px solid #2a2a3a; border-radius:12px; padding:18px 16px 14px; margin:16px 0; background:#14141c; position:relative; }
+  .layer-label { position:absolute; top:-11px; left:16px; background:#1E9EBF; color:#04121a; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 10px; border-radius:6px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; margin-top:4px; }
+  .node { flex:1; min-width:150px; background:#1d1d28; border:1px solid #34344a; border-radius:8px; padding:11px 13px; }
+  .node h4 { margin:0 0 5px; font-size:12.5px; color:#e8e8f0; }
+  .node p { margin:0; font-size:10.8px; color:#9a9ab0; line-height:1.42; }
+
+  .bus { background:linear-gradient(90deg,#0d3a47,#1E9EBF22,#0d3a47); border:2px dashed #1E9EBF; text-align:center; padding:16px; }
+  .bus h3 { margin:0 0 4px; color:#5fd3ec; font-size:15px; }
+  .bus p { margin:0; font-size:11px; color:#b8d8e0; }
+  .envelope { font-family:ui-monospace,monospace; font-size:10px; color:#7fc4d8; background:#06222b; border:1px solid #1E9EBF55; border-radius:6px; padding:6px 10px; margin-top:8px; display:inline-block; text-align:left; }
+
+  .arrow { text-align:center; color:#1E9EBF; font-size:18px; margin:2px 0; }
+  .adapter { background:#2a1d10; border-color:#6b4a1f; }
+  .adapter h4 { color:#f0c890; }
+  .gate { background:#2a1018; border-color:#6b1f2f; }
+  .gate h4 { color:#f09090; }
+  .cross { background:#101820; border-color:#2a3a44; }
+  .cross h4 { color:#8fd0c0; }
+  .note { font-size:10.5px; color:#777; font-style:italic; margin-top:8px; }
+  .badge { display:inline-block; font-size:9px; background:#34344a; color:#bbb; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:middle; }
+  .seam { color:#f0c890; font-weight:700; }
+
+  /* promotion strip */
+  .promo { border:2px solid #3a6b4a; background:#0e1a12; border-radius:12px; padding:18px 16px 14px; margin:16px 0; position:relative; }
+  .promo .layer-label { background:#3a9b5a; color:#04120a; }
+  .promo-flow { display:flex; align-items:stretch; gap:8px; margin-top:6px; }
+  .promo-step { flex:1; background:#13241a; border:1px solid #2a4a34; border-radius:8px; padding:10px 12px; }
+  .promo-step h4 { margin:0 0 4px; font-size:12px; color:#9fe0b0; }
+  .promo-step p { margin:0; font-size:10.5px; color:#88a894; line-height:1.4; }
+  .promo-gate { background:#241016; border:1px solid #6b1f2f; }
+  .promo-gate h4 { color:#f09090; }
+  .promo-arrow { display:flex; align-items:center; color:#3a9b5a; font-size:20px; }
+</style>
+
+<div class="arch">
+
+  <!-- TERMINOLOGY KEY -->
+  <div class="key">
+    <h3>🗝️ Terminology — read this first</h3>
+    <div class="key-grid">
+      <div class="key-item"><b>Nutrient</b> — a unit of work/data that flows on the bus. Here: an <span class="em">intent</span> (what the user asked) or a <span class="em">result</span> coming back.</div>
+      <div class="key-item"><b>Biome</b> — any participant plugged into the bus. A front door, a capability, a RAG — all biomes. Think: "a node that can send/receive nutrients."</div>
+      <div class="key-item"><b>The Bus</b> — peer-to-peer message fabric. No central boss. Every biome talks to it in one shared protocol.</div>
+      <div class="key-item"><b>Capability</b> — something that DOES work: a Frank service, a RAG, an MCP tool. ~789 of them exist already.</div>
+      <div class="key-item"><b>Adapter</b> — thin shim that makes a whole CLASS of capabilities (all HTTP services, all RAGs…) speak bus. <span class="seam">Written once per protocol, not per capability.</span></div>
+      <div class="key-item"><b>Cultivation</b> — a Mycelium run that decomposes a big goal into many parallel agents (<span class="em">leaves</span>) and composes their output. The "build-anything" path.</div>
+      <div class="key-item"><b>Triage</b> — the sizing step: is this a cheap lookup, a single capability, or a full cultivation? Decided once, up front.</div>
+      <div class="key-item"><b>Promotion</b> — the GATED path by which a proven cultivation output becomes a permanent, reusable capability-biome. Not automatic.</div>
+    </div>
+  </div>
+
+  <!-- 1 FRONT DOORS -->
+  <div class="layer">
+    <span class="layer-label">1 · Front-door biomes — receive intent + identity</span>
+    <div class="row">
+      <div class="node"><h4>📱 iMessage / phone <span class="badge">v1</span></h4><p>Injects an intent nutrient with reply-channel + caller identity attached.</p></div>
+      <div class="node"><h4>💬 CC session <span class="badge">operator</span></h4><p>Your door. Same injection, but skips the spend-gate — you are the gate.</p></div>
+      <div class="node"><h4>🌐 web / email / API <span class="badge">later</span></h4><p>Each new channel = one more front-door biome. Core untouched.</p></div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ &nbsp; intent</div>
+
+  <!-- 2 TRIAGE -->
+  <div class="layer">
+    <span class="layer-label">2 · Triage — size &amp; ROUTE (never composes)</span>
+    <div class="row">
+      <div class="node"><h4>① Lookup ≈ $0</h4><p>Single capability / model call / RAG query. Answer inline, done.</p></div>
+      <div class="node"><h4>② Composed task</h4><p>2+ capabilities, KNOWN shape → routes to a <b>contract-bound Mycelium agent</b>. Pre-defined first, dynamic later. Agent composes, not triage.</p></div>
+      <div class="node gate"><h4>③ Build → spend-gate</h4><p>Novel goal, decompose from scratch → cultivation. Over threshold → texts "build X, ~$Y, go?", waits.</p></div>
+    </div>
+    <p class="note">Triage picks the tier and hands off. Composition is ALWAYS owned downstream (agent or cultivation), never by triage.</p>
+  </div>
+
+  <div class="arrow">▼ &nbsp; routed + approved work</div>
+
+  <!-- BUS -->
+  <div class="bus">
+    <h3>⚡ THE BUS <span style="font-weight:400;font-size:11px">— peer-to-peer · no central node · one protocol</span></h3>
+    <p>The reusable seam. Everything on this page speaks to it the same way.</p>
+    <div class="envelope">{ intent, origin_channel, identity, budget_cap, trace_id, deadline, reply_to }</div>
+  </div>
+
+  <div class="arrow">▲▼ &nbsp; request / response</div>
+
+  <!-- 3 CAPABILITY BIOMES -->
+  <div class="layer">
+    <span class="layer-label">3 · Capability biomes — 789 + RAGs via ~4 adapters</span>
+    <div class="row">
+      <div class="node adapter"><h4>🔌 HTTP-service</h4><p>Frank services (research, recon, comp-intel…).</p></div>
+      <div class="node adapter"><h4>🔌 RAG / archive</h4><p>research-archive, knowledge-router, topic RAGs.</p></div>
+      <div class="node adapter"><h4>🔌 MCP</h4><p>Gmail, Drive, Brave, Shodan, any MCP tool.</p></div>
+      <div class="node adapter"><h4>🔌 cap-reg</h4><p>The registry/menu. Triage queries it; biomes self-announce.</p></div>
+    </div>
+    <p class="note">~4 TRANSPORT adapters + 1 interface descriptor per capability (in cap-reg). Transport cost is fixed; interface cost is declarative, not eliminated.</p>
+  </div>
+
+  <div class="arrow">▼ &nbsp; the "build-anything" path lands here · leaves reach back UP to capability biomes</div>
+
+  <!-- 4 ORCHESTRATION (resolved: above the bus, private) -->
+  <div class="layer">
+    <span class="layer-label">4 · Mycelium engine — owns ALL composition · invoked by hand OR auto-triggered</span>
+    <div class="row">
+      <div class="node"><h4>② Tier-2 contract-bound agent</h4><p>Fixed-shape composition via NUTRIENTS contract. No decomposition. Cheap, predictable, testable. v1 = pre-defined; dynamic later.</p></div>
+      <div class="node"><h4>③ Tier-3 cultivation</h4><p>plant→freeze→cultivate→harvest. Novel goal decomposed from scratch. Owns fan-out/CommitQueue. NOT automatically a biome.</p></div>
+      <div class="node"><h4>🍄 Leaves/steps call capability-biomes</h4><p>Toolset = capability-biomes on the bus. Where composition + the fleet finally meet.</p></div>
+    </div>
+    <p class="note">CLI is the engine's interface, NOT a human-at-terminal requirement. Same build cycle whether you type `mycelium …` or a routed request auto-triggers it. Spend-gate + promotion gate make headless invocation safe.</p>
+    <p class="note">Resolved: not every cultivation joins the organism. A user could build nonsense — it stays private until it earns promotion. ↓</p>
+  </div>
+
+  <div class="arrow" style="color:#3a9b5a">▼ &nbsp; only IF it proves useful</div>
+
+  <!-- PROMOTION GATE -->
+  <div class="promo">
+    <span class="layer-label">5 · Promotion — gated path from cultivation → permanent biome</span>
+    <div class="promo-flow">
+      <div class="promo-step"><h4>🍄 Cultivation output</h4><p>A working fruit. Lives privately. Reusable only by re-running.</p></div>
+      <div class="promo-arrow">→</div>
+      <div class="promo-step promo-gate"><h4>🚦 Approval gate</h4><p>Operator (or policy) reviews: useful? safe? non-nonsense? Worth keeping?</p></div>
+      <div class="promo-arrow">→</div>
+      <div class="promo-step"><h4>🔌 Wrapped as adapter</h4><p>Gets a bus adapter + cap-reg entry. Now discoverable.</p></div>
+      <div class="promo-arrow">→</div>
+      <div class="promo-step"><h4>♻️ Permanent capability-biome</h4><p>Joins layer 3. Future triage can route to it directly — no rebuild.</p></div>
+    </div>
+    <p class="note">The bus stays CURATED. Cultivations produce candidates; only approved ones become permanent. Nonsense never auto-joins.</p>
+  </div>
+
+  <!-- CROSS-CUTTING -->
+  <div class="layer">
+    <span class="layer-label">Cross-cutting — spans every layer</span>
+    <div class="row">
+      <div class="node cross"><h4>🧠 Memory / identity</h4><p>Who's asking? What does Maui know about them + the org? (colleague↔product boundary lives here.)</p></div>
+      <div class="node cross"><h4>💰 Budget ledger</h4><p>Per-trace cap from the envelope. Triage reads it; cultivations decrement it.</p></div>
+      <div class="node cross"><h4>🔭 Observability</h4><p>trace_id threads the whole journey: door → triage → bus → biomes → reply.</p></div>
+      <div class="node cross"><h4>🔐 Safety tier</h4><p>Product caller ≠ operator. Hides sensitive biomes (OSINT/recon) from the product tier.</p></div>
+    </div>
+  </div>
+
+</div>

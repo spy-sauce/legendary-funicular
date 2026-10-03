@@ -1,0 +1,144 @@
+<h2>Which direction is the dashboard aiming?</h2>
+<p class="subtitle">The two reference files you handed off pull in different directions — same domain, very different surface. Pick the anchor, or hybrid.</p>
+
+<div class="cards" data-multiselect>
+  <div class="card" data-choice="canvas" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#060610;color:#E8E8F0;padding:18px;font-family:'JetBrains Mono',monospace;height:240px;position:relative;overflow:hidden;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:24px;">
+        <span style="color:#00FFB2;">● mycelium · organism</span>
+        <span>12 agents · 847/s · 2.1ms</span>
+      </div>
+      <div style="position:relative;height:160px;">
+        <!-- center node -->
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:#00FFB220;border:2px solid #00FFB2;box-shadow:0 0 24px #00FFB260;"></div>
+        <!-- radiating nodes -->
+        <div style="position:absolute;left:18%;top:24%;width:18px;height:18px;border-radius:50%;background:#A78BFA20;border:1px solid #A78BFA;"></div>
+        <div style="position:absolute;left:80%;top:18%;width:16px;height:16px;border-radius:50%;background:#FF6B6B20;border:1px solid #FF6B6B;"></div>
+        <div style="position:absolute;left:14%;top:72%;width:14px;height:14px;border-radius:50%;background:#4ECDC420;border:1px solid #4ECDC4;"></div>
+        <div style="position:absolute;left:78%;top:78%;width:16px;height:16px;border-radius:50%;background:#FFB34720;border:1px solid #FFB347;"></div>
+        <div style="position:absolute;left:30%;top:90%;width:14px;height:14px;border-radius:50%;background:#FF69B420;border:1px solid #FF69B4;"></div>
+        <!-- hyphae curves (rough) -->
+        <svg style="position:absolute;inset:0;width:100%;height:100%;" preserveAspectRatio="none">
+          <path d="M50% 50% Q 30% 30% 18% 24%" stroke="#00FFB230" fill="none" stroke-width="1" style="stroke-dasharray:none"/>
+          <path d="M50% 50% Q 70% 35% 82% 22%" stroke="#00FFB230" fill="none" stroke-width="1"/>
+          <path d="M50% 50% Q 30% 70% 18% 76%" stroke="#00FFB230" fill="none" stroke-width="1"/>
+          <path d="M50% 50% Q 70% 70% 82% 82%" stroke="#00FFB230" fill="none" stroke-width="1"/>
+          <circle cx="35%" cy="40%" r="1.5" fill="#00FFB2"/>
+          <circle cx="60%" cy="38%" r="1.5" fill="#00FFB2"/>
+          <circle cx="40%" cy="68%" r="1.5" fill="#00FFB2"/>
+        </svg>
+      </div>
+      <div style="position:absolute;bottom:14px;left:18px;font-size:9px;color:#444460;letter-spacing:1px;">HOVER A NODE → INFO PANEL</div>
+    </div>
+    <div class="card-body">
+      <h3>A · Network Canvas</h3>
+      <p><strong>file 1</strong> — hero canvas, organic curved hyphae, animated nutrient dots, sparse-by-default with info-on-hover. Dark, neon, alive. Single immersive surface.</p>
+      <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px;">good for: showing the organism is breathing. poetic. demo-friendly. one screen.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="console" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F7F6F2;color:#1F1E1B;padding:14px;font-family:system-ui,-apple-system,sans-serif;height:240px;font-size:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+        <span style="font-weight:500;font-size:12px;">Mycelium organism <span style="color:#777;font-weight:400;">mfautomation</span></span>
+        <span style="font-family:monospace;color:#085041;">● 00:42:17</span>
+      </div>
+      <!-- metric strip -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:8px;">
+        <div style="background:#fff;border:0.5px solid #e0ddd5;border-radius:4px;padding:6px;">
+          <div style="font-size:8px;color:#777;">Health</div>
+          <div style="font-size:14px;color:#085041;font-weight:500;">94%</div>
+        </div>
+        <div style="background:#fff;border:0.5px solid #e0ddd5;border-radius:4px;padding:6px;">
+          <div style="font-size:8px;color:#777;">Agents</div>
+          <div style="font-size:14px;font-weight:500;">5</div>
+        </div>
+        <div style="background:#fff;border:0.5px solid #e0ddd5;border-radius:4px;padding:6px;">
+          <div style="font-size:8px;color:#777;">Cost 24h</div>
+          <div style="font-size:14px;font-weight:500;">$0.84</div>
+        </div>
+        <div style="background:#fff;border:0.5px solid #e0ddd5;border-radius:4px;padding:6px;">
+          <div style="font-size:8px;color:#777;">Events</div>
+          <div style="font-size:14px;font-weight:500;">1,247</div>
+        </div>
+        <div style="background:#fff;border:0.5px solid #e0ddd5;border-radius:4px;padding:6px;">
+          <div style="font-size:8px;color:#777;">Alerts</div>
+          <div style="font-size:14px;color:#A32D2D;font-weight:500;">1</div>
+        </div>
+      </div>
+      <!-- alert ribbon -->
+      <div style="background:#FCEBEB;border:0.5px solid #A32D2D;border-radius:4px;padding:4px 8px;margin-bottom:6px;color:#791F1F;font-size:9px;">⚠ Latency 3.2× baseline — provider degradation</div>
+      <!-- mesh + rail -->
+      <div style="display:grid;grid-template-columns:1fr 80px;gap:6px;">
+        <div style="background:#fff;border:0.5px solid #e0ddd5;border-radius:4px;height:90px;display:flex;align-items:center;justify-content:center;position:relative;">
+          <svg viewBox="0 0 200 80" style="width:100%;height:100%;">
+            <circle cx="40" cy="30" r="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+            <circle cx="100" cy="20" r="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+            <circle cx="160" cy="30" r="10" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
+            <circle cx="40" cy="60" r="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+            <circle cx="100" cy="65" r="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+            <circle cx="160" cy="60" r="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+            <line x1="40" y1="30" x2="100" y2="20" stroke="#5DCAA5" stroke-width="1" stroke-dasharray="2 2"/>
+            <line x1="100" y1="20" x2="160" y2="30" stroke="#5DCAA5" stroke-width="0.6" opacity="0.4"/>
+          </svg>
+        </div>
+        <div style="font-size:8px;line-height:1.5;color:#444;">
+          <div>● anthropic 142ms</div>
+          <div>● ollama 88ms</div>
+          <div style="color:#A32D2D;">● openai 4200ms</div>
+          <div>● google 230ms</div>
+        </div>
+      </div>
+      <div style="font-family:monospace;font-size:8px;color:#444;margin-top:6px;">14:22:08  architect  lifecycle.fruiting<br>14:22:09  triage     nutrient.flow → review</div>
+    </div>
+    <div class="card-body">
+      <h3>B · Operator Console</h3>
+      <p><strong>file 2</strong> — metric strip + alert ribbon + SVG mesh + event feed + provider rail. Light/quiet, paper-feeling, dense. Built for someone debugging.</p>
+      <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px;">good for: actually operating the thing. cellar-aesthetic. answers "what's wrong right now."</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0E0E18;color:#E8E8F0;padding:12px;height:240px;font-size:10px;font-family:system-ui;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:9px;">
+        <span style="color:#00FFB2;">● organism</span>
+        <span style="color:#888;">00:42:17 · 5 agents · 1 alert</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px;">
+        <div style="background:#060610;border:1px solid #1A1A2A;border-radius:3px;padding:4px;"><div style="font-size:7px;color:#666;">HEALTH</div><div style="color:#00FFB2;font-weight:600;font-size:11px;">94%</div></div>
+        <div style="background:#060610;border:1px solid #1A1A2A;border-radius:3px;padding:4px;"><div style="font-size:7px;color:#666;">AGENTS</div><div style="font-weight:600;font-size:11px;">5</div></div>
+        <div style="background:#060610;border:1px solid #1A1A2A;border-radius:3px;padding:4px;"><div style="font-size:7px;color:#666;">COST</div><div style="font-weight:600;font-size:11px;">$0.84</div></div>
+        <div style="background:#060610;border:1px solid #1A1A2A;border-radius:3px;padding:4px;"><div style="font-size:7px;color:#666;">EVENTS</div><div style="font-weight:600;font-size:11px;">1247</div></div>
+        <div style="background:#060610;border:1px solid #1A1A2A;border-radius:3px;padding:4px;"><div style="font-size:7px;color:#666;">ALERTS</div><div style="color:#FF6B6B;font-weight:600;font-size:11px;">1</div></div>
+      </div>
+      <!-- canvas-style network hero in the middle -->
+      <div style="background:#060610;border:1px solid #1A1A2A;border-radius:3px;height:110px;position:relative;margin-bottom:6px;">
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;background:#00FFB220;border:1.5px solid #00FFB2;box-shadow:0 0 12px #00FFB260;"></div>
+        <div style="position:absolute;left:22%;top:30%;width:12px;height:12px;border-radius:50%;background:#A78BFA20;border:1px solid #A78BFA;"></div>
+        <div style="position:absolute;left:75%;top:25%;width:11px;height:11px;border-radius:50%;background:#FF6B6B20;border:1px solid #FF6B6B;"></div>
+        <div style="position:absolute;left:20%;top:72%;width:11px;height:11px;border-radius:50%;background:#4ECDC420;border:1px solid #4ECDC4;"></div>
+        <div style="position:absolute;left:78%;top:74%;width:11px;height:11px;border-radius:50%;background:#FFB34720;border:1px solid #FFB347;"></div>
+        <svg style="position:absolute;inset:0;width:100%;height:100%;" preserveAspectRatio="none">
+          <path d="M50% 50% Q 35% 35% 22% 30%" stroke="#00FFB240" fill="none" stroke-width="1"/>
+          <path d="M50% 50% Q 65% 35% 75% 25%" stroke="#00FFB240" fill="none" stroke-width="1"/>
+          <path d="M50% 50% Q 32% 65% 20% 72%" stroke="#00FFB240" fill="none" stroke-width="1"/>
+          <path d="M50% 50% Q 68% 65% 78% 74%" stroke="#00FFB240" fill="none" stroke-width="1"/>
+          <circle cx="36%" cy="42%" r="1.5" fill="#00FFB2"/>
+          <circle cx="62%" cy="40%" r="1.5" fill="#00FFB2"/>
+        </svg>
+      </div>
+      <div style="font-family:monospace;font-size:8px;color:#888;line-height:1.5;background:#060610;border:1px solid #1A1A2A;border-radius:3px;padding:4px 6px;">
+        <span style="color:#FF6B6B;">14:22:01  organism  ⚠ anomaly.latency_spike  openai 4200ms</span><br>
+        14:22:08  architect  ● lifecycle.fruiting<br>
+        14:22:09  triage     → nutrient.flow → review  score:0.84
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Hybrid — Canvas hero in operator chrome</h3>
+      <p>Network canvas <em>is</em> the centerpiece (file 1's organic feel) but wrapped in operator-console chrome (file 2's metric strip + event feed + alert ribbon). Dark themed, single screen, both poetic and useful.</p>
+      <p style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px;">good for: keeping both audiences. costs more cultivation surface to build. theme.yaml drives palette + node colors.</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Click a card to vote; multiple ok if you want to discuss. Then tell me in the terminal — including any "but actually…" notes.</p>

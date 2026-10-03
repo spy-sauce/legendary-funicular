@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mycelium · specimen under glass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300;9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* base — specimen under glass */
+  --ink:           #0A0908;
+  --ink-2:         #15110D;
+  --ink-3:         #1E1812;
+  --parchment:     #E8DDB5;
+  --parchment-2:   #B5AB87;
+  --parchment-3:   #7A7159;
+  --rule:          #2A231B;
+  --rule-2:        #3A3026;
+
+  /* the single bulb — phosphorescent */
+  --phos:          #9FFFCC;
+  --phos-glow:     rgba(159,255,204,0.18);
+  --phos-soft:     rgba(159,255,204,0.06);
+
+  /* lifecycle — desaturated for dark glass */
+  --life-germ:     #9F90D6;
+  --life-grow:     #6EBFA5;
+  --life-flow:     #6E9DC4;
+  --life-fruit:    #D6A36E;
+  --life-dorm:     #6B6358;
+
+  /* severities */
+  --sev-warn:      #D6A36E;
+  --sev-alert:     #D67E5C;
+  --sev-crit:      #C95C5C;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { background: var(--ink); color: var(--parchment); height:100%; }
+body {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+  /* film grain */
+  position: relative;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+}
+
+/* ───────────── layout ───────────── */
+.frame {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100vh;
+}
+
+/* ── header rail ── */
+.titlebar {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 14px 28px 12px;
+  border-bottom: 0.5px solid var(--rule);
+  background: linear-gradient(180deg, var(--ink-2), var(--ink));
+}
+.brand {
+  display: flex; align-items: baseline; gap: 14px;
+}
+.brand .seal {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  font-size: 24px;
+  font-style: italic;
+  letter-spacing: -0.01em;
+  color: var(--parchment);
+}
+.brand .seal em {
+  color: var(--phos);
+  font-style: italic;
+  text-shadow: 0 0 16px var(--phos-glow);
+}
+.brand .stamp {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--parchment-3);
+  padding-left: 14px;
+  border-left: 0.5px solid var(--rule-2);
+  align-self: stretch;
+  display: flex; align-items: center;
+}
+.titlebar-right {
+  display: flex; align-items: center; gap: 24px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+.organism-state { display:flex; gap:10px; align-items:center; }
+.heartbeat {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--phos);
+  box-shadow: 0 0 12px var(--phos);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 0.5; transform: scale(1); }
+  50%     { opacity: 1;   transform: scale(1.25); }
+}
+.uptime { color: var(--parchment-2); }
+
+/* ── metric strip ── */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0;
+  border-bottom: 0.5px solid var(--rule);
+  background: var(--ink-2);
+}
+.metric {
+  padding: 14px 24px 16px;
+  border-right: 0.5px solid var(--rule);
+  position: relative;
+}
+.metric:last-child { border-right: none; }
+.metric .ml {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--parchment-3);
+  margin-bottom: 6px;
+}
+.metric .mv {
+  font-family: 'Fraunces', serif;
+  font-weight: 400;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--parchment);
+}
+.metric .mv.phos { color: var(--phos); text-shadow: 0 0 18px var(--phos-glow); }
+.metric .mv.warn { color: var(--sev-warn); }
+.metric .mv.crit { color: var(--sev-crit); }
+.metric .ms {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--parchment-3);
+  margin-top: 5px;
+  letter-spacing: 0.04em;
+}
+.metric .mtick {
+  position: absolute; top: 0; left: 0;
+  height: 1px; width: 0%;
+  background: var(--phos);
+  opacity: 0.4;
+  transition: width 0.8s ease;
+}
+
+/* ── body: canvas left, rail right ── */
+.body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  overflow: hidden;
+  min-height: 0;
+}
+.stage {
+  position: relative;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(159,255,204,0.04) 0%, transparent 55%),
+    var(--ink);
+  overflow: hidden;
+  border-right: 0.5px solid var(--rule);
+}
+.stage canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+}
+.stage-meta {
+  position: absolute;
+  top: 14px; left: 18px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--parchment-3);
+  z-index: 5;
+}
+.stage-meta .label {
+  display: block;
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--parchment-2);
+  margin-top: 2px;
+}
+.zoom-cluster {
+  position: absolute;
+  bottom: 18px; left: 18px;
+  z-index: 5;
+  display: flex; align-items: center; gap: 0;
+  background: var(--ink-2);
+  border: 0.5px solid var(--rule-2);
+  border-radius: 2px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+.zoom-btn {
+  background: transparent;
+  border: none;
+  border-right: 0.5px solid var(--rule-2);
+  color: var(--parchment-2);
+  cursor: pointer;
+  padding: 7px 11px;
+  font-family: inherit;
+  font-size: 12px;
+}
+.zoom-btn:last-of-type { border-right: none; }
+.zoom-btn:hover { background: var(--ink-3); color: var(--phos); }
+.zoom-readout {
+  padding: 0 12px;
+  color: var(--parchment-3);
+  letter-spacing: 0.04em;
+  min-width: 95px;
+}
+.zoom-readout strong { color: var(--phos); font-weight: 500; }
+
+.legend {
+  position: absolute;
+  top: 14px; right: 18px;
+  z-index: 5;
+  display: flex; gap: 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--parchment-3);
+}
+.legend .litem { display: flex; align-items: center; gap: 5px; }
+.legend .ldot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; opacity: 0.85; }
+
+/* hover card (specimen note) */
+.specimen-card {
+  position: absolute;
+  bottom: 18px; right: 18px;
+  z-index: 6;
+  width: 280px;
+  background: var(--ink-2);
+  border: 0.5px solid var(--rule-2);
+  padding: 14px 16px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+.specimen-card.show { opacity: 1; transform: translateY(0); }
+.specimen-card .card-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--parchment-3);
+}
+.specimen-card .card-name {
+  font-family: 'Fraunces', serif;
+  font-size: 19px;
+  font-style: italic;
+  margin: 4px 0 12px;
+  color: var(--parchment);
+}
+.specimen-card .card-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+}
+.specimen-card .gk { color: var(--parchment-3); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; }
+.specimen-card .gv { color: var(--parchment); margin-top: 1px; }
+.specimen-card .leaves-strip {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px dashed var(--rule-2);
+}
+.specimen-card .leaves-strip .gk { margin-bottom: 6px; }
+.specimen-card .leaves-strip .pips {
+  display: flex; flex-wrap: wrap; gap: 3px;
+}
+.specimen-card .pip {
+  width: 8px; height: 8px; border-radius: 1.5px;
+  border: 0.5px solid var(--rule-2);
+}
+
+/* ── right rail ── */
+.rail {
+  display: flex; flex-direction: column;
+  background: var(--ink-2);
+  overflow: hidden;
+  min-height: 0;
+}
+.rail-section { padding: 14px 18px; border-bottom: 0.5px solid var(--rule); }
+.rail-section:last-of-type { border-bottom: none; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.rail-h {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--parchment);
+  margin-bottom: 10px;
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.rail-h .count {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-style: normal;
+  color: var(--parchment-3);
+  letter-spacing: 0.14em;
+}
+
+.providers .prow {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 0;
+  border-bottom: 0.5px dashed var(--rule);
+}
+.providers .prow:last-child { border-bottom: none; }
+.providers .pdot { width: 7px; height: 7px; border-radius: 50%; }
+.providers .pdot.up { background: var(--life-grow); box-shadow: 0 0 6px var(--life-grow); }
+.providers .pdot.down { background: var(--sev-crit); box-shadow: 0 0 6px var(--sev-crit); }
+.providers .pname {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--parchment-2);
+  letter-spacing: 0.02em;
+}
+.providers .platency {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--parchment-3);
+}
+.providers .platency.slow { color: var(--sev-warn); }
+
+.agents .arow {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 0;
+}
+.agents .alabel {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+  color: var(--parchment-2);
+}
+.agents .apill {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 1px;
+  border: 0.5px solid;
+}
+
+/* ── alert ribbon ── */
+.alert-ribbon {
+  display: none;
+  padding: 9px 28px;
+  background: linear-gradient(90deg, rgba(201,92,92,0.18), rgba(201,92,92,0.04));
+  border-top: 0.5px solid rgba(201,92,92,0.6);
+  border-bottom: 0.5px solid rgba(201,92,92,0.6);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: #F0C4B5;
+  letter-spacing: 0.02em;
+  align-items: center;
+  gap: 12px;
+}
+.alert-ribbon.show { display: flex; }
+.alert-ribbon .badge {
+  background: rgba(201,92,92,0.25);
+  padding: 2px 7px;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border: 0.5px solid rgba(201,92,92,0.5);
+}
+
+/* ── event feed footer ── */
+.feedbar {
+  border-top: 0.5px solid var(--rule);
+  background: var(--ink-2);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 10px 18px 4px;
+  gap: 16px;
+}
+.feedbar h4 {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+  color: var(--parchment);
+}
+.filters { display: flex; gap: 0; }
+.fbtn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  border-right: 0.5px solid var(--rule);
+  color: var(--parchment-3);
+  cursor: pointer;
+}
+.fbtn:last-child { border-right: none; }
+.fbtn:hover { color: var(--parchment-2); }
+.fbtn.active { color: var(--phos); }
+.fbtn.active::before { content: '·'; margin-right: 4px; color: var(--phos); }
+
+.feed {
+  background: var(--ink);
+  border-top: 0.5px solid var(--rule);
+  height: 158px;
+  overflow-y: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 6px 18px 14px;
+}
+.feed::-webkit-scrollbar { width: 4px; }
+.feed::-webkit-scrollbar-thumb { background: var(--rule-2); }
+.fline {
+  display: grid;
+  grid-template-columns: 14px 78px 90px 1fr;
+  gap: 12px;
+  padding: 3px 0;
+  border-left: 1.5px solid transparent;
+  padding-left: 10px;
+}
+.fline.sev-warn  { border-left-color: var(--sev-warn); }
+.fline.sev-alert { border-left-color: var(--sev-alert); }
+.fline.sev-crit  { border-left-color: var(--sev-crit); background: rgba(201,92,92,0.06); }
+.ficon { color: var(--parchment-3); text-align: center; }
+.fts   { color: var(--parchment-3); }
+.fsrc  { color: var(--parchment-2); }
+.fmsg  { color: var(--parchment); }
+.fline.sev-crit .fmsg { color: #F0C4B5; }
+
+/* zoom transitioning */
+.zoom-readout em { font-style: italic; color: var(--parchment-2); font-weight: 400; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+
+  <!-- ─── header ─── -->
+  <div class="titlebar">
+    <div class="brand">
+      <div class="seal"><em>mycelium</em> · specimen</div>
+      <div class="stamp">organism · audit-run · ddp gating · contract-freeze</div>
+    </div>
+    <div class="titlebar-right">
+      <div class="organism-state">
+        <span class="heartbeat"></span>
+        <span class="uptime" id="uptime">00:00:00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── metric strip ─── -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="mtick" style="width: 94%;"></div>
+      <div class="ml">Health</div>
+      <div class="mv phos" id="m-health">94%</div>
+      <div class="ms">4 of 4 providers · 1 slow</div>
+    </div>
+    <div class="metric">
+      <div class="ml">Agents · Leaves</div>
+      <div class="mv" id="m-agents">6 · 22</div>
+      <div class="ms">5 active · 1 dormant</div>
+    </div>
+    <div class="metric">
+      <div class="ml">Cost · 24h</div>
+      <div class="mv" id="m-cost">$0.082</div>
+      <div class="ms" id="m-tokens">142,840 tokens</div>
+    </div>
+    <div class="metric">
+      <div class="ml">Events</div>
+      <div class="mv" id="m-events">0</div>
+      <div class="ms">processed since boot</div>
+    </div>
+    <div class="metric">
+      <div class="ml">Alerts</div>
+      <div class="mv" id="m-alerts">0</div>
+      <div class="ms" id="m-alerts-sub">all clear</div>
+    </div>
+  </div>
+
+  <!-- ─── alert ribbon (toggles) ─── -->
+  <div class="alert-ribbon" id="alert-ribbon">
+    <span class="badge">anomaly</span>
+    <span id="alert-text">Latency 3.2× above baseline — possible provider degradation</span>
+  </div>
+
+  <!-- ─── stage + rail ─── -->
+  <div class="body">
+
+    <div class="stage">
+      <div class="stage-meta">
+        live · network
+        <span class="label">the organism, breathing</span>
+      </div>
+
+      <div class="legend">
+        <span class="litem"><span class="ldot" style="background:var(--life-germ)"></span> germ</span>
+        <span class="litem"><span class="ldot" style="background:var(--life-grow)"></span> grow</span>
+        <span class="litem"><span class="ldot" style="background:var(--life-flow)"></span> flow</span>
+        <span class="litem"><span class="ldot" style="background:var(--life-fruit)"></span> fruit</span>
+        <span class="litem"><span class="ldot" style="background:var(--life-dorm)"></span> dorm</span>
+      </div>
+
+      <canvas id="net"></canvas>
+
+      <div class="zoom-cluster">
+        <button class="zoom-btn" id="zoom-out" title="biomes">−</button>
+        <div class="zoom-readout"><strong id="zoom-level">biomes</strong> · <em id="zoom-tip">scroll · or use buttons</em></div>
+        <button class="zoom-btn" id="zoom-in" title="leaves">+</button>
+      </div>
+
+      <div class="specimen-card" id="specimen">
+        <div class="card-eyebrow">specimen</div>
+        <div class="card-name" id="sp-name">—</div>
+        <div class="card-grid">
+          <div><div class="gk">tag</div><div class="gv" id="sp-tag">—</div></div>
+          <div><div class="gk">state</div><div class="gv" id="sp-state">—</div></div>
+          <div><div class="gk">leaves</div><div class="gv" id="sp-leaves">—</div></div>
+          <div><div class="gk">last event</div><div class="gv" id="sp-event">—</div></div>
+        </div>
+        <div class="leaves-strip">
+          <div class="gk">leaf strip</div>
+          <div class="pips" id="sp-pips"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rail">
+      <div class="rail-section providers">
+        <div class="rail-h">Providers <span class="count" id="prov-count">4 ·  link</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">anthropic</span><span class="platency">142ms</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">ollama_local</span><span class="platency">88ms</span></div>
+        <div class="prow"><span class="pdot down"></span><span class="pname">openai</span><span class="platency slow">4,212ms</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">google</span><span class="platency">230ms</span></div>
+      </div>
+
+      <div class="rail-section agents">
+        <div class="rail-h">Biomes <span class="count">6</span></div>
+        <div class="arow"><span class="alabel">audit-findings</span><span class="apill" id="ap-findings" style="color:var(--life-fruit); border-color:var(--life-fruit)">fruit</span></div>
+        <div class="arow"><span class="alabel">audit-testers</span><span class="apill" id="ap-testers" style="color:var(--life-grow); border-color:var(--life-grow)">grow</span></div>
+        <div class="arow"><span class="alabel">audit-aggregator</span><span class="apill" id="ap-agg" style="color:var(--life-flow); border-color:var(--life-flow)">flow</span></div>
+        <div class="arow"><span class="alabel">audit-heal-loop</span><span class="apill" id="ap-heal" style="color:var(--life-grow); border-color:var(--life-grow)">grow</span></div>
+        <div class="arow"><span class="alabel">audit-sporenet</span><span class="apill" id="ap-spore" style="color:var(--life-germ); border-color:var(--life-germ)">germ</span></div>
+        <div class="arow"><span class="alabel">audit-cli</span><span class="apill" id="ap-cli" style="color:var(--life-dorm); border-color:var(--life-dorm)">dorm</span></div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- ─── feed ─── -->
+  <div class="feedbar">
+    <h4>Event log <span style="font-style:normal; color:var(--parchment-3); font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.12em; margin-left:8px;">— newest at bottom</span></h4>
+    <div class="filters">
+      <button class="fbtn active" data-f="all">all</button>
+      <button class="fbtn" data-f="lifecycle">lifecycle</button>
+      <button class="fbtn" data-f="nutrient">nutrient</button>
+      <button class="fbtn" data-f="cost">cost</button>
+      <button class="fbtn" data-f="health">health</button>
+      <button class="fbtn" data-f="anomaly">anomaly</button>
+    </div>
+  </div>
+  <div class="feed" id="feed"></div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────
+//  data model
+// ─────────────────────────────────────────────────────────────────────────
+const LIFECYCLE = ['germ','grow','flow','fruit','dorm'];
+const LIFE_COLOR = {
+  germ:  getComputedStyle(document.documentElement).getPropertyValue('--life-germ').trim(),
+  grow:  getComputedStyle(document.documentElement).getPropertyValue('--life-grow').trim(),
+  flow:  getComputedStyle(document.documentElement).getPropertyValue('--life-flow').trim(),
+  fruit: getComputedStyle(document.documentElement).getPropertyValue('--life-fruit').trim(),
+  dorm:  getComputedStyle(document.documentElement).getPropertyValue('--life-dorm').trim(),
+};
+const PHOS = getComputedStyle(document.documentElement).getPropertyValue('--phos').trim();
+const PARCH = getComputedStyle(document.documentElement).getPropertyValue('--parchment').trim();
+const PARCH3 = getComputedStyle(document.documentElement).getPropertyValue('--parchment-3').trim();
+const RULE = getComputedStyle(document.documentElement).getPropertyValue('--rule').trim();
+
+// 6 biomes from audit-run (real cultivation). Each has a state, a tag, and N leaves.
+const BIOMES = [
+  { id:'audit-findings',   tag:'AUDIT-FINDINGS',   leaves: 3, state:'fruit', angle:  -90 },
+  { id:'audit-testers',    tag:'AUDIT-TESTERS',    leaves: 4, state:'grow',  angle:  -30 },
+  { id:'audit-aggregator', tag:'AUDIT-AGGREGATOR', leaves: 3, state:'flow',  angle:   30 },
+  { id:'audit-heal-loop',  tag:'AUDIT-HEAL-LOOP',  leaves: 4, state:'grow',  angle:   90 },
+  { id:'audit-sporenet',   tag:'AUDIT-SPORENET',   leaves: 3, state:'germ',  angle:  150 },
+  { id:'audit-cli',        tag:'AUDIT-CLI',        leaves: 5, state:'dorm',  angle: -150 },
+];
+
+// build leaves per biome with their own states
+BIOMES.forEach(b => {
+  b.leafObjs = Array.from({length: b.leaves}, (_,i) => ({
+    id: `${b.id}.leaf-${i+1}`,
+    state: weightedLeafState(b.state),
+    parent: b.id,
+  }));
+});
+function weightedLeafState(biome) {
+  // Most leaves match parent; some lag/lead
+  const r = Math.random();
+  if (r < 0.7) return biome;
+  return LIFECYCLE[Math.floor(Math.random()*LIFECYCLE.length)];
+}
+
+const ROUTING = [
+  ['audit-findings','audit-aggregator'],
+  ['audit-findings','audit-heal-loop'],
+  ['audit-findings','audit-sporenet'],
+  ['audit-findings','audit-testers'],
+  ['audit-testers','audit-cli'],
+  ['audit-testers','audit-findings'],
+  ['audit-aggregator','audit-findings'],
+  ['audit-aggregator','audit-heal-loop'],
+  ['audit-aggregator','audit-cli'],
+  ['audit-cli','audit-findings'],
+  ['audit-cli','audit-aggregator'],
+  ['audit-heal-loop','audit-findings'],
+  ['audit-sporenet','audit-findings'],
+];
+
+const state = {
+  zoom: 'biomes',           // 'biomes' | 'mid' | 'leaves'
+  zoomT: 0,                 // 0 .. 1
+  zoomTarget: 0,
+  events: [],
+  eventCount: 0,
+  feedFilter: 'all',
+  hover: null,              // biome id
+  flows: [],                // active nutrient flows
+  packets: [],              // animated packet positions
+  alerts: [],
+  startTime: Date.now(),
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+//  canvas
+// ─────────────────────────────────────────────────────────────────────────
+const cv = document.getElementById('net');
+const ctx = cv.getContext('2d');
+let W, H, cx, cy, biomeR, leafR;
+
+function fitCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * dpr; cv.height = r.height * dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  W = r.width; H = r.height;
+  cx = W/2; cy = H/2;
+  biomeR = Math.min(W, H) * 0.32;
+  leafR  = 36;
+  layout();
+}
+window.addEventListener('resize', fitCanvas);
+
+function layout() {
+  BIOMES.forEach(b => {
+    const a = b.angle * Math.PI / 180;
+    b.bx = cx + Math.cos(a) * biomeR;
+    b.by = cy + Math.sin(a) * biomeR;
+    b.leafObjs.forEach((leaf, i) => {
+      // when zoomed in, leaves arc out further from their biome
+      const n = b.leafObjs.length;
+      const spread = Math.PI * 0.85;
+      const la = a + (i - (n-1)/2) * (spread / Math.max(n,1));
+      // direction outward from center
+      leaf.lx = b.bx + Math.cos(la) * leafR * 2.4;
+      leaf.ly = b.by + Math.sin(la) * leafR * 2.4;
+    });
+  });
+}
+
+// breathing offsets per biome
+BIOMES.forEach(b => { b.phase = Math.random() * Math.PI * 2; });
+
+// ─────────────────────────────────────────────────────────────────────────
+//  zoom controls
+// ─────────────────────────────────────────────────────────────────────────
+function setZoom(level) {
+  state.zoom = level;
+  state.zoomTarget = level === 'biomes' ? 0 : level === 'mid' ? 0.5 : 1;
+  document.getElementById('zoom-level').textContent =
+    level === 'biomes' ? 'biomes' : level === 'mid' ? 'biomes + halos' : 'leaves';
+}
+document.getElementById('zoom-in').onclick = () => {
+  if (state.zoom === 'biomes') setZoom('mid');
+  else if (state.zoom === 'mid') setZoom('leaves');
+};
+document.getElementById('zoom-out').onclick = () => {
+  if (state.zoom === 'leaves') setZoom('mid');
+  else if (state.zoom === 'mid') setZoom('biomes');
+};
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.deltaY < 0) { // zoom in
+    if (state.zoom === 'biomes') setZoom('mid');
+    else if (state.zoom === 'mid') setZoom('leaves');
+  } else {
+    if (state.zoom === 'leaves') setZoom('mid');
+    else if (state.zoom === 'mid') setZoom('biomes');
+  }
+}, { passive: false });
+
+// ─────────────────────────────────────────────────────────────────────────
+//  hover detection (biome only for now)
+// ─────────────────────────────────────────────────────────────────────────
+cv.addEventListener('mousemove', e => {
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  let hit = null;
+  for (const b of BIOMES) {
+    const dx = mx - b.bx, dy = my - b.by;
+    if (Math.sqrt(dx*dx + dy*dy) < 38) { hit = b.id; break; }
+  }
+  if (hit !== state.hover) {
+    state.hover = hit;
+    const card = document.getElementById('specimen');
+    if (hit) {
+      const b = BIOMES.find(x => x.id === hit);
+      document.getElementById('sp-name').textContent = b.id;
+      document.getElementById('sp-tag').textContent = b.tag;
+      document.getElementById('sp-state').textContent = b.state;
+      document.getElementById('sp-state').style.color = LIFE_COLOR[b.state];
+      document.getElementById('sp-leaves').textContent = b.leaves;
+      const lastEv = [...state.events].reverse().find(ev => ev.source === b.id);
+      document.getElementById('sp-event').textContent = lastEv ? lastEv.shortType : '—';
+      const pipsEl = document.getElementById('sp-pips');
+      pipsEl.innerHTML = '';
+      b.leafObjs.forEach(l => {
+        const pip = document.createElement('span');
+        pip.className = 'pip';
+        pip.style.background = LIFE_COLOR[l.state];
+        pip.style.borderColor = LIFE_COLOR[l.state];
+        pipsEl.appendChild(pip);
+      });
+      card.classList.add('show');
+    } else {
+      card.classList.remove('show');
+    }
+  }
+});
+cv.addEventListener('mouseleave', () => { state.hover = null; document.getElementById('specimen').classList.remove('show'); });
+
+// ─────────────────────────────────────────────────────────────────────────
+//  draw
+// ─────────────────────────────────────────────────────────────────────────
+let frame = 0;
+function draw() {
+  frame++;
+  // smooth zoom approach
+  state.zoomT += (state.zoomTarget - state.zoomT) * 0.07;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // ── grid (very subtle) ──
+  ctx.strokeStyle = '#15110D';
+  ctx.lineWidth = 0.5;
+  const step = 48;
+  for (let x = step/2; x < W; x += step) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = step/2; y < H; y += step) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // gentle breathing per biome
+  BIOMES.forEach(b => {
+    b.x = b.bx + Math.sin(frame*0.008 + b.phase) * 6;
+    b.y = b.by + Math.cos(frame*0.006 + b.phase * 1.3) * 4;
+  });
+
+  // ── hyphae (biome→biome edges) ──
+  ROUTING.forEach(([fromId, toId]) => {
+    const from = BIOMES.find(b => b.id === fromId);
+    const to = BIOMES.find(b => b.id === toId);
+    if (!from || !to) return;
+    const isHovered = state.hover === fromId || state.hover === toId;
+    const isFlowing = state.flows.some(f => (f.from === fromId && f.to === toId) || (f.from === toId && f.to === fromId));
+    const mx = (from.x + to.x)/2 + Math.sin(frame*0.01 + from.phase) * 14;
+    const my = (from.y + to.y)/2 + Math.cos(frame*0.01 + to.phase) * 14;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo(mx, my, to.x, to.y);
+    if (isFlowing) {
+      ctx.strokeStyle = PHOS + '88'; ctx.lineWidth = 1.8;
+      ctx.shadowColor = PHOS; ctx.shadowBlur = 6;
+    } else if (isHovered) {
+      ctx.strokeStyle = PHOS + '55'; ctx.lineWidth = 1.2;
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.strokeStyle = '#2A231B'; ctx.lineWidth = 0.7;
+      ctx.shadowBlur = 0;
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // nutrient dots traveling along all edges (slow ambient)
+    const dotCount = isFlowing ? 4 : 2;
+    for (let i = 0; i < dotCount; i++) {
+      const t = ((frame * 0.0035 + i/dotCount + from.phase * 0.1) % 1);
+      const px = from.x*(1-t)*(1-t) + mx*2*t*(1-t) + to.x*t*t;
+      const py = from.y*(1-t)*(1-t) + my*2*t*(1-t) + to.y*t*t;
+      ctx.beginPath();
+      ctx.arc(px, py, isFlowing ? 2.4 : 1.2, 0, Math.PI*2);
+      ctx.fillStyle = isFlowing ? PHOS : 'rgba(159,255,204,0.4)';
+      ctx.fill();
+    }
+  });
+
+  // ── biome nodes ──
+  BIOMES.forEach(b => {
+    const c = LIFE_COLOR[b.state];
+    const isHover = state.hover === b.id;
+    const pulse = Math.sin(frame*0.03 + b.phase) * 0.12 + 1;
+    const r = (isHover ? 30 : 24) * pulse;
+
+    // outer halo (visible when zoomed mid+)
+    const haloOpacity = state.zoomT * 0.5;
+    if (haloOpacity > 0.02) {
+      const grad = ctx.createRadialGradient(b.x, b.y, r*0.6, b.x, b.y, r*4);
+      grad.addColorStop(0, c + Math.floor(haloOpacity*256).toString(16).padStart(2,'0'));
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(b.x, b.y, r*4, 0, Math.PI*2); ctx.fill();
+    }
+
+    // ring
+    ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI*2);
+    ctx.fillStyle = c + '22'; ctx.fill();
+    ctx.strokeStyle = c; ctx.lineWidth = isHover ? 2 : 1.2; ctx.stroke();
+
+    // inner mark
+    ctx.beginPath(); ctx.arc(b.x, b.y, r*0.32, 0, Math.PI*2);
+    ctx.fillStyle = c; ctx.fill();
+
+    // label
+    ctx.font = (isHover ? '600 12px' : '500 11px') + ' "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = isHover ? PARCH : PARCH3;
+    ctx.fillText(b.id, b.x, b.y + r + 16);
+
+    // leaf strip under biome (always present, intensity scales with zoom)
+    const stripWidth = Math.min(b.leafObjs.length * 7 + 4, 72);
+    const stripX = b.x - stripWidth/2;
+    const stripY = b.y + r + 22;
+    if (state.zoomT > 0.05) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, state.zoomT * 1.8);
+      b.leafObjs.forEach((leaf, i) => {
+        const lc = LIFE_COLOR[leaf.state];
+        const px = stripX + i * 7 + 2;
+        ctx.fillStyle = lc;
+        ctx.fillRect(px, stripY, 4, 4);
+      });
+      ctx.restore();
+    }
+
+    // when fully zoomed, draw leaf circles arcing outward
+    if (state.zoomT > 0.5) {
+      const opacity = (state.zoomT - 0.5) * 2;
+      b.leafObjs.forEach(leaf => {
+        const lc = LIFE_COLOR[leaf.state];
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        // line from biome center to leaf
+        ctx.strokeStyle = lc + '55'; ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(leaf.lx, leaf.ly); ctx.stroke();
+        // leaf circle
+        ctx.beginPath(); ctx.arc(leaf.lx, leaf.ly, 5, 0, Math.PI*2);
+        ctx.fillStyle = lc + '33'; ctx.fill();
+        ctx.strokeStyle = lc; ctx.lineWidth = 1; ctx.stroke();
+        ctx.beginPath(); ctx.arc(leaf.lx, leaf.ly, 1.6, 0, Math.PI*2);
+        ctx.fillStyle = lc; ctx.fill();
+        ctx.restore();
+      });
+    }
+  });
+
+  requestAnimationFrame(draw);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  event simulator (mirrors framework's frozen kinds where possible)
+// ─────────────────────────────────────────────────────────────────────────
+function rid() { return Math.random().toString(36).slice(2,8); }
+function rpick(a) { return a[Math.floor(Math.random()*a.length)]; }
+
+function genEvent() {
+  const r = Math.random();
+  if (r < 0.30) {
+    // leaf_started or leaf_fruited
+    const b = rpick(BIOMES);
+    const kind = Math.random() < 0.5 ? 'leaf_started' : 'leaf_fruited';
+    return { id:rid(), category:'lifecycle', source:b.id, severity:'info',
+      shortType: kind === 'leaf_started' ? 'leaf · started' : 'leaf · fruited',
+      message: kind === 'leaf_started' ? `${b.id}.${rid()} started` : `${b.id}.${rid()} fruited`,
+      kind, _biome: b };
+  } else if (r < 0.55) {
+    // nutrient flow (synthetic — routing-derived)
+    const [fromId, toId] = rpick(ROUTING);
+    return { id:rid(), category:'nutrient', source:fromId, severity:'info',
+      shortType:'nutrient · flow', message:`${fromId} → ${toId}  score:${(Math.random()*0.5+0.4).toFixed(2)}`,
+      kind:'nutrient_flow', _flow: { from:fromId, to:toId } };
+  } else if (r < 0.75) {
+    // cost
+    const b = rpick(BIOMES);
+    return { id:rid(), category:'cost', source:b.id, severity:'info',
+      shortType:'cost · recorded',
+      message:`${b.id}  $${(Math.random()*0.012).toFixed(4)}  ${Math.floor(500+Math.random()*4000)} tok`,
+      kind:'cost_recorded' };
+  } else if (r < 0.88) {
+    // health pulse (simulated; not yet in framework's frozen kinds)
+    const provs = ['anthropic','openai','ollama_local','google'];
+    const p = rpick(provs);
+    const healthy = Math.random() > 0.1;
+    return { id:rid(), category:'health', source:p, severity: healthy?'info':'warn',
+      shortType:'health · pulse',
+      message:`${p}  ${healthy ? Math.round(120+Math.random()*200) : Math.round(4000+Math.random()*3000)}ms${healthy?'':'  TIMEOUT'}`,
+      kind:'health_pulse' };
+  } else if (r < 0.96) {
+    // ddp stage
+    const stages = ['merge-order','lint','typecheck','test','build','deploy-stg','smoke','deploy-prod'];
+    const s = rpick(stages);
+    const started = Math.random() < 0.5;
+    return { id:rid(), category:'lifecycle', source:'ddp', severity:'info',
+      shortType: started ? 'ddp · started' : 'ddp · ended',
+      message:`stage ${s} ${started ? 'started' : 'ended  ' + Math.round(Math.random()*9000)+'ms'}`,
+      kind: started ? 'ddp_stage_started' : 'ddp_stage_ended' };
+  } else {
+    // anomaly
+    const anomalies = [
+      { msg:'Latency 3.2× above baseline — possible provider degradation', sev:'warn' },
+      { msg:'Cost 4.1× above baseline — possible runaway loop', sev:'alert' },
+      { msg:'14 agents spawned in 30s — possible fork bomb', sev:'crit' },
+      { msg:'7 auth failures in 120s — credential probe?', sev:'crit' },
+    ];
+    const a = rpick(anomalies);
+    return { id:rid(), category:'anomaly', source:'organism', severity:a.sev,
+      shortType:'anomaly', message:a.msg, kind:'alert' };
+  }
+}
+
+function processEvent(e) {
+  state.events.push(e);
+  if (state.events.length > 200) state.events.shift();
+  state.eventCount++;
+
+  // mutate biome state for lifecycle events
+  if (e._biome) {
+    if (e.kind === 'leaf_started') e._biome.state = e._biome.state === 'dorm' ? 'germ' : e._biome.state;
+    if (e.kind === 'leaf_fruited') {
+      const allFruit = e._biome.leafObjs.every(l => l.state === 'fruit');
+      const lp = rpick(e._biome.leafObjs);
+      lp.state = 'fruit';
+      if (allFruit) e._biome.state = 'fruit';
+      else e._biome.state = 'flow';
+    }
+    // refresh side rail
+    updateRailPill(e._biome);
+  }
+
+  // animate flows
+  if (e.kind === 'nutrient_flow') {
+    const flow = { ...e._flow, expires: Date.now() + 2400 };
+    state.flows.push(flow);
+    setTimeout(() => {
+      state.flows = state.flows.filter(f => f !== flow);
+    }, 2400);
+  }
+
+  // anomalies become alerts
+  if (e.kind === 'alert') {
+    state.alerts.push(e);
+    showAlertRibbon(e);
+    setTimeout(() => {
+      state.alerts = state.alerts.filter(a => a !== e);
+      if (state.alerts.length === 0) hideAlertRibbon();
+    }, 15000);
+  }
+
+  renderFeed();
+  renderMetrics();
+}
+
+function updateRailPill(b) {
+  const map = {
+    'audit-findings':'ap-findings','audit-testers':'ap-testers',
+    'audit-aggregator':'ap-agg','audit-heal-loop':'ap-heal',
+    'audit-sporenet':'ap-spore','audit-cli':'ap-cli',
+  };
+  const el = document.getElementById(map[b.id]); if (!el) return;
+  el.textContent = b.state;
+  el.style.color = LIFE_COLOR[b.state];
+  el.style.borderColor = LIFE_COLOR[b.state];
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  feed
+// ─────────────────────────────────────────────────────────────────────────
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  const filtered = state.feedFilter === 'all'
+    ? state.events
+    : state.events.filter(e => e.category === state.feedFilter);
+  const last = filtered.slice(-60);
+  feed.innerHTML = last.map(e => {
+    const t = new Date(e.id ? Date.now() : Date.now());
+    const d = new Date();
+    const ts = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
+    let sevCls = '';
+    if (e.severity === 'warn') sevCls = 'sev-warn';
+    if (e.severity === 'alert') sevCls = 'sev-alert';
+    if (e.severity === 'crit')  sevCls = 'sev-crit';
+    const icon = e.category === 'lifecycle' ? '●' : e.category === 'nutrient' ? '→' : e.category === 'cost' ? '▲' : e.category === 'health' ? '♥' : e.category === 'anomaly' ? '⚠' : '·';
+    return `<div class="fline ${sevCls}"><span class="ficon">${icon}</span><span class="fts">${ts}</span><span class="fsrc">${e.source}</span><span class="fmsg">${e.message}</span></div>`;
+  }).join('');
+  feed.scrollTop = feed.scrollHeight;
+}
+
+document.querySelectorAll('.fbtn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    state.feedFilter = b.dataset.f;
+    renderFeed();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  metrics + alert ribbon
+// ─────────────────────────────────────────────────────────────────────────
+let cumCost = 0.082, cumTokens = 142840;
+function renderMetrics() {
+  const active = BIOMES.filter(b => b.state !== 'dorm').length;
+  document.getElementById('m-agents').textContent = `${BIOMES.length} · 22`;
+  document.getElementById('m-events').textContent = state.eventCount.toLocaleString();
+  document.getElementById('m-alerts').textContent = state.alerts.length;
+  document.getElementById('m-alerts-sub').textContent =
+    state.alerts.length === 0 ? 'all clear' : `last: ${state.alerts[state.alerts.length-1].message.slice(0,40)}…`;
+  const am = document.getElementById('m-alerts');
+  am.className = 'mv ' + (state.alerts.length === 0 ? 'phos' : state.alerts.some(a=>a.severity==='crit') ? 'crit' : 'warn');
+  // cost drift
+  cumCost += Math.random() * 0.0008;
+  cumTokens += Math.floor(Math.random() * 300);
+  document.getElementById('m-cost').textContent = '$' + cumCost.toFixed(3);
+  document.getElementById('m-tokens').textContent = cumTokens.toLocaleString() + ' tokens';
+}
+
+function showAlertRibbon(e) {
+  const r = document.getElementById('alert-ribbon');
+  document.getElementById('alert-text').textContent = e.message;
+  r.classList.add('show');
+}
+function hideAlertRibbon() { document.getElementById('alert-ribbon').classList.remove('show'); }
+
+// ─────────────────────────────────────────────────────────────────────────
+//  uptime
+// ─────────────────────────────────────────────────────────────────────────
+setInterval(() => {
+  const s = Math.floor((Date.now() - state.startTime) / 1000);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  document.getElementById('uptime').textContent =
+    String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}, 1000);
+
+// ─────────────────────────────────────────────────────────────────────────
+//  boot
+// ─────────────────────────────────────────────────────────────────────────
+fitCanvas();
+draw();
+
+// seed a few events so the feed isn't empty
+for (let i = 0; i < 6; i++) processEvent(genEvent());
+
+// drive the simulator
+function tick() {
+  processEvent(genEvent());
+  setTimeout(tick, 700 + Math.random() * 1400);
+}
+tick();
+</script>
+</body>
+</html>

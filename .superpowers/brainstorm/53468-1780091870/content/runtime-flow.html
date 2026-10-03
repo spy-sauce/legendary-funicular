@@ -1,0 +1,98 @@
+<h2>Runtime flow — one request, end to end</h2>
+<p class="subtitle">The TEMPORAL path (what happens, in order) — complement to the structural diagram. Follows a single intent from iMessage all the way to the capability call and back home.</p>
+
+<style>
+  .flow { font-family:-apple-system,system-ui,sans-serif; max-width:1180px; margin:0 auto; }
+  .lane-key { display:flex; gap:14px; flex-wrap:wrap; margin:6px 0 18px; font-size:11px; }
+  .lane-key span { display:inline-flex; align-items:center; gap:6px; color:#9a9ab0; }
+  .dot { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  .step { display:flex; gap:0; align-items:stretch; margin:0; }
+  .gutter { width:120px; flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; padding:14px 12px 0 0; }
+  .gutter .lane { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; text-align:right; line-height:1.3; }
+  .spine { width:34px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; }
+  .num { width:26px; height:26px; border-radius:50%; background:#1E9EBF; color:#04121a; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; margin-top:12px; z-index:2; }
+  .line { width:2px; flex:1; background:#2a3a44; margin:2px 0; }
+  .card { flex:1; background:#1d1d28; border:1px solid #34344a; border-left:4px solid #1E9EBF; border-radius:8px; padding:11px 14px; margin:8px 0; }
+  .card h4 { margin:0 0 4px; font-size:13px; color:#e8e8f0; }
+  .card p { margin:0; font-size:11px; color:#9a9ab0; line-height:1.45; }
+  .card .wire { font-family:ui-monospace,monospace; font-size:10px; color:#7fc4d8; background:#06222b; border:1px solid #1E9EBF44; border-radius:5px; padding:3px 8px; margin-top:7px; display:inline-block; }
+  /* lane colors */
+  .l-door  { border-left-color:#5fd3ec; } .l-door .num  { background:#5fd3ec; }
+  .l-tri   { border-left-color:#f0c890; } .l-tri .num   { background:#f0c890; }
+  .l-bus   { border-left-color:#1E9EBF; } .l-bus .num   { background:#1E9EBF; }
+  .l-adapt { border-left-color:#d8a060; } .l-adapt .num { background:#d8a060; }
+  .l-cap   { border-left-color:#8fd0c0; } .l-cap .num   { background:#8fd0c0; }
+  .l-back  { border-left-color:#9f9fe0; } .l-back .num  { background:#9f9fe0; }
+  .l-agent { border-left-color:#c890f0; } .l-agent .num { background:#c890f0; }
+  .gutter .agent { color:#c890f0; }
+  .branch { background:#1a1420; border:1px dashed #4a3a5a; border-radius:8px; padding:10px 14px; margin:8px 0 8px 154px; font-size:11px; color:#b8a8c8; }
+  .branch b { color:#d8b8f0; }
+  .gutter .door  { color:#5fd3ec; } .gutter .tri{color:#f0c890;} .gutter .bus{color:#1E9EBF;}
+  .gutter .adapt { color:#d8a060; } .gutter .cap{color:#8fd0c0;} .gutter .back{color:#9f9fe0;}
+</style>
+
+<div class="flow">
+
+  <div class="lane-key">
+    <span><i class="dot" style="background:#5fd3ec"></i> Front door</span>
+    <span><i class="dot" style="background:#f0c890"></i> Triage</span>
+    <span><i class="dot" style="background:#c890f0"></i> Tier-2 agent (Mycelium)</span>
+    <span><i class="dot" style="background:#1E9EBF"></i> Bus</span>
+    <span><i class="dot" style="background:#d8a060"></i> Adapter</span>
+    <span><i class="dot" style="background:#8fd0c0"></i> Capability (beyond the adapter)</span>
+    <span><i class="dot" style="background:#9f9fe0"></i> Return path</span>
+  </div>
+
+  <!-- 1 -->
+  <div class="step">
+    <div class="gutter"><span class="lane door">Front door</span></div>
+    <div class="spine"><div class="num">1</div><div class="line"></div></div>
+    <div class="card l-door"><h4>📱 Inbound message arrives</h4><p>"Find me 3 suppliers for X and draft outreach." iMessage handler wraps it as an intent nutrient, stamps identity + reply channel + a fresh trace_id, sets a budget_cap from the caller's tier.</p><span class="wire">POST bus ← { intent, identity, reply_to:"imsg:+1305…", trace_id:7f3a, budget_cap:$5 }</span></div>
+  </div>
+
+  <!-- 2 -->
+  <div class="step">
+    <div class="gutter"><span class="lane tri">Triage</span></div>
+    <div class="spine"><div class="num">2</div><div class="line"></div></div>
+    <div class="card l-tri"><h4>🚦 Triage sizes &amp; routes (does NOT compose)</h4><p>Classifies depth. Needs 2 capabilities combined, known shape → <b>Tier 2, composed task</b>. Triage does not orchestrate — it matches the request to a pre-defined contract-bound agent and routes to it. Under budget_cap → no spend-gate prompt.</p><span class="wire">cap-reg match → agent:"supplier-outreach" (contract: comp-intel → draft)</span></div>
+  </div>
+
+  <!-- branch note -->
+  <div class="branch">↳ If triage had sized this as <b>build-anything</b>, it would estimate cost, fire the <b>spend-gate</b> back over the front door ("build X, ~$Y, go?"), and only on approval spawn a <b>Mycelium cultivation</b> (steps 3–6 then repeat per leaf).</div>
+
+  <!-- 3 -->
+  <div class="step">
+    <div class="gutter"><span class="lane agent">Tier-2 agent</span></div>
+    <div class="spine"><div class="num">3</div><div class="line"></div></div>
+    <div class="card l-agent"><h4>🧬 Contract-bound agent composes (Mycelium, not triage)</h4><p>The <b>supplier-outreach</b> agent owns the orchestration. Per its NUTRIENTS contract it emits two request nutrients onto the bus and will combine their results. trace_id rides along so every hop is observable on the dashboard.</p><span class="wire">agent emits → nutrient[supplier-search]→comp-intel · nutrient[draft]→draft (parallel)</span></div>
+  </div>
+
+  <!-- 4 -->
+  <div class="step">
+    <div class="gutter"><span class="lane adapt">Adapter</span></div>
+    <div class="spine"><div class="num">4</div><div class="line"></div></div>
+    <div class="card l-adapt"><h4>🔌 Adapter translates bus → native call</h4><p>The HTTP-service <b>transport</b> adapter turns the bus nutrient into the call the real service expects, using comp-intel's <b>interface descriptor from cap-reg</b> (endpoint + request schema). Adapter knows transport; cap-reg supplies the interface. Same adapter serves any HTTP capability.</p><span class="wire">descriptor(comp-intel) ⇒ POST http://127.0.0.1:9118/company { name:"X" }</span></div>
+  </div>
+
+  <!-- 5 — BEYOND THE ADAPTER -->
+  <div class="step">
+    <div class="gutter"><span class="lane cap">Capability</span></div>
+    <div class="spine"><div class="num">5</div><div class="line"></div></div>
+    <div class="card l-cap"><h4>🛠️ Capability does the real work (beyond the adapter)</h4><p>frank-comp-intel runs its OWN internal pipeline — fans out to Glassdoor/Levels/Blind, hits its fallback chain if a source is down, maybe queries a RAG. The bus & adapter don't see any of this; the capability is a black box that takes a request and returns a result. THIS is the "and the calls beyond that" you asked for.</p><span class="wire">comp-intel internal: source A → source B (fallback) → dedupe → RAG enrich → result</span></div>
+  </div>
+
+  <!-- 6 -->
+  <div class="step">
+    <div class="gutter"><span class="lane back">Return</span></div>
+    <div class="spine"><div class="num">6</div><div class="line"></div></div>
+    <div class="card l-back"><h4>↩️ Result nutrient flows back to the agent</h4><p>Adapter wraps the native response as a result nutrient (same trace_id). Bus delivers it back to the Tier-2 agent. Budget ledger decrements actual spend. If the capability errored/timed out → an error nutrient instead, and the agent (per contract) decides: retry, fallback, or surface the failure.</p><span class="wire">{ result, trace_id:7f3a, cost:$0.12 } → bus → agent</span></div>
+  </div>
+
+  <!-- 7 -->
+  <div class="step">
+    <div class="gutter"><span class="lane agent">Compose</span></div>
+    <div class="spine"><div class="num">7</div></div>
+    <div class="card l-agent"><h4>🧩 Agent composes → triage replies home</h4><p>The Tier-2 agent waits for both sub-results (supplier list + draft), composes one coherent answer per its contract, and hands it to triage, which replies via reply_to. The user gets a single reply on the same channel they messaged from. Whole journey is one trace on the dashboard.</p><span class="wire">agent composes → triage → imsg send +1305… "3 suppliers + a draft: …" (trace 7f3a closed)</span></div>
+  </div>
+
+</div>

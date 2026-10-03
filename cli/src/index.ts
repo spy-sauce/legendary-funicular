@@ -24,6 +24,7 @@ import { registerIntegrateCommand } from "./commands/integrate.js";
 import { registerDdpCommand } from "./commands/ddp.js";
 import { registerAuditRunCommand } from "./commands/audit-run.js";
 import { registerEvalCommand } from "./commands/eval.js";
+import { registerLedgerCommand } from "./commands/ledger.js";
 
 const banner = boxen(
   chalk.magentaBright.bold("🍄 Mycelium") +
@@ -65,5 +66,6 @@ registerIntegrateCommand(program);
 registerDdpCommand(program);
 registerAuditRunCommand(program);
 registerEvalCommand(program);
+registerLedgerCommand(program);
 
 program.parse();

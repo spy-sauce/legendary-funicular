@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mycelium · quantum array</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@200;300;400;500&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* cryogenic base */
+  --ink:        #060912;
+  --ink-2:      #0A0E18;
+  --ink-3:      #11161F;
+  --rule:       #1A2030;
+  --rule-2:     #232B3D;
+
+  /* ice */
+  --ice:        #E8EEF5;
+  --ice-2:      #A8B4C5;
+  --ice-3:      #6A7585;
+  --ice-4:      #404B5C;
+
+  /* cryo accent */
+  --cryo:       #7AE5FF;
+  --cryo-glow:  rgba(122,229,255,0.18);
+  --cryo-soft:  rgba(122,229,255,0.06);
+
+  /* lifecycle — cool sub-spectrum */
+  --life-germ:  #B7A8E8;   /* pale violet */
+  --life-grow:  #7BC9C0;   /* ice teal   */
+  --life-flow:  #8BB8E0;   /* cyan blue  */
+  --life-fruit: #D9C390;   /* pale gold (cool) */
+  --life-dorm:  #5A6471;   /* slate      */
+
+  /* severities — desaturated */
+  --sev-warn:   #D9B85A;
+  --sev-alert:  #E08A5C;
+  --sev-crit:   #DB5C6E;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  background: var(--ink);
+  color: var(--ice);
+  height:100%;
+}
+body {
+  font-family: 'Geist', sans-serif;
+  font-size: 13px;
+  font-weight: 300;
+  overflow: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.005em;
+}
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:9999; opacity:0.025;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='1' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: screen;
+}
+
+/* ─── layout ─── */
+.frame { display:grid; grid-template-rows:auto auto 1fr auto; height:100vh; }
+
+/* ─── titlebar ─── */
+.titlebar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 32px;
+  border-bottom: 0.5px solid var(--rule);
+  background: linear-gradient(180deg, var(--ink-2) 0%, var(--ink) 100%);
+}
+.brand { display:flex; align-items:baseline; gap:18px; }
+.brand .seal {
+  font-family:'Geist',sans-serif;
+  font-weight:200;
+  font-size:22px;
+  letter-spacing: 0.02em;
+  color: var(--ice);
+  display: flex; align-items: baseline; gap: 8px;
+}
+.brand .seal::before {
+  content: '';
+  display: inline-block;
+  width: 7px; height: 7px;
+  background: var(--cryo);
+  box-shadow: 0 0 14px var(--cryo);
+  margin-right: 4px;
+  transform: translateY(-2px);
+}
+.brand .seal strong { color: var(--cryo); font-weight: 300; }
+.brand .stamp {
+  font-family:'Geist Mono',monospace;
+  font-size:10px; font-weight: 400;
+  letter-spacing:0.18em; text-transform:uppercase;
+  color:var(--ice-3);
+  padding-left:18px;
+  border-left:0.5px solid var(--rule-2);
+  display:flex; align-items:center;
+  height: 20px;
+}
+.titlebar-right { display:flex; align-items:center; gap:24px; font-family:'Geist Mono',monospace; font-size:11px; }
+.heartbeat-wrap { display:flex; gap:10px; align-items:center; }
+.heartbeat {
+  width:6px; height:6px; border-radius:50%;
+  background:var(--cryo);
+  box-shadow:0 0 10px var(--cryo);
+  animation:qubit 1.6s ease-in-out infinite;
+}
+@keyframes qubit {
+  0%,100% { opacity:0.4; transform:scale(0.9) }
+  50%     { opacity:1;   transform:scale(1.15) }
+}
+.uptime { color:var(--ice-2); font-weight: 400; }
+
+/* ─── metrics ─── */
+.metrics {
+  display:grid; grid-template-columns:repeat(5,1fr);
+  border-bottom:0.5px solid var(--rule);
+  background:var(--ink-2);
+}
+.metric { padding:16px 26px 18px; border-right:0.5px solid var(--rule); position:relative; }
+.metric:last-child { border-right:none; }
+.metric .ml {
+  font-family:'Geist Mono',monospace;
+  font-size:9px; font-weight: 400;
+  letter-spacing:0.2em; text-transform:uppercase;
+  color:var(--ice-3); margin-bottom:8px;
+}
+.metric .mv {
+  font-family:'Geist',sans-serif;
+  font-weight:200;
+  font-size:32px;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-0.02em;
+  line-height:1;
+  color:var(--ice);
+}
+.metric .mv.cryo { color:var(--cryo); text-shadow:0 0 22px var(--cryo-glow); }
+.metric .mv.warn { color:var(--sev-warn); } .metric .mv.crit { color:var(--sev-crit); }
+.metric .ms {
+  font-family:'Geist Mono',monospace;
+  font-size:10px;
+  color:var(--ice-3);
+  margin-top:6px;
+  letter-spacing:0.04em;
+}
+.metric .mtick {
+  position:absolute; top:0; left:0;
+  height:1px; background:var(--cryo);
+  opacity:0.5; transition:width 0.8s ease;
+}
+
+/* ─── alert ─── */
+.alert-ribbon {
+  display:none;
+  padding:9px 32px;
+  background: linear-gradient(90deg, rgba(219,92,110,0.18), rgba(219,92,110,0.03));
+  border-top: 0.5px solid rgba(219,92,110,0.6);
+  border-bottom: 0.5px solid rgba(219,92,110,0.6);
+  font-family:'Geist Mono',monospace; font-size:12px;
+  color:#F0BAC4; letter-spacing:0.02em;
+  align-items:center; gap:14px;
+}
+.alert-ribbon.show { display:flex; }
+.alert-ribbon .badge {
+  background:rgba(219,92,110,0.22);
+  padding:2px 8px;
+  font-size:9px; letter-spacing:0.2em; text-transform:uppercase;
+  border: 0.5px solid rgba(219,92,110,0.5);
+}
+
+/* ─── body ─── */
+.body { display:grid; grid-template-columns:1fr 320px; overflow:hidden; min-height:0; }
+.stage {
+  position:relative;
+  background: var(--ink);
+  overflow:hidden;
+  border-right:0.5px solid var(--rule);
+}
+.stage canvas { position:absolute; inset:0; width:100%; height:100%; }
+
+.stage-meta {
+  position:absolute; top:16px; left:22px; z-index:5;
+  font-family:'Geist Mono',monospace; font-size:10px;
+  letter-spacing:0.2em; text-transform:uppercase;
+  color:var(--ice-3);
+}
+.stage-meta .label {
+  display:block;
+  font-family:'Geist',sans-serif;
+  font-weight: 200;
+  font-size:15px;
+  letter-spacing:-0.005em;
+  text-transform:none;
+  color:var(--ice-2);
+  margin-top:3px;
+}
+
+.legend {
+  position:absolute; top:18px; right:22px; z-index:5;
+  display:flex; gap:14px;
+  font-family:'Geist Mono',monospace; font-size:10px;
+  color:var(--ice-3); letter-spacing: 0.04em;
+  pointer-events:none;
+}
+.legend .litem { display:flex; align-items:center; gap:6px; }
+.legend .ldot {
+  width:8px; height:8px; border-radius:50%;
+  display:inline-block;
+  border: 0.5px solid currentColor;
+  background: transparent;
+}
+
+.zoom-cluster {
+  position:absolute; bottom:22px; left:22px; z-index:5;
+  display:flex; align-items:center;
+  background:var(--ink-2);
+  border:0.5px solid var(--rule-2);
+  font-family:'Geist Mono',monospace; font-size:11px;
+}
+.zoom-btn {
+  background:transparent; border:none;
+  border-right:0.5px solid var(--rule-2);
+  color:var(--ice-2); cursor:pointer;
+  padding:8px 12px;
+  font-family:inherit; font-size:13px;
+}
+.zoom-btn:last-of-type { border-right:none; }
+.zoom-btn:hover { background:var(--ink-3); color:var(--cryo); }
+.zoom-readout { padding:0 14px; color:var(--ice-3); letter-spacing:0.04em; min-width:120px; }
+.zoom-readout strong { color:var(--cryo); font-weight:400; }
+.zoom-readout em { font-style:italic; color:var(--ice-2); }
+
+/* specimen card */
+.specimen-card {
+  position:absolute; bottom:22px; right:22px; z-index:6;
+  width:288px;
+  background:var(--ink-2);
+  border:0.5px solid var(--rule-2);
+  padding:16px 18px;
+  opacity:0; transform:translateY(8px);
+  transition:opacity 0.18s ease, transform 0.18s ease;
+  pointer-events:none;
+}
+.specimen-card.show { opacity:1; transform:translateY(0); }
+.specimen-card .card-eyebrow {
+  font-family:'Geist Mono',monospace; font-size:9px;
+  letter-spacing:0.2em; text-transform:uppercase;
+  color:var(--ice-3);
+}
+.specimen-card .card-name {
+  font-family:'Geist',sans-serif;
+  font-weight: 300;
+  font-size:20px;
+  letter-spacing:-0.01em;
+  margin:5px 0 14px;
+  color:var(--ice);
+}
+.specimen-card .card-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:12px 16px;
+  font-family:'Geist Mono',monospace; font-size:11px;
+}
+.specimen-card .gk { color:var(--ice-3); font-size:9px; letter-spacing:0.16em; text-transform:uppercase; }
+.specimen-card .gv { color:var(--ice); margin-top:2px; font-weight:400; }
+.specimen-card .leaves-strip { margin-top:14px; padding-top:12px; border-top:0.5px dashed var(--rule-2); }
+.specimen-card .leaves-strip .gk { margin-bottom:8px; }
+.specimen-card .leaves-strip .pips { display:flex; flex-wrap:wrap; gap:3px; }
+.specimen-card .pip { width:10px; height:3px; border-radius: 0; }
+
+/* ─── rail ─── */
+.rail { display:flex; flex-direction:column; background:var(--ink-2); overflow:hidden; min-height:0; }
+.rail-section { padding:16px 22px; border-bottom:0.5px solid var(--rule); }
+.rail-section:last-of-type { border-bottom:none; flex:1; }
+.rail-h {
+  font-family:'Geist',sans-serif;
+  font-weight: 200;
+  font-size:16px;
+  letter-spacing:-0.005em;
+  color:var(--ice);
+  margin-bottom:12px;
+  display:flex; justify-content:space-between; align-items:baseline;
+}
+.rail-h .count {
+  font-family:'Geist Mono',monospace;
+  font-size:10px; font-weight: 400;
+  color:var(--ice-3); letter-spacing:0.16em;
+}
+
+.providers .prow {
+  display:grid; grid-template-columns:14px 1fr auto;
+  align-items:center; gap:10px;
+  padding:7px 0;
+  border-bottom:0.5px dashed var(--rule);
+}
+.providers .prow:last-child { border-bottom:none; }
+.providers .pdot { width:8px; height:8px; border-radius:50%; border:0.5px solid; }
+.providers .pdot.up { color: var(--life-grow); background: var(--life-grow); box-shadow:0 0 6px var(--life-grow); }
+.providers .pdot.down { color: var(--sev-crit); background: var(--sev-crit); box-shadow:0 0 6px var(--sev-crit); }
+.providers .pname { font-family:'Geist Mono',monospace; font-size:11px; color:var(--ice-2); }
+.providers .platency { font-family:'Geist Mono',monospace; font-size:10px; color:var(--ice-3); }
+.providers .platency.slow { color:var(--sev-warn); }
+
+.agents .arow { display:flex; align-items:center; justify-content:space-between; padding:6px 0; }
+.agents .alabel { font-size:12px; color:var(--ice-2); font-weight: 400; }
+.agents .apill {
+  font-family:'Geist Mono',monospace; font-size:9px;
+  letter-spacing:0.14em; text-transform:uppercase;
+  padding:3px 9px; border-radius:1px;
+  border:0.5px solid;
+}
+
+/* ─── feed ─── */
+.feedbar {
+  border-top:0.5px solid var(--rule);
+  background:var(--ink-2);
+  display:grid; grid-template-columns:1fr auto;
+  align-items:center; padding:12px 22px 4px; gap:16px;
+}
+.feedbar h4 {
+  font-family:'Geist',sans-serif;
+  font-weight: 200;
+  font-size:15px;
+  letter-spacing:-0.005em;
+  color:var(--ice);
+}
+.feedbar h4 .tail {
+  font-family:'Geist Mono',monospace;
+  font-size:10px; font-weight:400; color:var(--ice-3);
+  letter-spacing:0.16em; margin-left:10px;
+}
+.filters { display:flex; }
+.fbtn {
+  font-family:'Geist Mono',monospace; font-size:10px;
+  letter-spacing:0.14em; text-transform:uppercase;
+  padding:4px 11px;
+  background:transparent; border:none;
+  border-right:0.5px solid var(--rule);
+  color:var(--ice-3); cursor:pointer;
+}
+.fbtn:last-child { border-right:none; }
+.fbtn:hover { color:var(--ice-2); }
+.fbtn.active { color:var(--cryo); }
+.fbtn.active::before { content:'·'; margin-right:5px; color:var(--cryo); }
+
+.feed {
+  background:var(--ink);
+  border-top:0.5px solid var(--rule);
+  height:158px; overflow-y:auto;
+  font-family:'Geist Mono',monospace; font-size:11px;
+  padding:6px 22px 14px;
+}
+.feed::-webkit-scrollbar { width:4px; }
+.feed::-webkit-scrollbar-thumb { background:var(--rule-2); }
+.fline {
+  display:grid; grid-template-columns:14px 78px 130px 1fr; gap:12px;
+  padding:3px 0; border-left:1.5px solid transparent; padding-left:10px;
+}
+.fline.sev-warn  { border-left-color:var(--sev-warn); }
+.fline.sev-alert { border-left-color:var(--sev-alert); }
+.fline.sev-crit  { border-left-color:var(--sev-crit); background:rgba(219,92,110,0.06); }
+.ficon { color:var(--ice-3); text-align:center; }
+.fts   { color:var(--ice-3); }
+.fsrc  { color:var(--ice-2); }
+.fmsg  { color:var(--ice); }
+.fline.sev-crit .fmsg { color:#F0BAC4; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+
+  <div class="titlebar">
+    <div class="brand">
+      <div class="seal">mycelium<strong>·array</strong></div>
+      <div class="stamp">organism · audit-run · gate · contract-freeze · t = 0.012 K</div>
+    </div>
+    <div class="titlebar-right">
+      <div class="heartbeat-wrap"><span class="heartbeat"></span><span class="uptime" id="uptime">00:00:00</span></div>
+    </div>
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="mtick" style="width:94%"></div><div class="ml">Coherence</div><div class="mv cryo" id="m-health">94%</div><div class="ms">4 of 4 providers · 1 decohering</div></div>
+    <div class="metric"><div class="ml">Qubits · States</div><div class="mv" id="m-agents">6 · 22</div><div class="ms">5 active · 1 collapsed</div></div>
+    <div class="metric"><div class="ml">Energy · 24h</div><div class="mv" id="m-cost">$0.082</div><div class="ms" id="m-tokens">142,840 tokens</div></div>
+    <div class="metric"><div class="ml">Measurements</div><div class="mv" id="m-events">0</div><div class="ms">events processed</div></div>
+    <div class="metric"><div class="ml">Anomalies</div><div class="mv" id="m-alerts">0</div><div class="ms" id="m-alerts-sub">stable</div></div>
+  </div>
+
+  <div class="alert-ribbon" id="alert-ribbon">
+    <span class="badge">anomaly</span>
+    <span id="alert-text">Latency 3.2× above baseline — possible provider degradation</span>
+  </div>
+
+  <div class="body">
+    <div class="stage">
+      <div class="stage-meta">
+        array · lattice
+        <span class="label">qubits in superposition</span>
+      </div>
+
+      <div class="legend">
+        <span class="litem" style="color:var(--life-germ)"><span class="ldot"></span>germ</span>
+        <span class="litem" style="color:var(--life-grow)"><span class="ldot"></span>grow</span>
+        <span class="litem" style="color:var(--life-flow)"><span class="ldot"></span>flow</span>
+        <span class="litem" style="color:var(--life-fruit)"><span class="ldot"></span>fruit</span>
+        <span class="litem" style="color:var(--life-dorm)"><span class="ldot"></span>dorm</span>
+      </div>
+
+      <canvas id="net"></canvas>
+
+      <div class="zoom-cluster">
+        <button class="zoom-btn" id="zoom-out">−</button>
+        <div class="zoom-readout"><strong id="zoom-level">lattice</strong> · <em id="zoom-tip">scroll · or use buttons</em></div>
+        <button class="zoom-btn" id="zoom-in">+</button>
+      </div>
+
+      <div class="specimen-card" id="specimen">
+        <div class="card-eyebrow">qubit</div>
+        <div class="card-name" id="sp-name">—</div>
+        <div class="card-grid">
+          <div><div class="gk">register</div><div class="gv" id="sp-tag">—</div></div>
+          <div><div class="gk">state</div><div class="gv" id="sp-state">—</div></div>
+          <div><div class="gk">amplitudes</div><div class="gv" id="sp-leaves">—</div></div>
+          <div><div class="gk">last meas.</div><div class="gv" id="sp-event">—</div></div>
+        </div>
+        <div class="leaves-strip"><div class="gk">amplitude strip</div><div class="pips" id="sp-pips"></div></div>
+      </div>
+    </div>
+
+    <aside class="rail">
+      <div class="rail-section providers">
+        <div class="rail-h">Providers <span class="count">4 ·  link</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">anthropic</span><span class="platency">142ms</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">ollama_local</span><span class="platency">88ms</span></div>
+        <div class="prow"><span class="pdot down"></span><span class="pname">openai</span><span class="platency slow">4,212ms</span></div>
+        <div class="prow"><span class="pdot up"></span><span class="pname">google</span><span class="platency">230ms</span></div>
+      </div>
+      <div class="rail-section agents">
+        <div class="rail-h">Qubits <span class="count">6</span></div>
+        <div class="arow"><span class="alabel">audit-findings</span><span class="apill" id="ap-findings" style="color:var(--life-fruit); border-color:var(--life-fruit)">fruit</span></div>
+        <div class="arow"><span class="alabel">audit-testers</span><span class="apill" id="ap-testers" style="color:var(--life-grow); border-color:var(--life-grow)">grow</span></div>
+        <div class="arow"><span class="alabel">audit-aggregator</span><span class="apill" id="ap-agg" style="color:var(--life-flow); border-color:var(--life-flow)">flow</span></div>
+        <div class="arow"><span class="alabel">audit-heal-loop</span><span class="apill" id="ap-heal" style="color:var(--life-grow); border-color:var(--life-grow)">grow</span></div>
+        <div class="arow"><span class="alabel">audit-sporenet</span><span class="apill" id="ap-spore" style="color:var(--life-germ); border-color:var(--life-germ)">germ</span></div>
+        <div class="arow"><span class="alabel">audit-cli</span><span class="apill" id="ap-cli" style="color:var(--life-dorm); border-color:var(--life-dorm)">dorm</span></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="feedbar">
+    <h4>Measurement log<span class="tail">— newest at bottom</span></h4>
+    <div class="filters">
+      <button class="fbtn active" data-f="all">all</button>
+      <button class="fbtn" data-f="lifecycle">lifecycle</button>
+      <button class="fbtn" data-f="nutrient">entanglement</button>
+      <button class="fbtn" data-f="cost">energy</button>
+      <button class="fbtn" data-f="health">coherence</button>
+      <button class="fbtn" data-f="anomaly">anomaly</button>
+    </div>
+  </div>
+  <div class="feed" id="feed"></div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────
+//  palette
+// ─────────────────────────────────────────────────────────────────────────
+const css = getComputedStyle(document.documentElement);
+const C = {
+  cryo:  css.getPropertyValue('--cryo').trim(),
+  ice:   css.getPropertyValue('--ice').trim(),
+  ice2:  css.getPropertyValue('--ice-2').trim(),
+  ice3:  css.getPropertyValue('--ice-3').trim(),
+  ice4:  css.getPropertyValue('--ice-4').trim(),
+  rule:  css.getPropertyValue('--rule').trim(),
+  rule2: css.getPropertyValue('--rule-2').trim(),
+};
+const LIFE_COLOR = {
+  germ:  css.getPropertyValue('--life-germ').trim(),
+  grow:  css.getPropertyValue('--life-grow').trim(),
+  flow:  css.getPropertyValue('--life-flow').trim(),
+  fruit: css.getPropertyValue('--life-fruit').trim(),
+  dorm:  css.getPropertyValue('--life-dorm').trim(),
+};
+const LIFECYCLE = ['germ','grow','flow','fruit','dorm'];
+
+// ─────────────────────────────────────────────────────────────────────────
+//  data
+// ─────────────────────────────────────────────────────────────────────────
+const BIOMES = [
+  { id:'audit-findings',   tag:'q[0]', leaves: 3, state:'fruit', angle:-90 },
+  { id:'audit-testers',    tag:'q[1]', leaves: 4, state:'grow',  angle:-30 },
+  { id:'audit-aggregator', tag:'q[2]', leaves: 3, state:'flow',  angle: 30 },
+  { id:'audit-heal-loop',  tag:'q[3]', leaves: 4, state:'grow',  angle: 90 },
+  { id:'audit-sporenet',   tag:'q[4]', leaves: 3, state:'germ',  angle:150 },
+  { id:'audit-cli',        tag:'q[5]', leaves: 5, state:'dorm',  angle:-150 },
+];
+BIOMES.forEach(b => {
+  b.spin = Math.random() * Math.PI * 2;
+  b.spinRate = (0.4 + Math.random() * 0.5) * (Math.random() < 0.5 ? 1 : -1);
+  b.collapseT = 0; // 0..1, set on lifecycle event
+  b.jitterPhase = Math.random() * Math.PI * 2;
+  b.leafObjs = Array.from({length: b.leaves}, (_,i) => ({
+    id: `${b.id}.${i+1}`,
+    state: Math.random() < 0.7 ? b.state : LIFECYCLE[Math.floor(Math.random()*5)],
+    spin: Math.random() * Math.PI * 2,
+  }));
+});
+
+const ROUTING = [
+  ['audit-findings','audit-aggregator'],['audit-findings','audit-heal-loop'],
+  ['audit-findings','audit-sporenet'],['audit-findings','audit-testers'],
+  ['audit-testers','audit-cli'],['audit-testers','audit-findings'],
+  ['audit-aggregator','audit-findings'],['audit-aggregator','audit-heal-loop'],
+  ['audit-aggregator','audit-cli'],['audit-cli','audit-findings'],
+  ['audit-cli','audit-aggregator'],['audit-heal-loop','audit-findings'],
+  ['audit-sporenet','audit-findings'],
+];
+
+const state = {
+  zoom: 'lattice', zoomT: 0, zoomTarget: 0,
+  events: [], eventCount: 0, feedFilter: 'all',
+  hover: null, flows: [], packets: [], alerts: [],
+  startTime: Date.now(),
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+//  canvas
+// ─────────────────────────────────────────────────────────────────────────
+const cv = document.getElementById('net');
+const ctx = cv.getContext('2d');
+let W, H, cx, cy, ringR;
+
+function fit() {
+  const dpr = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * dpr; cv.height = r.height * dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  W = r.width; H = r.height;
+  cx = W/2; cy = H/2;
+  ringR = Math.min(W, H) * 0.30;
+  layout();
+}
+window.addEventListener('resize', fit);
+
+function layout() {
+  BIOMES.forEach(b => {
+    const a = b.angle * Math.PI / 180;
+    b.bx = cx + Math.cos(a) * ringR;
+    b.by = cy + Math.sin(a) * ringR;
+    const n = b.leafObjs.length;
+    const baseR = 56;
+    b.leafObjs.forEach((l, i) => {
+      const ang = a + Math.PI + (i - (n-1)/2) * (Math.PI * 0.55 / Math.max(n,1));
+      l.lx = b.bx + Math.cos(ang) * baseR;
+      l.ly = b.by + Math.sin(ang) * baseR;
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  zoom
+// ─────────────────────────────────────────────────────────────────────────
+function setZoom(level) {
+  state.zoom = level;
+  state.zoomTarget = level === 'lattice' ? 0 : level === 'qubits' ? 0.55 : 1;
+  document.getElementById('zoom-level').textContent =
+    level === 'lattice' ? 'lattice' : level === 'qubits' ? 'qubits' : 'amplitudes';
+}
+setZoom('lattice');
+document.getElementById('zoom-in').onclick = () => {
+  if (state.zoom === 'lattice') setZoom('qubits');
+  else if (state.zoom === 'qubits') setZoom('amplitudes');
+};
+document.getElementById('zoom-out').onclick = () => {
+  if (state.zoom === 'amplitudes') setZoom('qubits');
+  else if (state.zoom === 'qubits') setZoom('lattice');
+};
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.deltaY < 0) {
+    if (state.zoom === 'lattice') setZoom('qubits');
+    else if (state.zoom === 'qubits') setZoom('amplitudes');
+  } else {
+    if (state.zoom === 'amplitudes') setZoom('qubits');
+    else if (state.zoom === 'qubits') setZoom('lattice');
+  }
+}, { passive: false });
+
+// ─────────────────────────────────────────────────────────────────────────
+//  hover
+// ─────────────────────────────────────────────────────────────────────────
+cv.addEventListener('mousemove', e => {
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  let hit = null;
+  for (const b of BIOMES) {
+    const dx = mx - b.bx, dy = my - b.by;
+    if (Math.sqrt(dx*dx + dy*dy) < 32) { hit = b.id; break; }
+  }
+  if (hit !== state.hover) {
+    state.hover = hit;
+    const card = document.getElementById('specimen');
+    if (hit) {
+      const b = BIOMES.find(x => x.id === hit);
+      document.getElementById('sp-name').textContent = b.id;
+      document.getElementById('sp-tag').textContent = b.tag;
+      const stEl = document.getElementById('sp-state');
+      stEl.textContent = b.state; stEl.style.color = LIFE_COLOR[b.state];
+      document.getElementById('sp-leaves').textContent = b.leaves;
+      const last = [...state.events].reverse().find(ev => ev.source === b.id);
+      document.getElementById('sp-event').textContent = last ? last.shortType : '—';
+      const pips = document.getElementById('sp-pips'); pips.innerHTML = '';
+      b.leafObjs.forEach(l => {
+        const p = document.createElement('span'); p.className = 'pip';
+        p.style.background = LIFE_COLOR[l.state];
+        pips.appendChild(p);
+      });
+      card.classList.add('show');
+    } else card.classList.remove('show');
+  }
+});
+cv.addEventListener('mouseleave', () => { state.hover = null; document.getElementById('specimen').classList.remove('show'); });
+
+// ─────────────────────────────────────────────────────────────────────────
+//  draw helpers
+// ─────────────────────────────────────────────────────────────────────────
+function withAlpha(hex, a) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// hexagonal lattice background
+function drawHexLattice() {
+  const r = 26;
+  const w = r * Math.sqrt(3);
+  const h = r * 1.5;
+  ctx.strokeStyle = withAlpha(C.rule, 0.55);
+  ctx.lineWidth = 0.5;
+
+  for (let row = -1; row * h < H + h; row++) {
+    for (let col = -1; col * w < W + w; col++) {
+      const x = col * w + (row % 2 ? w/2 : 0);
+      const y = row * h;
+      // fade out toward viewport center
+      const dx = x - cx, dy = y - cy;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      const maxD = Math.max(W, H) * 0.65;
+      const fade = Math.min(1, d / maxD);
+      ctx.globalAlpha = 0.18 + fade * 0.35;
+      // hexagon
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i + Math.PI / 6;
+        const px = x + Math.cos(a) * r;
+        const py = y + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// horizon trace lines
+function drawHorizon() {
+  ctx.strokeStyle = withAlpha(C.cryo, 0.04);
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 5; i++) {
+    const y = cy + (i - 2) * ringR * 0.45;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+}
+
+// draw a Bloch-style qubit (ring + internal vector + small core)
+function drawQubit(b, hover, life, jitter, time) {
+  const x = b.bx + jitter.x;
+  const y = b.by + jitter.y;
+  const r = hover ? 26 : 22;
+
+  // outer ring
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = withAlpha(life, hover ? 0.95 : 0.65);
+  ctx.lineWidth = hover ? 1.4 : 1;
+  ctx.stroke();
+
+  // equator (squished ellipse) — Bloch-sphere projection
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.35, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = withAlpha(life, 0.32);
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+
+  // internal vector — spinning
+  const vx = Math.cos(b.spin) * r * 0.78;
+  const vy = Math.sin(b.spin) * r * 0.78;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + vx, y + vy);
+  ctx.strokeStyle = life;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // vector head dot
+  ctx.beginPath();
+  ctx.arc(x + vx, y + vy, 2, 0, Math.PI * 2);
+  ctx.fillStyle = life;
+  ctx.fill();
+
+  // central core
+  ctx.beginPath();
+  ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+  ctx.fillStyle = life;
+  ctx.fill();
+
+  // measurement collapse ring (transient)
+  if (b.collapseT > 0) {
+    const expand = (1 - b.collapseT) * 36 + r;
+    ctx.beginPath();
+    ctx.arc(x, y, expand, 0, Math.PI * 2);
+    ctx.strokeStyle = withAlpha(life, b.collapseT * 0.55);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // label
+  ctx.font = '400 10px "Geist Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = hover ? C.ice : C.ice3;
+  ctx.fillText(b.id, x, y + r + 16);
+  // register tag
+  ctx.font = '400 9px "Geist Mono", monospace';
+  ctx.fillStyle = C.ice4;
+  ctx.fillText(b.tag, x, y + r + 28);
+}
+
+// fine amplitude strip beneath each qubit (always — fades in with zoom)
+function drawAmplitudeStrip(b, jitter, opacity) {
+  const x = b.bx + jitter.x;
+  const y = b.by + jitter.y;
+  const stripY = y + 38;
+  const total = b.leafObjs.length;
+  const cellW = 7;
+  const startX = x - (total * cellW) / 2 + cellW/2 - 1;
+  b.leafObjs.forEach((l, i) => {
+    const lc = LIFE_COLOR[l.state];
+    const px = startX + i * cellW;
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    // tick
+    ctx.fillStyle = lc;
+    ctx.fillRect(px - 2, stripY, 4, 5);
+    // tail (probability tail)
+    ctx.globalAlpha = opacity * 0.35;
+    ctx.fillRect(px - 2, stripY + 5, 4, 2);
+    ctx.restore();
+  });
+}
+
+// amplitude satellites — visible only when zoomed to amplitudes level
+function drawAmplitudes(b, jitter, opacity, time) {
+  if (opacity < 0.02) return;
+  const cx_ = b.bx + jitter.x;
+  const cy_ = b.by + jitter.y;
+  b.leafObjs.forEach((l, i) => {
+    const a = b.angle * Math.PI / 180 + Math.PI;
+    const n = b.leafObjs.length;
+    const localA = a + (i - (n-1)/2) * (Math.PI * 0.55 / Math.max(n,1));
+    const rr = 58;
+    const lx = cx_ + Math.cos(localA) * rr;
+    const ly = cy_ + Math.sin(localA) * rr;
+
+    // trace from qubit to amplitude
+    ctx.save();
+    ctx.globalAlpha = opacity * 0.5;
+    ctx.strokeStyle = LIFE_COLOR[l.state];
+    ctx.setLineDash([2, 3]);
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx_, cy_);
+    ctx.lineTo(lx, ly);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // amplitude dot
+    ctx.globalAlpha = opacity;
+    ctx.fillStyle = LIFE_COLOR[l.state];
+    ctx.beginPath(); ctx.arc(lx, ly, 2.6, 0, Math.PI * 2); ctx.fill();
+    // ring
+    ctx.strokeStyle = withAlpha(LIFE_COLOR[l.state], 0.55);
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  });
+}
+
+// straight entanglement edge with photon flash
+function drawEdge(from, to, isFlowing, isHovered, time, fromJ, toJ) {
+  const x1 = from.bx + fromJ.x, y1 = from.by + fromJ.y;
+  const x2 = to.bx   + toJ.x,   y2 = to.by   + toJ.y;
+  ctx.save();
+  if (isFlowing) {
+    ctx.strokeStyle = withAlpha(C.cryo, 0.9);
+    ctx.lineWidth = 1.4;
+    ctx.shadowColor = C.cryo;
+    ctx.shadowBlur = 8;
+  } else if (isHovered) {
+    ctx.strokeStyle = withAlpha(C.cryo, 0.35);
+    ctx.lineWidth = 0.9;
+  } else {
+    ctx.strokeStyle = withAlpha(C.rule2, 0.65);
+    ctx.lineWidth = 0.5;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// photon packet on an edge with trail
+function drawPacket(packet, time) {
+  const e = packet.edge;
+  const fromB = BIOMES.find(b => b.id === e[0]);
+  const toB = BIOMES.find(b => b.id === e[1]);
+  if (!fromB || !toB) return;
+  const t = packet.t;
+  const x = fromB.bx * (1 - t) + toB.bx * t;
+  const y = fromB.by * (1 - t) + toB.by * t;
+  // motion trail
+  for (let i = 0; i < 6; i++) {
+    const tt = Math.max(0, t - i * 0.015);
+    const tx = fromB.bx * (1 - tt) + toB.bx * tt;
+    const ty = fromB.by * (1 - tt) + toB.by * tt;
+    ctx.beginPath();
+    ctx.arc(tx, ty, 3 - i*0.35, 0, Math.PI * 2);
+    ctx.fillStyle = withAlpha(C.cryo, 0.9 - i * 0.14);
+    ctx.fill();
+  }
+  // head
+  ctx.beginPath();
+  ctx.arc(x, y, 3.4, 0, Math.PI * 2);
+  ctx.fillStyle = C.cryo;
+  ctx.shadowColor = C.cryo; ctx.shadowBlur = 10;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  draw loop
+// ─────────────────────────────────────────────────────────────────────────
+let lastTime = performance.now();
+function draw() {
+  const now = performance.now();
+  const dt = Math.min(64, now - lastTime) / 1000;
+  lastTime = now;
+  const time = now / 1000;
+
+  // smooth zoom
+  state.zoomT += (state.zoomTarget - state.zoomT) * 0.07;
+  const amplOpacity = Math.max(0, (state.zoomT - 0.55) / 0.45);
+  const stripOpacity = Math.min(1, Math.max(0, (state.zoomT - 0.05) * 1.7));
+
+  ctx.clearRect(0, 0, W, H);
+
+  // background
+  drawHexLattice();
+  drawHorizon();
+  // central faint glow
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W, H) * 0.5);
+  grad.addColorStop(0, withAlpha(C.cryo, 0.06));
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // update biome state
+  BIOMES.forEach(b => {
+    b.spin += b.spinRate * dt;
+    b.jitterX = Math.sin(time * 18 + b.jitterPhase) * 0.6 + Math.cos(time * 26 + b.jitterPhase * 1.7) * 0.4;
+    b.jitterY = Math.cos(time * 17 + b.jitterPhase) * 0.6 + Math.sin(time * 23 + b.jitterPhase * 1.4) * 0.4;
+    if (b.collapseT > 0) b.collapseT = Math.max(0, b.collapseT - dt * 1.6);
+  });
+
+  // edges
+  ROUTING.forEach(([fid, tid]) => {
+    const f = BIOMES.find(b => b.id === fid);
+    const t_ = BIOMES.find(b => b.id === tid);
+    if (!f || !t_) return;
+    const flowing = state.flows.some(fl => (fl.from === fid && fl.to === tid) || (fl.from === tid && fl.to === fid));
+    const hovered = state.hover === fid || state.hover === tid;
+    drawEdge(f, t_, flowing, hovered, time, {x:f.jitterX, y:f.jitterY}, {x:t_.jitterX, y:t_.jitterY});
+  });
+
+  // packets
+  state.packets = state.packets.filter(p => {
+    p.t += p.speed * dt * 60;
+    return p.t < 1;
+  });
+  state.packets.forEach(p => drawPacket(p, time));
+
+  // amplitude satellites (drawn before qubits so qubits sit on top)
+  if (amplOpacity > 0.02) {
+    BIOMES.forEach(b => {
+      drawAmplitudes(b, {x:b.jitterX, y:b.jitterY}, amplOpacity, time);
+    });
+  }
+
+  // amplitude strip
+  if (stripOpacity > 0.02) {
+    BIOMES.forEach(b => drawAmplitudeStrip(b, {x:b.jitterX, y:b.jitterY}, stripOpacity));
+  }
+
+  // qubits
+  BIOMES.forEach(b => {
+    drawQubit(b, state.hover === b.id, LIFE_COLOR[b.state], {x:b.jitterX, y:b.jitterY}, time);
+  });
+
+  // organism center mark
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.strokeStyle = withAlpha(C.cryo, 0.55);
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = withAlpha(C.cryo, 0.18);
+  ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
+  // crosshair
+  ctx.strokeStyle = withAlpha(C.cryo, 0.4);
+  ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-3, 0); ctx.moveTo(3, 0); ctx.lineTo(9, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(0, -3); ctx.moveTo(0, 3); ctx.lineTo(0, 9); ctx.stroke();
+  ctx.restore();
+
+  // expire flows
+  const nowMs = Date.now();
+  state.flows = state.flows.filter(f => f.expires > nowMs);
+
+  requestAnimationFrame(draw);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  event simulator
+// ─────────────────────────────────────────────────────────────────────────
+function rid(){ return Math.random().toString(36).slice(2,8); }
+function rpick(a){ return a[Math.floor(Math.random()*a.length)]; }
+
+function genEvent() {
+  const r = Math.random();
+  if (r < 0.30) {
+    const b = rpick(BIOMES);
+    const kind = Math.random() < 0.5 ? 'leaf_started' : 'leaf_fruited';
+    return { id:rid(), category:'lifecycle', source:b.id, severity:'info',
+      shortType: kind === 'leaf_started' ? 'state · prepared' : 'state · collapsed',
+      message: kind === 'leaf_started' ? `${b.id}.${rid()} prepared` : `${b.id}.${rid()} collapsed to |fruit⟩`,
+      kind, _biome: b };
+  } else if (r < 0.55) {
+    const [fromId, toId] = rpick(ROUTING);
+    return { id:rid(), category:'nutrient', source:fromId, severity:'info',
+      shortType:'entangle · pair', message:`${fromId} ⟷ ${toId}  fidelity:${(Math.random()*0.5+0.5).toFixed(2)}`,
+      kind:'nutrient_flow', _flow:{ from:fromId, to:toId } };
+  } else if (r < 0.75) {
+    const b = rpick(BIOMES);
+    return { id:rid(), category:'cost', source:b.id, severity:'info',
+      shortType:'energy · recorded',
+      message:`${b.id}  $${(Math.random()*0.012).toFixed(4)}  ${Math.floor(500+Math.random()*4000)} tok`,
+      kind:'cost_recorded' };
+  } else if (r < 0.88) {
+    const provs = ['anthropic','openai','ollama_local','google'];
+    const p = rpick(provs);
+    const healthy = Math.random() > 0.1;
+    return { id:rid(), category:'health', source:p, severity: healthy?'info':'warn',
+      shortType:'coherence · pulse',
+      message:`${p}  ${healthy ? Math.round(120+Math.random()*200) : Math.round(4000+Math.random()*3000)}ms${healthy?'':'  T2 collapse'}`,
+      kind:'health_pulse' };
+  } else if (r < 0.96) {
+    const stages = ['merge-order','lint','typecheck','test','build','deploy-stg','smoke','deploy-prod'];
+    const s = rpick(stages);
+    const started = Math.random() < 0.5;
+    return { id:rid(), category:'lifecycle', source:'ddp', severity:'info',
+      shortType: started ? 'gate · entered' : 'gate · cleared',
+      message:`${s} ${started ? 'entered' : 'cleared  ' + Math.round(Math.random()*9000)+'ms'}`,
+      kind: started ? 'ddp_stage_started' : 'ddp_stage_ended' };
+  } else {
+    const anomalies = [
+      { msg:'Latency 3.2× above baseline — provider drift', sev:'warn' },
+      { msg:'Energy 4.1× above baseline — runaway loop', sev:'alert' },
+      { msg:'14 states prepared in 30s — fork instability', sev:'crit' },
+      { msg:'7 auth failures in 120s — credential probe', sev:'crit' },
+    ];
+    const a = rpick(anomalies);
+    return { id:rid(), category:'anomaly', source:'organism', severity:a.sev,
+      shortType:'anomaly · detected', message:a.msg, kind:'alert' };
+  }
+}
+
+function processEvent(e) {
+  state.events.push(e);
+  if (state.events.length > 200) state.events.shift();
+  state.eventCount++;
+
+  if (e._biome) {
+    if (e.kind === 'leaf_started') {
+      if (e._biome.state === 'dorm') e._biome.state = 'germ';
+      e._biome.collapseT = 1;
+    }
+    if (e.kind === 'leaf_fruited') {
+      const lp = rpick(e._biome.leafObjs); lp.state = 'fruit';
+      const all = e._biome.leafObjs.every(l => l.state === 'fruit');
+      e._biome.state = all ? 'fruit' : 'flow';
+      e._biome.collapseT = 1;
+    }
+    updateRailPill(e._biome);
+  }
+
+  if (e.kind === 'nutrient_flow') {
+    state.flows.push({ from:e._flow.from, to:e._flow.to, expires: Date.now() + 2400 });
+    state.packets.push({
+      edge: [e._flow.from, e._flow.to],
+      t: 0,
+      speed: 0.018,
+    });
+  }
+
+  if (e.kind === 'alert') {
+    state.alerts.push(e);
+    showAlertRibbon(e);
+    setTimeout(() => {
+      state.alerts = state.alerts.filter(a => a !== e);
+      if (state.alerts.length === 0) hideAlertRibbon();
+    }, 15000);
+  }
+
+  renderFeed();
+  renderMetrics();
+}
+
+function updateRailPill(b) {
+  const map = {
+    'audit-findings':'ap-findings','audit-testers':'ap-testers',
+    'audit-aggregator':'ap-agg','audit-heal-loop':'ap-heal',
+    'audit-sporenet':'ap-spore','audit-cli':'ap-cli',
+  };
+  const el = document.getElementById(map[b.id]); if (!el) return;
+  el.textContent = b.state;
+  el.style.color = LIFE_COLOR[b.state];
+  el.style.borderColor = LIFE_COLOR[b.state];
+}
+
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  const filtered = state.feedFilter === 'all' ? state.events : state.events.filter(e => e.category === state.feedFilter);
+  const last = filtered.slice(-60);
+  feed.innerHTML = last.map(e => {
+    const d = new Date();
+    const ts = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
+    let sevCls = '';
+    if (e.severity === 'warn') sevCls = 'sev-warn';
+    if (e.severity === 'alert') sevCls = 'sev-alert';
+    if (e.severity === 'crit')  sevCls = 'sev-crit';
+    const icon = e.category === 'lifecycle' ? '|·⟩' : e.category === 'nutrient' ? '⟷' : e.category === 'cost' ? '⊕' : e.category === 'health' ? '∿' : e.category === 'anomaly' ? '!' : '·';
+    return `<div class="fline ${sevCls}"><span class="ficon">${icon}</span><span class="fts">${ts}</span><span class="fsrc">${e.source}</span><span class="fmsg">${e.message}</span></div>`;
+  }).join('');
+  feed.scrollTop = feed.scrollHeight;
+}
+
+document.querySelectorAll('.fbtn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    state.feedFilter = b.dataset.f;
+    renderFeed();
+  });
+});
+
+let cumCost = 0.082, cumTokens = 142840;
+function renderMetrics() {
+  document.getElementById('m-events').textContent = state.eventCount.toLocaleString();
+  document.getElementById('m-alerts').textContent = state.alerts.length;
+  document.getElementById('m-alerts-sub').textContent =
+    state.alerts.length === 0 ? 'stable' : `last: ${state.alerts[state.alerts.length-1].message.slice(0,40)}…`;
+  const am = document.getElementById('m-alerts');
+  am.className = 'mv ' + (state.alerts.length === 0 ? 'cryo' : state.alerts.some(a=>a.severity==='crit') ? 'crit' : 'warn');
+  cumCost += Math.random() * 0.0008;
+  cumTokens += Math.floor(Math.random() * 300);
+  document.getElementById('m-cost').textContent = '$' + cumCost.toFixed(3);
+  document.getElementById('m-tokens').textContent = cumTokens.toLocaleString() + ' tokens';
+}
+
+function showAlertRibbon(e) { const r = document.getElementById('alert-ribbon'); document.getElementById('alert-text').textContent = e.message; r.classList.add('show'); }
+function hideAlertRibbon() { document.getElementById('alert-ribbon').classList.remove('show'); }
+
+setInterval(() => {
+  const s = Math.floor((Date.now() - state.startTime) / 1000);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  document.getElementById('uptime').textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}, 1000);
+
+// boot
+fit();
+draw();
+for (let i = 0; i < 6; i++) processEvent(genEvent());
+function tick() { processEvent(genEvent()); setTimeout(tick, 700 + Math.random()*1400); }
+tick();
+</script>
+</body>
+</html>

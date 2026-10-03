@@ -1,0 +1,102 @@
+<h2>Maui-as-Product — depth pass</h2>
+<p class="subtitle">Same skeleton, more organs. The one open question (is a cultivation a biome?) is shown as two readings at the bottom — don't decide yet, just react.</p>
+
+<style>
+  .arch { font-family: -apple-system, system-ui, sans-serif; max-width: 1180px; margin: 0 auto; }
+  .layer { border: 2px solid #2a2a3a; border-radius: 12px; padding: 16px; margin: 13px 0; background: #14141c; position: relative; }
+  .layer-label { position: absolute; top: -11px; left: 16px; background: #1E9EBF; color: #04121a; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 2px 10px; border-radius: 6px; }
+  .layer-label.side { background: #6b4a1f; color: #f0c890; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .node { flex: 1; min-width: 120px; background: #1d1d28; border: 1px solid #34344a; border-radius: 8px; padding: 9px 11px; }
+  .node h4 { margin: 0 0 4px; font-size: 12.5px; color: #e8e8f0; }
+  .node p { margin: 0; font-size: 10.5px; color: #9a9ab0; line-height: 1.38; }
+  .bus { background: linear-gradient(90deg,#0d3a47,#1E9EBF22,#0d3a47); border: 2px dashed #1E9EBF; text-align: center; padding: 14px; }
+  .bus h3 { margin: 0 0 4px; color: #5fd3ec; font-size: 15px; }
+  .bus p { margin: 0; font-size: 11px; color: #b8d8e0; }
+  .bus .envelope { font-family: ui-monospace, monospace; font-size: 10px; color: #7fc4d8; background:#06222b; border:1px solid #1E9EBF55; border-radius:6px; padding:6px 10px; margin-top:8px; display:inline-block; text-align:left; }
+  .arrow { text-align: center; color: #1E9EBF; font-size: 18px; margin: -5px 0; }
+  .adapter { background: #2a1d10; border-color: #6b4a1f; }
+  .adapter h4 { color: #f0c890; }
+  .note { font-size: 10.5px; color: #777; font-style: italic; margin-top: 5px; }
+  .seam { color: #f0c890; font-weight: 700; }
+  .cross { background:#101820; border:1px solid #2a3a44; }
+  .cross h4 { color:#8fd0c0; }
+  .twocol { display:flex; gap:14px; }
+  .twocol > .layer { flex:1; margin:0; }
+  .badge { display:inline-block; font-size:9px; background:#34344a; color:#bbb; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:middle; }
+  .gate { background:#2a1018; border-color:#6b1f2f; }
+  .gate h4 { color:#f09090; }
+</style>
+
+<div class="arch">
+
+  <div class="layer">
+    <span class="layer-label">1 · Front-door biomes — receive intent + carry identity</span>
+    <div class="row">
+      <div class="node"><h4>📱 iMessage / phone <span class="badge">v1</span></h4><p>Injects intent nutrient. Attaches <b>reply-channel</b> + <b>caller identity</b> so the answer knows how to get home.</p></div>
+      <div class="node"><h4>💬 CC session</h4><p>Operator door. Same injection, but bypasses the spend-gate (you ARE the gate).</p></div>
+      <div class="node"><h4>🌐 web / email / API <span class="badge">later</span></h4><p>Each = one more front door. Core untouched.</p></div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ intent</div>
+
+  <div class="layer">
+    <span class="layer-label">2 · Triage / sizing — classify depth, estimate cost</span>
+    <div class="row">
+      <div class="node"><h4>🔍 Lookup</h4><p>≈$0. One model call OR one RAG query. Answer inline.</p></div>
+      <div class="node"><h4>🧰 Menu pick</h4><p>Dispatch ONE capability-biome. Bounded cost.</p></div>
+      <div class="node gate"><h4>🚦 Build-anything → GATE</h4><p>Estimates $ + time. If &gt; threshold → texts you "build X, ~$Y, go?" over the SAME front door. Waits.</p></div>
+    </div>
+    <p class="note">Sizing happens ONCE. The gate is the safety valve that makes autonomy affordable. Operator door skips it.</p>
+  </div>
+
+  <div class="arrow">▼ routed + approved work</div>
+
+  <div class="bus">
+    <h3>⚡ THE BUS <span style="font-weight:400;font-size:11px">— BIOME BUS :9450 · peer-to-peer · no central node</span></h3>
+    <p>One protocol for every box on this page. The reusable seam.</p>
+    <div class="envelope">{ intent, origin_channel, identity, budget_cap,<br>&nbsp;&nbsp;trace_id, deadline, reply_to } → flows as a nutrient</div>
+  </div>
+
+  <div class="arrow">▲▼ request / response (capability biomes answer)</div>
+
+  <div class="layer">
+    <span class="layer-label">3 · Capability biomes — the 789 + RAGs, via ~4 adapters</span>
+    <div class="row">
+      <div class="node adapter"><h4>🔌 HTTP-service</h4><p>Frank services (research, recon, comp-intel, image-osint…). <span class="seam">Write once.</span></p></div>
+      <div class="node adapter"><h4>🔌 RAG / archive</h4><p>research-archive :8975, knowledge-router :9003, topic RAGs. <span class="seam">Write once.</span></p></div>
+      <div class="node adapter"><h4>🔌 MCP</h4><p>Any MCP tool (Gmail, Drive, Brave, Shodan…). <span class="seam">Write once.</span></p></div>
+      <div class="node adapter"><h4>🔌 cap-reg :9172</h4><p>Registry = the menu. Triage queries it; biomes self-announce.</p></div>
+    </div>
+    <p class="note">~4 protocol adapters, not 789 integrations. THIS is "think bigger / reusability."</p>
+  </div>
+
+  <div class="arrow">▼ build-anything routes here · leaves reach back UP to capability biomes</div>
+
+  <div class="twocol">
+    <div class="layer">
+      <span class="layer-label side">4a · Reading A — Mycelium ABOVE the bus</span>
+      <div class="node" style="margin-top:6px"><h4>🌍 Cultivation = an orchestrator that USES the bus</h4><p>plant→freeze→cultivate→harvest runs at CLI. Leaves call capability-biomes as a CLIENT of the bus. Mycelium owns its own fan-out, parallelism, CommitQueue. <b>Bus is a tool it consumes.</b></p></div>
+      <div class="note">+ Keeps CLI control crisp. + Cultivation internals stay private. − Cultivation isn't itself discoverable/observable on the bus.</div>
+    </div>
+    <div class="layer">
+      <span class="layer-label side">4b · Reading B — a cultivation IS a biome</span>
+      <div class="node" style="margin-top:6px"><h4>🍄 Cultivation = a biome that happens to spawn sub-biomes</h4><p>The whole cultivation registers on the bus, emits lifecycle as nutrients, and its leaves are sub-biomes. Recursive: a biome made of biomes. <b>Everything is uniform.</b></p></div>
+      <div class="note">+ Total uniformity + observability + recursion. − Heavier; cultivation lifecycle must map cleanly to bus semantics. − This is the part you said needs more thought.</div>
+    </div>
+  </div>
+
+  <div class="arrow">— spans everything —</div>
+
+  <div class="layer">
+    <span class="layer-label">Cross-cutting (touches every layer)</span>
+    <div class="row">
+      <div class="node cross"><h4>🧠 Memory / identity</h4><p>Who's the caller? What does Maui remember about them + the org? Shared brain (the colleague↔product question lives here).</p></div>
+      <div class="node cross"><h4>💰 Budget ledger</h4><p>Per-trace cap from the envelope. Triage gate reads it; cultivations decrement it.</p></div>
+      <div class="node cross"><h4>🔭 Observability</h4><p>trace_id threads front-door → triage → bus → biomes → reply. One story per request.</p></div>
+      <div class="node cross"><h4>🔐 Auth / safety tier</h4><p>Product caller ≠ operator. Gates which capability-biomes are even visible (OSINT/recon hidden from product tier?).</p></div>
+    </div>
+  </div>
+
+</div>
