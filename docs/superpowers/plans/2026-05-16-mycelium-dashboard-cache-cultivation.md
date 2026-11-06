@@ -4,7 +4,7 @@
 
 **Goal:** Ship the Mycelium dashboard (operator console with cryogenic-aesthetic canvas + analytics) AND the cache-network runtime (`cache-layer` biome + micro-agent fan-out + cache-hit accounting) as ONE parallel cultivation, dynamically decomposed by `mycelium plant` from a single brief.
 
-**Architecture:** Dogfood — the framework cultivates its own extension. Brief → `mycelium plant` (auto-generates HYPHAs + NUTRIENTS skeleton + mycelium.yaml) → operator hand-edits NUTRIENTS frozen sections → `mycelium contracts freeze` → `mycelium cultivate -c 30` (parallel leaf execution at framework-decided concurrency) → `mycelium harvest -t 0.8` → validate against v9.4 prototype + design doc → PR. No Sean Patrick gate per operator direction.
+**Architecture:** Dogfood — the framework cultivates its own extension. Brief → `mycelium plant` (auto-generates HYPHAs + NUTRIENTS skeleton + mycelium.yaml) → operator hand-edits NUTRIENTS frozen sections → `mycelium contracts freeze` → `mycelium cultivate -c 30` (parallel leaf execution at framework-decided concurrency) → `mycelium harvest -t 0.8` → validate against v9.4 prototype + design doc → PR. No separate contract-review gate per operator direction.
 
 **Tech Stack:** TypeScript (Node 18+, Commander.js, `@anthropic-ai/claude-agent-sdk`) · Three.js r161 (canvas viz) · vanilla DOM (operator chrome) · YAML (`theme.yaml`, `mycelium.yaml`) · JSONL (event stream) · `npm link` for local dev install.
 
@@ -73,7 +73,7 @@ Expected: help text shows brief/HYPHA paths are relative to cwd, OR a `--cultiva
 - [ ] **Step 4: Commit scaffold**
 
 ```bash
-cd /Users/spy/mfautomation/repos/legendary-funicular
+cd /Users/spy/repos/legendary-funicular
 git add cultivations/dashboard-cache/.gitkeep
 git commit -m "[MYC] cultivation: scaffold cultivations/dashboard-cache/ for parallel dashboard+cache-net build"
 ```
@@ -242,7 +242,7 @@ Expected: 8-12 HYPHA files (plant may merge/split the brief's 10 hints). `myceli
 - [ ] **Step 4: Commit the plant output**
 
 ```bash
-cd /Users/spy/mfautomation/repos/legendary-funicular
+cd /Users/spy/repos/legendary-funicular
 git add cultivations/dashboard-cache/
 git commit -m "[MYC] cultivation: mycelium plant generated $(ls cultivations/dashboard-cache/hyphae/ | wc -l | tr -d ' ') HYPHAs from brief"
 ```
@@ -595,7 +595,7 @@ Expected: ≥ 7 sections. Read NUTRIENTS.md end-to-end. Every `XXX`/`TODO`/`plac
 - [ ] **Step 9: Commit NUTRIENTS**
 
 ```bash
-cd /Users/spy/mfautomation/repos/legendary-funicular
+cd /Users/spy/repos/legendary-funicular
 git add cultivations/dashboard-cache/NUTRIENTS.md
 git commit -m "[MYC] cultivation: NUTRIENTS frozen sections 1-7 for dashboard+cache-net"
 ```
@@ -664,7 +664,7 @@ Expected: one line containing `frozen at` + ISO-8601 timestamp.
 - [ ] **Step 3: Commit freeze**
 
 ```bash
-cd /Users/spy/mfautomation/repos/legendary-funicular
+cd /Users/spy/repos/legendary-funicular
 git add cultivations/dashboard-cache/NUTRIENTS.md cultivations/dashboard-cache/mycelium.yaml
 git commit -m "[MYC] cultivation: contracts frozen at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ```
@@ -832,7 +832,7 @@ Expected: 8-15 new commits on `feat/dashboard-cache-net`, each prefixed with `[M
 - [ ] **Step 1: Smoke-test the build**
 
 ```bash
-cd /Users/spy/mfautomation/repos/legendary-funicular/cli
+cd /Users/spy/repos/legendary-funicular/cli
 npm run build
 ```
 
@@ -898,7 +898,7 @@ If any item fails: identify the offending biome (canvas, console, theme, data, c
 - [ ] **Step 1: Final review of diff**
 
 ```bash
-cd /Users/spy/mfautomation/repos/legendary-funicular
+cd /Users/spy/repos/legendary-funicular
 git log --oneline main..HEAD
 git diff main..HEAD --stat | tail -20
 ```

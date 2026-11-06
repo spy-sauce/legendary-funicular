@@ -5,7 +5,7 @@
 > actually built vs. planned, and the dependency-locked order future work must follow.
 
 This index exists because "future work in `docs/`" is only partly accurate. Three
-docs describe *shipped* features (reference docs now), two are *vision* whitepapers,
+docs describe *shipped* features (reference docs now), one is a *vision* whitepaper,
 and the genuinely-unbuilt build plans carry a **one-way dependency order** in their
 own text — they cannot be sequenced by preference.
 
@@ -41,7 +41,6 @@ Each entry was verified against the codebase, not taken on faith from the doc he
 
 | Doc | What it is |
 |---|---|
-| `mycelium-bus-product-architecture-whitepaper.md` (2026-05-29) | **Strategic North Star.** Maui + Mycelium + the ~789-capability fleet as a *product* over one message bus: triage → 3 tiers → contract-bound agents → promotion gate. Ends explicitly: "design artifact, not an implementation plan." |
 | `mycelium-design-system-whitepaper.md` | **Brand / patent framing.** The biology-not-industry vocabulary argument. Pairs with `MANIFESTO.md`. |
 
 These set direction; they are not ranked against build specs.
@@ -129,7 +128,7 @@ cheap/full split from a colored sphere on the dashboard into a real cost reducti
 
 ## Synthesis — hardening IS the product prerequisite
 
-The bus-product whitepaper's safety model (§3.5) is that cultivation runs
+The bus-product vision's safety model is that cultivation runs
 **headless and auto-triggered**, made safe *only* by the spend-gate + promotion-gate.
 Those gates are trustworthy only if cultivation reliability is **measurable** — which
 is exactly what contracts (P0) + eval (P1) deliver. The reliability tooling in

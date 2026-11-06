@@ -1,7 +1,7 @@
 # Cache Network + Micro-Agents — Design Note
 
 **Mycelium Framework · Design artifact (not a build plan)**
-VibeSpace LLC / mfautomation · 2026-05-16
+VibeSpace LLC · 2026-05-16
 Sibling to: `bus-router-livegrid-architecture-pack.md`, `temporal-context-framework.md`, `mycelium-router-30day-plan.md`
 
 ---
