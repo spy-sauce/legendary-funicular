@@ -1,7 +1,7 @@
 # Temporal Context Framework
 
 **Mycelium Agent Network · Engineering Spec**
-VibeSpace LLC / mfautomation · v0.2 · May 2026
+VibeSpace LLC · v0.2 · May 2026
 
 ---
 
@@ -249,7 +249,7 @@ Cross-product daily/weekly aggregation, KPI tracking, deliverable status surfaci
 
 | Source | Format | Decay profile | base_weight default |
 |---|---|---|---|
-| `git log` per repo (`~/mfautomation/repos/*`) | Commit objects | LINEAR (7d) | Rule-based by `[TAG]` prefix |
+| `git log` per repo (the operator's local repos directory) | Commit objects | LINEAR (7d) | Rule-based by `[TAG]` prefix |
 | HANDOFF.md updates | Reverse-chron entries | LINEAR (14d) | LLM-scored at ingest |
 | Calendar events (if wired) | Event objects | EXPONENTIAL (until end-of-day), then LINEAR (7d) | Rule-based |
 | Email/Slack threads (if wired) | Thread snapshots | EXPONENTIAL (4h) | LLM-scored |
@@ -318,4 +318,4 @@ This is multi-week work, not a Session 9 weekend hack. Realistic timeline: TCF v
 - **Spec status:** v0.2, post-author-engagement notes added but not promoted.
 - **Next milestone:** TCF v0.3 — fold §B candidate answers + §C additions back into the spec proper. Owner: SPY (with engagement support).
 - **Blocking:** None. v0.3 work can begin whenever Session 8 dwell completes and friction-list review prioritizes it.
-- **Friction-list memory entry:** see `~/.claude/projects/-Users-spy-mfautomation-mfautomation-kickoff/memory/project_daily_aggregator_idea.md` (predecessor scope; promote when v0.3 + operator HYPHA design lands).
+- **Friction-list memory entry:** see the `project_daily_aggregator_idea.md` memory note from the predecessor workspace (not carried over; promote when v0.3 + operator HYPHA design lands).

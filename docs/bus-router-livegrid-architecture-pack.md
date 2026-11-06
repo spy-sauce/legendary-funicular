@@ -1,7 +1,7 @@
 # MYCELIUM — ARCHITECTURE PACK
 
 **Session:** Opus deep dive · BIOME BUS extension + LiveGrid + stress test + roadmap
-**Author:** Claude (Cee-Ro) for SPY · VibeSpace LLC · mfautomation
+**Author:** Claude (Cee-Ro) for SPY · VibeSpace LLC
 **Status:** Working architecture, drop-into-repo ready
 **Stored:** 2026-05-05
 
