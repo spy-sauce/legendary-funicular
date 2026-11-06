@@ -152,7 +152,6 @@ export function registerExportCommand(program: Command): void {
       let dirs: string[] = opts.dirs ?? [];
       if (dirs.length === 0) {
         const scanRoots = [
-          path.join(process.env.HOME ?? "~", "Desktop", "mfautomation"),
           path.join(process.env.HOME ?? "~", "Desktop", "bardot"),
           path.join(
             process.env.HOME ?? "~",

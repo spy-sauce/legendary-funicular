@@ -773,18 +773,18 @@ For each patched item: subsection, what was missing, what was copied in.
 
 ## 3. Unresolved failures (block freeze)
 For each: subsection, exact rule violated, suggested human action.
-If none: "None. Ready for Patrick review → freeze."
+If none: "None. Ready for operator review → freeze."
 
 ## 4. Failure-mode prevention table
 The 5-row table above, post-patch.
 
-## 5. Patrick checklist
-Short list of questions Patrick should answer in his contract review,
+## 5. Operator review checklist
+Short list of questions the operator should answer in the contract review,
 derived from anything patched or borderline.
 
 # Final line — REQUIRED MARKER
 Your VERY LAST line of output must be exactly one of:
-- \`AUDIT PASS — Patrick review pending\`
+- \`AUDIT PASS — operator review pending\`
 - \`AUDIT FAIL — <n> unresolved gaps\`
 
 Nothing after this line. The CLI greps for it to set its exit code.
