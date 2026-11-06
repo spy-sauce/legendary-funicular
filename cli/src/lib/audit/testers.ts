@@ -7,6 +7,7 @@
 // Do not modify these interfaces without unfreezing the contract first.
 
 import type { Finding } from "./findings.js";
+import type { MicroCallRecord } from "../micro-agents/types.js";
 
 /**
  * Allowed tools for testers. Write/Edit are NEVER granted to testers —
@@ -107,6 +108,22 @@ export interface TesterResult {
    * Written to `<auditRunDir>/testers/<tester_id>/stderr.log`.
    */
   stderr_path: string;
+
+  /**
+   * Per-call records from the read-side micro fan-out (Spec §3), if micros ran.
+   */
+  micro_records?: MicroCallRecord[];
+
+  /**
+   * Targets actually summarized by micros and folded into the tester prompt.
+   */
+  micro_folded_targets?: string[];
+
+  /**
+   * Count of redundant re-reads detected in the tester stdout — files the
+   * tester re-READ despite already having a folded summary.
+   */
+  micro_redundant_re_reads?: number;
 }
 
 /**

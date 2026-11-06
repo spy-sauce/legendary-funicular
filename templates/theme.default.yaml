@@ -1,0 +1,45 @@
+# theme.yaml — example
+brand:
+  title: "mycelium · dashboard-cache"
+  tagline: "decentralized · cryogenic · live"
+  logo_char: "Ψ"
+
+palette:
+  ink:    "#060912"
+  ink_2:  "#0A0E18"
+  ice:    "#E8EEF5"
+  ice_2:  "#A8B4C5"
+  cryo:   "#7AE5FF"
+  rule:   "#1A2030"
+
+lifecycle:
+  germ:  "#B7A8E8"
+  grow:  "#7BC9C0"
+  flow:  "#8BB8E0"
+  fruit: "#D9C390"
+  dorm:  "#5A6471"
+
+severity:
+  warn:  "#D9B85A"
+  alert: "#E08A5C"
+  crit:  "#DB5C6E"
+
+identity:
+  # biome_id → stable hue. lifecycle state modulates brightness, not hue.
+  "dashboard-canvas":          "#7AE5FF"
+  "dashboard-console":         "#C9A84C"
+  "dashboard-theme":           "#B7A8E8"
+  "dashboard-data":            "#88AAFF"
+  "dashboard-cli":             "#9FE870"
+  "dashboard-docs":            "#E8B4D4"
+  "cache-network-store":       "#1E9EBF"
+  "cache-network-integration": "#D4820A"
+  "cache-network-micros":      "#7B5EA7"
+  "cache-network-docs":        "#FF8C5A"
+
+modulator:
+  pending_brightness: 0.30
+  active_brightness:  1.00
+  fruit_brightness:   0.90
+  failed_brightness:  0.45
+  active_pulse_hz:    0.9     # slow-pulse discipline; max 1.5

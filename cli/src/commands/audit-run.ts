@@ -62,6 +62,10 @@ export function registerAuditRunCommand(program: Command): void {
       "Skip sporenet state.json writes (sporenet integration disabled)"
     )
     .option(
+      "--no-micros",
+      "Disable read-side micro-agent fan-out (baseline measurement)"
+    )
+    .option(
       "--autofix-branch <name>",
       "Branch name for autofix commits (sub-organism mode; default: commit-on-top)"
     )
@@ -100,6 +104,7 @@ export function registerAuditRunCommand(program: Command): void {
           autofixBranch: opts.autofixBranch,
           maxBudgetUsd: opts.maxBudgetUsd,
           dryRun: opts.dryRun,
+          microsEnabled: opts.micros !== false,
         });
 
         process.exit(result.exitCode);

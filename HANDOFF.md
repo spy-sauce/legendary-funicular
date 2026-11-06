@@ -4,6 +4,55 @@
 
 ---
 
+## [MYC] 2026-05-16 — dashboard + cache-network cultivation shipped (PR #3)
+
+**Massive session.** Dogfood cultivation of the operator dashboard AND the cache-network runtime, in one parallel build.
+
+### What landed
+
+Branch `feat/dashboard-cache-net`, PR #3 (https://github.com/spy-sauce/legendary-funicular/pull/3). 40 commits, 47 files changed, +11,304 / -930.
+
+- **`mycelium dashboard {init,serve,render}`** — cryogenic operator console. Three.js Bloch-sphere agents on a fibonacci globe, **cache relay inner shell** (cyan-teal `#1E9EBF` octahedrons at r=2.6), multiverse view, Star Wars HUD overlays, slow-pulse discipline (≥1.5s, no fast blinks). Per-cultivation `theme.yaml` molds palette + brand + biome→identity-color map. `serve` re-reads state.json + theme.yaml every request; SSE event stream at `/events/stream`.
+- **`cli/src/lib/cache-network/`** — LRU `CacheStore` wraps SDK calls at `cultivate.ts:480` (chokepoint located via `query()` grep). `--no-cache` flag for bypass. JSONL events: `cache.hit` / `cache.miss` / `cache.evict` / `cache.pulse` (1.4s aggregation). `state.cache` additive block on `sporenet/state.json`.
+- **`cli/src/lib/micro-agents/spawn.ts`** — deterministic 2-4 micro fan-out per leaf via xorshift seeded from sha256(leafId). 70/30 cheap/full split (50/50 if critical severity).
+- **`templates/dashboard.html`** — 5292-line single-file dashboard. Three.js CDN-loaded. Reads `window.__DASHBOARD_STATE__` + `window.__DASHBOARD_THEME__` inlined by `cli/src/lib/dashboard/render.ts`.
+- **`docs/cache-network-micro-agents.md`** + **`docs/dashboard-theming.md`** + **`DEVELOPER_GUIDE.md`** Dashboard + Cache-Network sections.
+
+### Cultivation stats
+
+- 10 biomes, 43 sub-leaves, 7 frozen NUTRIENTS sections, contract-freeze gating
+- Frozen 2026-05-16T08:40:49.410Z (via `--skip-audit` per audit-run precedent — framework-internal cultivation has no app-stack)
+- **First cultivate attempt at -c 30: 0/43 (all rate-limited).** Anthropic API rate limit hit ~25s in, every leaf returned `API Error: Rate limit reached` after burning $0.40 each (~$17 total).
+- **Second attempt at -c 4: 43/43 FRUIT_READY in 1055.7s (~17.6 min).** Concurrency dropped to let token bucket recover between batches; warmed prompt cache.
+
+### Visual reference
+
+v9.4 prototype at `.superpowers/brainstorm/4035-1778891130/content/hybrid-v9.4-cache-relays.html` (gitignored) was canonical visual ground truth. Built dashboard ports it faithfully — bind to state instead of simulator.
+
+### Open framework follow-ups (NOT blocking PR)
+
+- **Harvest threshold check mismatched.** `mycelium harvest` looks for `feat/<biome-id>` branches per `mycelium.yaml agents[].branch`, but cultivate emits `feat/<leaf-id>` branches. Reports 0% threshold even when work is fully on the target branch via CommitQueue.
+- **`dashboard.canvas.multiverse` artifact-path mismatch.** Leaf produced 10 files but declared `templates/dashboard.canvas.multiverse.js` as artifact — file didn't exist at that path. Content landed but commit attribution split.
+- **Four `dashboard.cli.*` leaves "0 files committed".** Files DO exist on disk; framework's `git add --all -- <declared-paths>` couldn't match. Possibly auto-committed by sibling leaves with overlapping artifact paths. Worth investigating in framework Q3 review.
+- **`mycelium contracts freeze` requires `--stack` flag now.** Audit-run was grandfathered; framework-internal cultivations have no app-stack. `--skip-audit` is the workaround. Long-term: add `stack: framework-internal` preset or scope-relax the freeze audit.
+
+### State at session pause
+
+- Working tree: clean on `feat/dashboard-cache-net`
+- PR #3 open: https://github.com/spy-sauce/legendary-funicular/pull/3
+- 7 frozen NUTRIENTS sections, 10 HYPHA files, 43 leaf commits + 6 operator-authored commits = 40 commits since main
+- `npm link` still active: `/opt/homebrew/bin/mycelium` → repo's `cli/dist`
+- Dashboard serve verified live on port 3334 against /tmp/dashboard-test cwd
+- `cli && tsc --noEmit` clean
+
+### Cost
+
+- ~$17 burned on the rate-limit attempt (zero output)
+- ~$30-40 estimated on the successful -c 4 run (43 leaves × ~$0.80 avg with cache reads)
+- Budget: organism `budget.maxUsd: 100`. Well under.
+
+---
+
 ## [MYC] 2026-05-13 — audit-run cultivation shipped + first proof-of-life + autofix loop close + next: mycelium-dashboard
 
 **Massive session.** Three things landed back-to-back:

@@ -1,0 +1,5326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mycelium dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Infant:ital,wght@0,500;0,600;1,500;1,600&family=Geist:wght@200;300;400;500&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════════════
+   DASHBOARD SCAFFOLD — base layout + canvas chrome
+   Consumes: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* fallback values — overridden at runtime from theme */
+  --ink: #060912;
+  --ink-2: #0A0E18;
+  --ice: #E8EEF5;
+  --ice-2: #A8B4C5;
+  --cryo: #7AE5FF;
+  --rule: #1A2030;
+
+  /* lifecycle colors — overridden at runtime from theme.lifecycle */
+  --life-germ: #B7A8E8;
+  --life-grow: #7BC9C0;
+  --life-flow: #8BB8E0;
+  --life-fruit: #D9C390;
+  --life-dorm: #5A6471;
+
+  /* severity colors — overridden at runtime from theme.severity */
+  --sev-warn: #D9B85A;
+  --sev-alert: #E08A5C;
+  --sev-crit: #DB5C6E;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: var(--ink);
+  color: var(--ice);
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Geist', sans-serif;
+  font-size: 12px;
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.005em;
+  position: relative;
+}
+
+/* ── Main frame layout ── */
+/* Rows: titlebar | metrics | body (canvas+rails) | feedbar | feed */
+.frame {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ── Stage: canvas container ── */
+.stage {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink);
+  min-height: 0;
+}
+
+#webgl {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Vignette overlay ── */
+.vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9997;
+  background: radial-gradient(ellipse at center, transparent 38%, rgba(6,9,18,0.7) 100%);
+}
+
+/* ── CRT scanlines (subtle) ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.045;
+  background: repeating-linear-gradient(0deg, rgba(122,229,255,0.6) 0px, rgba(122,229,255,0.6) 1px, transparent 1px, transparent 3px);
+}
+
+/* ── Accent line (top-right diagonal) ── */
+.accent-line {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px;
+  height: 1px;
+  z-index: 9996;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--cryo) 60%, var(--cryo));
+  opacity: 0.4;
+  transform-origin: right;
+  transform: rotate(-22deg) translate(0, 14px);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   PLACEHOLDER SECTIONS — other biomes will fill these in
+   dashboard-console owns: titlebar, metrics, body (rails), feedbar, feed
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   TITLEBAR — dashboard.console.titlebar
+   Scope: heartbeat dot at theme pulse rate, uptime counter, brand seal from theme.brand
+   Consumes: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
+  min-height: 32px;
+  background: linear-gradient(180deg, var(--ink-2), var(--ink));
+  border-bottom: 0.5px solid var(--rule);
+  flex-shrink: 0;
+  min-width: 0;
+  gap: 12px;
+}
+
+/* ── Brand Seal (left side) ── */
+.titlebar .brand {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.titlebar .brand .seal {
+  font-family: 'Cormorant Infant', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 21px;
+  letter-spacing: 0.005em;
+  color: var(--ice);
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+/* Logo char (Ψ) — cryo-colored, before title */
+.titlebar .brand .logo-char {
+  color: var(--cryo);
+  font-weight: 600;
+  font-style: italic;
+  text-shadow: 0 0 16px rgba(122, 229, 255, 0.6);
+  margin-right: 4px;
+}
+
+/* Title text */
+.titlebar .brand .title {
+  color: var(--ice);
+}
+
+/* Cryo dot separator after seal */
+.titlebar .brand .seal::after {
+  content: '·';
+  color: var(--cryo);
+  margin-left: 5px;
+  animation: titlebarCryoBreath 3.6s ease-in-out infinite;
+}
+
+@keyframes titlebarCryoBreath {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* Tagline/stamp — Geist Mono uppercase, per v9.4 HUD treatment */
+.titlebar .brand .tagline {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  padding-left: 12px;
+  border-left: 0.5px solid var(--rule);
+  display: flex;
+  align-items: center;
+  height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Titlebar Right (heartbeat + uptime) ── */
+.titlebar .titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 11px;
+}
+
+.titlebar .heartbeat-wrap {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Heartbeat dot — pulses at theme.modulator.active_pulse_hz */
+.titlebar .heartbeat {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cryo);
+  box-shadow: 0 0 10px var(--cryo);
+  /* animation-duration set inline from JS based on theme.modulator.active_pulse_hz */
+  animation: titlebarHeartbeat ease-in-out infinite;
+  animation-duration: 1.6s; /* fallback; overwritten by JS */
+}
+
+@keyframes titlebarHeartbeat {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50%      { opacity: 1; transform: scale(1.15); }
+}
+
+/* Uptime counter — Geist Mono, ice_2 */
+.titlebar .uptime {
+  color: var(--ice-2);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   METRIC STRIP — dashboard.console.metric-strip
+   Scope: 5 core cells + 2 cache cells — reads from window.__DASHBOARD_STATE__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 0.5px solid var(--rule);
+  background: var(--ink-2);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.metric {
+  padding: 4px 10px 5px;
+  border-right: 0.5px solid var(--rule);
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.metric:last-child {
+  border-right: none;
+}
+
+/* Label — Geist Mono 10px, ice_2 per HYPHA spec (changed from 7px for readability) */
+.metric .ml {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Value — Geist 300 (weight 200 for light), ice */
+.metric .mv {
+  font-family: 'Geist', sans-serif;
+  font-weight: 200;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+}
+
+/* Cryo accent for cache cells */
+.metric .mv.cryo {
+  color: var(--cryo);
+  text-shadow: 0 0 22px rgba(122, 229, 255, 0.18);
+}
+
+/* Severity color modifiers */
+.metric .mv.warn { color: var(--sev-warn, #D9B85A); }
+.metric .mv.alert { color: var(--sev-alert, #E08A5C); }
+.metric .mv.crit { color: var(--sev-crit, #DB5C6E); }
+
+/* Health dot indicator */
+.metric .health-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.metric .health-dot.healthy { background: var(--life-grow, #7BC9C0); color: var(--life-grow, #7BC9C0); }
+.metric .health-dot.warn { background: var(--sev-warn, #D9B85A); color: var(--sev-warn, #D9B85A); }
+.metric .health-dot.alert { background: var(--sev-alert, #E08A5C); color: var(--sev-alert, #E08A5C); }
+.metric .health-dot.crit { background: var(--sev-crit, #DB5C6E); color: var(--sev-crit, #DB5C6E); }
+
+/* Breath underline on metric values when they update */
+/* Animation total duration ≥1.5s per slow-pulse discipline */
+.metric .mv::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  height: 1px;
+  width: 0%;
+  background: var(--cryo);
+  opacity: 0;
+  transition: opacity 1.5s ease;
+}
+
+.metric.pulse .mv::after {
+  width: 100%;
+  opacity: 0.75;
+  transition: width 1.5s ease-out, opacity 1.5s ease-out;
+}
+
+/* Responsive scaling — match v9.4 breakpoints */
+@media (max-height: 760px) {
+  .metric .mv { font-size: 14px; }
+  .metric { padding: 5px 10px 6px; }
+}
+@media (max-height: 640px) {
+  .metric { padding: 4px 8px 5px; }
+  .metric .mv { font-size: 13px; }
+  .metric .ml { font-size: 9px; letter-spacing: 0.10em; }
+}
+
+/* body grid (stage + rails) — dashboard-console handles rails */
+.body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   RIGHT RAIL — providers + agents
+   Scope: dashboard.console.providers-rail, dashboard.console.agents-rail
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.right-rail {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  min-width: 220px;
+  max-width: 280px;
+  background: var(--ink-2);
+  border-left: 0.5px solid var(--rule);
+  overflow: hidden;
+}
+
+/* ── Providers Rail (top section) — dashboard.console.providers-rail ── */
+.providers-rail {
+  flex-shrink: 0;
+  padding: 10px 12px 8px;
+  border-bottom: 0.5px solid var(--rule);
+}
+
+.providers-rail .rail-header {
+  font-family: 'Cormorant Infant', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 0.5px solid var(--rule);
+}
+
+.providers-rail .provider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-family: 'Geist', sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+}
+
+/* Provider identity dot — colored by theme.identity[provider.id], fallback cryo */
+.providers-rail .provider-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--cryo);
+  box-shadow: 0 0 6px var(--provider-color, var(--cryo));
+}
+
+/* Provider name — ice color, truncate if needed */
+.providers-rail .provider-name {
+  flex: 1;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Provider model — ice_2 color, smaller, after name */
+.providers-rail .provider-model {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  color: var(--ice-2);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* Provider status dot — green (grow) when up, red (severity.crit) when down */
+.providers-rail .provider-status {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--sev-crit, #DB5C6E);
+  transition: background 1.8s ease, box-shadow 1.8s ease;
+}
+
+.providers-rail .provider-status.up {
+  background: var(--life-grow, #7BC9C0);
+  box-shadow: 0 0 6px var(--life-grow, #7BC9C0);
+}
+
+/* Provider latency — right-aligned, monospace, ice_2 */
+.providers-rail .provider-latency {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ice-2);
+  text-align: right;
+  min-width: 42px;
+  flex-shrink: 0;
+}
+
+/* Latency warning thresholds */
+.providers-rail .provider-latency.slow {
+  color: var(--sev-warn, #D9B85A);
+}
+
+.providers-rail .provider-latency.very-slow {
+  color: var(--sev-alert, #E08A5C);
+}
+
+/* Empty state */
+.providers-rail .empty-state {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  color: var(--ice-2);
+  opacity: 0.6;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* ── Agents Rail placeholder (bottom section) — dashboard.console.agents-rail ── */
+.agents-rail {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.agents-rail .rail-header {
+  font-family: 'Cormorant Infant', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 0.5px solid var(--rule);
+}
+
+/* Scrollbar styling for agents rail */
+.agents-rail::-webkit-scrollbar {
+  width: 4px;
+}
+
+.agents-rail::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agents-rail::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 2px;
+}
+
+.agents-rail::-webkit-scrollbar-thumb:hover {
+  background: var(--ice-2);
+}
+
+/* ── Agent Row Styles — dashboard.console.agents-rail ── */
+.agents-rail .agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 0;
+  margin-bottom: 2px;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background 1.5s ease, border-color 1.5s ease;
+  position: relative;
+}
+
+.agents-rail .agent-row:hover {
+  background: rgba(122, 229, 255, 0.04);
+}
+
+.agents-rail .agent-row.selected {
+  background: rgba(122, 229, 255, 0.08);
+}
+
+.agents-rail .agent-row.pinned::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--cryo);
+  box-shadow: 0 0 6px var(--cryo);
+}
+
+/* Agent name — ice color, truncate if needed */
+.agents-rail .agent-name {
+  flex: 1;
+  font-family: 'Geist', sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Lifecycle pill — text from agent.state, background from theme.lifecycle */
+.agents-rail .lifecycle-pill {
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  color: var(--ink);
+  /* background set inline from JS based on theme.lifecycle */
+}
+
+/* Lifecycle state color mappings */
+.agents-rail .lifecycle-pill.pending {
+  background: var(--life-germ, #B7A8E8);
+}
+
+.agents-rail .lifecycle-pill.active {
+  background: var(--life-flow, #8BB8E0);
+}
+
+.agents-rail .lifecycle-pill.fruit {
+  background: var(--life-fruit, #D9C390);
+}
+
+.agents-rail .lifecycle-pill.failed {
+  background: var(--sev-crit, #DB5C6E);
+}
+
+.agents-rail .lifecycle-pill.dorm {
+  background: var(--life-dorm, #5A6471);
+  color: var(--ice-2);
+}
+
+/* Empty state */
+.agents-rail .empty-state {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  color: var(--ice-2);
+  opacity: 0.6;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   FEEDBAR — dashboard.console.feedbar
+   Scope: filter chips (all/lifecycle/nutrient/cost/health/anomaly/cache)
+   cache chip pivots canvas via CustomEvent("dashboard:filter", { detail: "cache" })
+   Consumes: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.feedbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  min-height: 28px;
+  background: var(--ink-2);
+  border-top: 0.5px solid var(--rule);
+  flex-shrink: 0;
+}
+
+.feedbar-label {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  opacity: 0.7;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.feedbar-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.feedbar-chips::-webkit-scrollbar {
+  display: none;
+}
+
+/* Filter chip base */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: background 1.5s ease, color 1.5s ease, border-color 1.5s ease;
+  /* Inactive state: rule border, ice_2 text */
+  background: transparent;
+  border: 0.5px solid var(--rule);
+  color: var(--ice-2);
+}
+
+.filter-chip:hover {
+  border-color: var(--ice-2);
+  color: var(--ice);
+}
+
+/* Active chip: cryo background, ink text */
+.filter-chip.active {
+  background: var(--cryo);
+  border-color: var(--cryo);
+  color: var(--ink);
+  box-shadow: 0 0 8px rgba(122, 229, 255, 0.25);
+}
+
+.filter-chip.active:hover {
+  background: var(--cryo);
+  border-color: var(--cryo);
+  color: var(--ink);
+}
+
+/* Cache chip special glow when active (to visually indicate canvas pivot) */
+.filter-chip[data-filter="cache"].active {
+  box-shadow: 0 0 12px rgba(122, 229, 255, 0.4);
+}
+
+/* Chip separator (subtle) */
+.feedbar-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--rule);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   EVENT FEED — dashboard.console.event-feed
+   Scope: 60-90px scrollable feed of state.events filtered by feedFilter,
+          severity-colored left border
+   Consumes: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  min-height: 60px;
+  max-height: 90px;
+  height: clamp(60px, 10vh, 90px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--ink);
+  border-top: 0.5px solid var(--rule);
+  flex-shrink: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ice-2) var(--ink-2);
+}
+
+.feed::-webkit-scrollbar {
+  width: 4px;
+}
+
+.feed::-webkit-scrollbar-track {
+  background: var(--ink-2);
+}
+
+.feed::-webkit-scrollbar-thumb {
+  background: var(--ice-2);
+  border-radius: 2px;
+}
+
+.feed::-webkit-scrollbar-thumb:hover {
+  background: var(--ice);
+}
+
+/* ── Event Row ── */
+.feed-row {
+  display: grid;
+  grid-template-columns: 16px 58px minmax(80px, 120px) minmax(80px, 140px) 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 0;
+  min-height: 22px;
+  border-left: 2px solid var(--ice-2);
+  border-bottom: 0.5px solid var(--rule);
+  background: var(--ink);
+  transition: background 1.5s ease;
+}
+
+.feed-row:last-child {
+  border-bottom: none;
+}
+
+.feed-row:hover {
+  background: var(--ink-2);
+}
+
+/* Severity border colors — per NUTRIENTS §2 EventEntry.severity */
+.feed-row.sev-info    { border-left-color: var(--ice-2); }
+.feed-row.sev-warn    { border-left-color: var(--sev-warn); }
+.feed-row.sev-alert   { border-left-color: var(--sev-alert); }
+.feed-row.sev-crit    { border-left-color: var(--sev-crit); }
+
+/* ── Category Icon (12px glyph) ── */
+.feed-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.feed-icon svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
+/* Icon color matches severity */
+.feed-row.sev-info .feed-icon  { color: var(--ice-2); }
+.feed-row.sev-warn .feed-icon  { color: var(--sev-warn); }
+.feed-row.sev-alert .feed-icon { color: var(--sev-alert); }
+.feed-row.sev-crit .feed-icon  { color: var(--sev-crit); }
+
+/* ── Timestamp (HH:MM:SS) ── */
+.feed-ts {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: var(--ice-2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Source biome (truncated to 14ch) ── */
+.feed-source {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  font-weight: 300;
+  color: var(--ice-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+/* ── short_type — Geist Mono ── */
+.feed-type {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+/* ── Message — Geist 300, ellipsis on overflow ── */
+.feed-msg {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  font-weight: 300;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ── Empty State ── */
+.feed-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 12px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  opacity: 0.6;
+}
+
+/* ── Responsive scaling ── */
+@media (max-width: 900px) {
+  .feed-row {
+    grid-template-columns: 16px 52px minmax(60px, 100px) minmax(60px, 100px) 1fr;
+    gap: 6px;
+  }
+  .feed-source { max-width: 100px; }
+  .feed-type   { max-width: 100px; }
+}
+
+@media (max-width: 640px) {
+  .feed-row {
+    grid-template-columns: 14px 48px 1fr;
+    gap: 4px;
+  }
+  .feed-source,
+  .feed-type { display: none; }
+  .feed-msg { grid-column: span 1; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   HUD OVERLAYS — targeting reticle, scan beam, depth readout (focus-conditional)
+   Scope: dashboard.canvas.hud-overlays
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Targeting Reticle: 4 corner brackets converging on focused agent ── */
+.target-reticle {
+  position: absolute;
+  pointer-events: none;
+  z-index: 7;
+  width: 180px;
+  height: 180px;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 1.6s cubic-bezier(0.22, 1, 0.36, 1),
+              width 1.6s cubic-bezier(0.22, 1, 0.36, 1),
+              height 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.target-reticle.lock {
+  opacity: 1;
+}
+
+/* Corner brackets via pseudo-elements + spans */
+.target-reticle::before,
+.target-reticle::after,
+.target-reticle .c1,
+.target-reticle .c2 {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--cryo);
+  border-style: solid;
+  border-width: 0;
+  transition: border-color 0.3s ease;
+}
+
+.target-reticle::before { top: 0; left: 0; border-top-width: 1px; border-left-width: 1px; }
+.target-reticle::after  { top: 0; right: 0; border-top-width: 1px; border-right-width: 1px; }
+.target-reticle .c1     { bottom: 0; left: 0; border-bottom-width: 1px; border-left-width: 1px; }
+.target-reticle .c2     { bottom: 0; right: 0; border-bottom-width: 1px; border-right-width: 1px; }
+
+.target-reticle .lbl {
+  position: absolute;
+  top: -20px;
+  left: 0;
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  color: var(--cryo);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(122, 229, 255, 0.5);
+  white-space: nowrap;
+}
+
+/* ── Scan Beam: vertical sweep during dive transitions ── */
+.scanbeam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent 5%, var(--cryo) 30%, var(--cryo) 70%, transparent 95%);
+  box-shadow: 0 0 14px var(--cryo), 0 0 30px rgba(122, 229, 255, 0.4);
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  top: 0;
+}
+
+.scanbeam.run {
+  animation: scanSweep 1.8s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+
+@keyframes scanSweep {
+  0%   { top: 0%;   opacity: 0; }
+  8%   { opacity: 0.95; }
+  92%  { opacity: 0.95; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* ── Depth HUD Readout: agent.id + state + iter ── */
+.depth-hud {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  z-index: 5;
+  pointer-events: none;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  color: var(--ice-2);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.8;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 0.35s ease 0.2s, transform 0.35s ease 0.2s;
+}
+
+.depth-hud.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.depth-hud .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.depth-hud .row .k {
+  color: var(--ice-2);
+  opacity: 0.7;
+}
+
+.depth-hud .row .v {
+  color: var(--cryo);
+  text-shadow: 0 0 8px rgba(122, 229, 255, 0.5);
+}
+
+.depth-hud .lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 0.5px solid var(--cryo);
+  background: rgba(122, 229, 255, 0.08);
+  color: var(--cryo);
+  text-shadow: 0 0 8px rgba(122, 229, 255, 0.5);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.depth-hud .lock-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cryo);
+  box-shadow: 0 0 8px var(--cryo);
+  animation: cryoBreath 1.4s ease-in-out infinite;
+}
+
+@keyframes cryoBreath {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50%      { opacity: 1;   transform: scale(1.1); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ALERT RIBBON — dashboard.console.alert-ribbon
+   Scope: absolute-positioned top banner sliding in when alerts arrive, auto-dismiss 15s
+   Consumes: window.__DASHBOARD_STATE__.alerts, window.__DASHBOARD_THEME__.severity
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.alert-ribbon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  pointer-events: auto;
+  transform: translateY(-100%);
+  transition: transform 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.alert-ribbon.visible {
+  transform: translateY(0);
+}
+
+/* Slide-out uses the same 1.5s timing per slow-pulse discipline */
+.alert-ribbon.dismissing {
+  transform: translateY(-100%);
+  transition: transform 1.5s ease;
+}
+
+/* Alert container — holds multiple alerts in a stack */
+.alert-ribbon-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Individual alert item */
+.alert-ribbon-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  min-height: 40px;
+  cursor: pointer;
+  border-bottom: 0.5px solid rgba(6, 9, 18, 0.4);
+  position: relative;
+  overflow: hidden;
+  transition: opacity 1.5s ease, transform 1.5s ease;
+}
+
+.alert-ribbon-item.dismissing {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+/* Severity backgrounds — linear-gradient from severity color → transparent */
+.alert-ribbon-item.crit {
+  background: linear-gradient(90deg, var(--sev-crit, #DB5C6E) 0%, rgba(219, 92, 110, 0.6) 40%, transparent 100%);
+}
+
+.alert-ribbon-item.alert {
+  background: linear-gradient(90deg, var(--sev-alert, #E08A5C) 0%, rgba(224, 138, 92, 0.6) 40%, transparent 100%);
+}
+
+.alert-ribbon-item.warn {
+  background: linear-gradient(90deg, var(--sev-warn, #D9B85A) 0%, rgba(217, 184, 90, 0.6) 40%, transparent 100%);
+}
+
+/* Alert content layout */
+.alert-ribbon-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Severity icon (pulsing dot) */
+.alert-ribbon-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px currentColor;
+  animation: alertPulse 1.8s ease-in-out infinite;
+}
+
+.alert-ribbon-item.crit .alert-ribbon-icon {
+  background: var(--ice, #E8EEF5);
+  color: var(--sev-crit, #DB5C6E);
+}
+
+.alert-ribbon-item.alert .alert-ribbon-icon {
+  background: var(--ice, #E8EEF5);
+  color: var(--sev-alert, #E08A5C);
+}
+
+.alert-ribbon-item.warn .alert-ribbon-icon {
+  background: var(--ice, #E8EEF5);
+  color: var(--sev-warn, #D9B85A);
+}
+
+@keyframes alertPulse {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); }
+  50%      { opacity: 1;   transform: scale(1.1); }
+}
+
+/* Timestamp — Geist Mono, subtle */
+.alert-ribbon-ts {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--ice, #E8EEF5);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* Message text — ice color, truncate on overflow */
+.alert-ribbon-message {
+  font-family: 'Geist', sans-serif;
+  font-size: 12px;
+  font-weight: 300;
+  color: var(--ice, #E8EEF5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  text-shadow: 0 1px 3px rgba(6, 9, 18, 0.5);
+}
+
+/* Dismiss hint (×) — appears on hover */
+.alert-ribbon-dismiss {
+  font-family: 'Geist', sans-serif;
+  font-size: 16px;
+  font-weight: 200;
+  color: var(--ice, #E8EEF5);
+  opacity: 0.4;
+  flex-shrink: 0;
+  padding: 0 4px;
+  transition: opacity 1.5s ease;
+}
+
+.alert-ribbon-item:hover .alert-ribbon-dismiss {
+  opacity: 0.9;
+}
+
+/* Auto-dismiss progress bar (thin line at bottom) */
+.alert-ribbon-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--ice, #E8EEF5);
+  opacity: 0.3;
+  animation: alertProgressShrink 15s linear forwards;
+}
+
+@keyframes alertProgressShrink {
+  0%   { width: 100%; }
+  100% { width: 0%; }
+}
+
+/* Responsive scaling */
+@media (max-height: 640px) {
+  .alert-ribbon-item {
+    padding: 8px 14px;
+    min-height: 34px;
+  }
+  .alert-ribbon-message {
+    font-size: 11px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   INSPECT PANEL — dashboard.console.inspect-panel
+   Scope: 300-420px slide-in from left edge, opens on dashboard:agent-select
+   Sections: header + synopsis + ops actions + identity + focus + leaf queue
+             + subagent mini-diagram + flow + files + cost
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.inspect-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 8;
+  width: clamp(300px, 30vw, 420px);
+  max-height: 100%;
+  background: var(--ink-2);
+  border-right: 0.5px solid var(--rule);
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 1.5s ease, transform 1.5s ease;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  overflow: hidden;
+}
+
+.inspect-panel.open {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.inspect-panel.pinned::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cryo);
+  box-shadow: 0 0 8px var(--cryo);
+}
+
+/* ── Inspect Header ── */
+.inspect-head {
+  padding: 10px 14px;
+  border-bottom: 0.5px solid var(--rule);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.inspect-head .h-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.inspect-head .h-eyebrow {
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 3px;
+}
+
+.inspect-head .h-title {
+  font-family: 'Geist', sans-serif;
+  font-weight: 300;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ice);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inspect-head .h-tag {
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  color: var(--ice-2);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+.inspect-head .h-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.inspect-head .h-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 0.5px solid;
+  border-radius: 2px;
+}
+
+.inspect-head .x-close {
+  background: transparent;
+  border: 0.5px solid var(--rule);
+  color: var(--ice-2);
+  cursor: pointer;
+  padding: 4px 10px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: color 1.5s ease, border-color 1.5s ease;
+}
+
+.inspect-head .x-close:hover {
+  color: var(--sev-warn);
+  border-color: var(--sev-warn);
+}
+
+/* ── Inspect Body (scrollable) ── */
+.inspect-body {
+  padding: 10px 14px 14px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.inspect-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.inspect-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.inspect-body::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 2px;
+}
+
+.inspect-body::-webkit-scrollbar-thumb:hover {
+  background: var(--ice-2);
+}
+
+/* ── Section styling ── */
+.i-section {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 0.5px dashed var(--rule);
+}
+
+.i-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.i-section h5 {
+  font-family: 'Geist Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ice-2);
+  margin-bottom: 6px;
+  font-weight: 400;
+}
+
+/* ── Key-value rows ── */
+.i-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  padding: 2px 0;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+}
+
+.i-row .k {
+  color: var(--ice-2);
+  letter-spacing: 0.05em;
+}
+
+.i-row .v {
+  color: var(--ice);
+  text-align: right;
+}
+
+.i-row .v.dim {
+  color: var(--ice-2);
+}
+
+/* ── Prose (synopsis, etc) ── */
+.i-prose {
+  font-family: 'Geist', sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--ice-2);
+  padding: 2px 0;
+}
+
+/* ── Provider tag (identity dot + name) ── */
+.i-provider-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.i-provider-tag .p-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.i-provider-tag .p-name {
+  color: var(--ice-2);
+}
+
+/* ── Operator actions ── */
+.op-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.op-btn {
+  background: transparent;
+  border: 0.5px solid var(--rule);
+  color: var(--ice-2);
+  cursor: pointer;
+  padding: 5px 8px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 1.5s ease;
+  white-space: nowrap;
+}
+
+.op-btn:hover {
+  background: rgba(122, 229, 255, 0.06);
+  color: var(--cryo);
+  border-color: var(--cryo);
+}
+
+.op-btn.danger:hover {
+  color: var(--sev-crit);
+  border-color: var(--sev-crit);
+  background: rgba(219, 92, 110, 0.06);
+}
+
+.op-btn.go:hover {
+  color: var(--life-grow);
+  border-color: var(--life-grow);
+  background: rgba(123, 201, 192, 0.06);
+}
+
+.op-btn:disabled {
+  color: var(--ice-2);
+  opacity: 0.4;
+  border-color: var(--rule);
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.op-btn:disabled:hover {
+  background: transparent;
+  color: var(--ice-2);
+  border-color: var(--rule);
+}
+
+/* ── Leaf queue list ── */
+.leaf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.leaf-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  gap: 6px;
+  padding: 4px 0 4px 8px;
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: background 1.5s ease;
+}
+
+.leaf-row:hover {
+  background: rgba(122, 229, 255, 0.04);
+}
+
+.leaf-row.current {
+  background: rgba(122, 229, 255, 0.08);
+  border-left-color: var(--cryo);
+}
+
+.leaf-row.s-done {
+  border-left-color: var(--life-fruit);
+}
+
+.leaf-row.s-active {
+  border-left-color: var(--life-flow);
+}
+
+.leaf-row.s-pending {
+  border-left-color: var(--life-germ);
+}
+
+.leaf-row.s-failed {
+  border-left-color: var(--sev-crit);
+}
+
+.leaf-row .dot {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.leaf-row .name {
+  color: var(--ice);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaf-row .name .scope {
+  display: block;
+  font-size: 8px;
+  color: var(--ice-2);
+  margin-top: 2px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaf-row .dur {
+  color: var(--ice-2);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.leaf-row .files-count {
+  color: var(--ice-2);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+/* ── Subagent mini-diagram (SVG) ── */
+.subagent-map {
+  width: 100%;
+  height: auto;
+  margin: 4px 0 6px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 0.5px dashed var(--rule);
+  border-radius: 2px;
+}
+
+.subagent-map .agent-core {
+  fill: var(--cryo);
+}
+
+.subagent-map .agent-ring {
+  fill: none;
+  stroke: var(--cryo);
+  stroke-width: 0.6;
+  opacity: 0.6;
+}
+
+.subagent-map .leaf-circle {
+  stroke-width: 0.5;
+}
+
+.subagent-map .leaf-line {
+  stroke: var(--rule);
+  stroke-width: 0.4;
+  opacity: 0.5;
+}
+
+.subagent-map .cache-glyph {
+  fill: var(--cryo);
+  opacity: 0.85;
+}
+
+.subagent-map .micro-circle {
+  stroke-width: 0.4;
+}
+
+.subagent-map .micro-circle.cheap {
+  fill: var(--life-germ);
+  stroke: var(--life-germ);
+}
+
+.subagent-map .micro-circle.full {
+  fill: var(--cryo);
+  stroke: var(--cryo);
+}
+
+/* Flow arrows with 4s dashoffset animation (per HYPHA: No animation under 1.5s) */
+.subagent-map .flow-out {
+  stroke: var(--cryo);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+  animation: dashflow 4s linear infinite;
+}
+
+.subagent-map .flow-in {
+  stroke: var(--life-germ);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+  animation: dashflow 4s linear infinite reverse;
+}
+
+@keyframes dashflow {
+  to { stroke-dashoffset: -8; }
+}
+
+.submap-legend {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Geist Mono', monospace;
+  font-size: 7px;
+  color: var(--ice-2);
+  letter-spacing: 0.05em;
+  padding: 2px 2px 0;
+  opacity: 0.7;
+}
+
+/* ── Recent nutrient flow list ── */
+.io-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.io-row {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  padding: 2px 0;
+  color: var(--ice-2);
+  display: flex;
+  gap: 6px;
+}
+
+.io-row .arrow {
+  color: var(--cryo);
+  flex-shrink: 0;
+}
+
+.io-row .type {
+  color: var(--ice);
+}
+
+.io-row .msg {
+  color: var(--ice-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Files produced list ── */
+.file-list {
+  font-family: 'Geist Mono', monospace;
+  font-size: 10px;
+  color: var(--ice-2);
+}
+
+.file-row {
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+}
+
+.file-row::before {
+  content: '·';
+  color: var(--ice-2);
+  margin-right: 6px;
+  opacity: 0.6;
+}
+
+.file-more {
+  font-style: italic;
+  color: var(--ice-2);
+  opacity: 0.7;
+  padding: 2px 0;
+}
+
+/* ── Empty states ── */
+.i-empty {
+  font-family: 'Geist', sans-serif;
+  font-size: 10px;
+  color: var(--ice-2);
+  opacity: 0.6;
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* ── Responsive: narrower panel on small screens ── */
+@media (max-width: 900px) {
+  .inspect-panel {
+    width: clamp(280px, 40vw, 340px);
+  }
+}
+
+</style>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     THREE.JS CDN IMPORT — ES module, version 0.161.0 (per NUTRIENTS §6)
+     ══════════════════════════════════════════════════════════════════════════════ -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="accent-line"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     ALERT RIBBON — dashboard.console.alert-ribbon
+     Scope: absolute-positioned top banner sliding in when alerts arrive, auto-dismiss 15s
+     Starts hidden (translateY -100%); slides in when alerts[] gains new entries
+     ══════════════════════════════════════════════════════════════════════════════ -->
+<div class="alert-ribbon" id="alert-ribbon">
+  <div class="alert-ribbon-stack" id="alert-ribbon-stack">
+    <!-- Alert items will be dynamically inserted here by initAlertRibbon() -->
+  </div>
+</div>
+
+<div class="frame">
+  <!-- titlebar: dashboard-console.titlebar will populate -->
+  <div class="titlebar" id="titlebar"></div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════════
+       METRIC STRIP — dashboard.console.metric-strip
+       Scope: 5 core cells + 2 cache cells — populated by initMetricStrip()
+       ══════════════════════════════════════════════════════════════════════════════ -->
+  <div class="metrics" id="metrics">
+    <div class="metric" id="metric-health">
+      <div class="ml">Health</div>
+      <div class="mv"><span id="health-val">—</span><span class="health-dot" id="health-dot"></span></div>
+    </div>
+    <div class="metric" id="metric-agents">
+      <div class="ml">Agents · Leaves</div>
+      <div class="mv" id="agents-leaves-val">— · —</div>
+    </div>
+    <div class="metric" id="metric-spend">
+      <div class="ml">Spend 24h</div>
+      <div class="mv" id="spend-val">$—</div>
+    </div>
+    <div class="metric" id="metric-events">
+      <div class="ml">Events</div>
+      <div class="mv" id="events-val">—</div>
+    </div>
+    <div class="metric" id="metric-alerts">
+      <div class="ml">Alerts</div>
+      <div class="mv" id="alerts-val">0</div>
+    </div>
+    <div class="metric" id="metric-cache-hit">
+      <div class="ml">Cache hit %</div>
+      <div class="mv cryo" id="cache-hit-val">—</div>
+    </div>
+    <div class="metric" id="metric-calls-saved">
+      <div class="ml">Calls saved</div>
+      <div class="mv cryo" id="calls-saved-val">—</div>
+    </div>
+  </div>
+
+  <!-- body: stage (canvas) + rails (dashboard-console) -->
+  <div class="body">
+    <div class="stage" id="stage">
+      <canvas id="webgl"></canvas>
+
+      <!-- ══════════════════════════════════════════════════════════════════════════════
+           HUD OVERLAYS — focus-conditional targeting + depth readout
+           Scope: dashboard.canvas.hud-overlays
+           ══════════════════════════════════════════════════════════════════════════════ -->
+
+      <!-- Targeting reticle: 4 corner brackets, follows focused agent in screen space -->
+      <div class="target-reticle" id="target-reticle">
+        <span class="c1"></span><span class="c2"></span>
+        <span class="lbl" id="reticle-lbl">lock · target</span>
+      </div>
+
+      <!-- Scan beam: vertical sweep during dive (zoom preset transitions) -->
+      <div class="scanbeam" id="scanbeam"></div>
+
+      <!-- Depth HUD: agent.id + state + iter readout while focused -->
+      <div class="depth-hud" id="depth-hud">
+        <div class="row"><span class="k">target</span><span class="v" id="depth-target">—</span></div>
+        <div class="row"><span class="k">state</span><span class="v" id="depth-state">—</span></div>
+        <div class="row"><span class="k">iter</span><span class="v" id="depth-iter">—</span></div>
+        <div class="lock-badge" id="depth-lock">—</div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════════════════
+           INSPECT PANEL — dashboard.console.inspect-panel
+           Scope: 300-420px slide-in from left edge, opens on dashboard:agent-select
+           Sections: header + synopsis + ops actions + identity + focus + leaf queue
+                     + subagent mini-diagram + flow + files + cost
+           ══════════════════════════════════════════════════════════════════════════════ -->
+      <div class="inspect-panel" id="inspect-panel">
+        <div class="inspect-head" id="inspect-head">
+          <!-- Populated by JS: h-info (eyebrow + title + tag) + h-actions (close + state pill) -->
+        </div>
+        <div class="inspect-body" id="inspect-body">
+          <!-- Populated by JS: sections for synopsis, ops, identity, focus, leaves, micros, flow, files, cost -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════════
+         RIGHT RAIL — providers + agents
+         Scope: dashboard.console.providers-rail, dashboard.console.agents-rail
+         ══════════════════════════════════════════════════════════════════════════════ -->
+    <div class="right-rail" id="right-rail">
+      <!-- Providers Rail (top section) — dashboard.console.providers-rail -->
+      <div class="providers-rail" id="providers-rail">
+        <div class="rail-header">Providers</div>
+        <div id="providers-list">
+          <!-- Provider rows populated by JS from state.providers[] -->
+        </div>
+      </div>
+
+      <!-- Agents Rail (bottom section) — dashboard.console.agents-rail will populate -->
+      <div class="agents-rail" id="agents-rail">
+        <div class="rail-header">Agents</div>
+        <div id="agents-list">
+          <!-- Agent rows populated by dashboard.console.agents-rail -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- feedbar: dashboard-console.feedbar will populate -->
+  <div class="feedbar" id="feedbar"></div>
+
+  <!-- feed: dashboard-console.event-feed will populate -->
+  <div class="feed" id="feed"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     CANVAS SCAFFOLD — scene, camera, renderer, resize handler
+     Reads: window.__DASHBOARD_STATE__, window.__DASHBOARD_THEME__
+     ══════════════════════════════════════════════════════════════════════════════ -->
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ────────── State + Theme from server-rendered globals ──────────
+// These are inlined by cli/src/lib/dashboard/render.ts before </body>
+const STATE = window.__DASHBOARD_STATE__ || {
+  organism: { name: 'dashboard-cache', started_at: new Date().toISOString(), iter: 0, view: 'multiverse' },
+  agents: [],
+  cache: { hits: 0, misses: 0, entries: 0, capacity: 0, recent_keys: [] },
+  events: [],
+  alerts: [],
+  providers: []
+};
+
+const THEME = window.__DASHBOARD_THEME__ || {
+  brand: { title: 'mycelium', tagline: 'decentralized', logo_char: 'Psi' },
+  palette: { ink: '#060912', ink_2: '#0A0E18', ice: '#E8EEF5', ice_2: '#A8B4C5', cryo: '#7AE5FF', rule: '#1A2030' },
+  lifecycle: { germ: '#B7A8E8', grow: '#7BC9C0', flow: '#8BB8E0', fruit: '#D9C390', dorm: '#5A6471' },
+  severity: { warn: '#D9B85A', alert: '#E08A5C', crit: '#DB5C6E' },
+  identity: {},
+  modulator: { pending_brightness: 0.3, active_brightness: 1.0, fruit_brightness: 0.9, failed_brightness: 0.45, active_pulse_hz: 0.9 }
+};
+
+// ────────── Live state polling ──────────
+// During cultivate, the framework writes sporenet/state.json incrementally via
+// writeLeafState (atomic temp/rename) and the cache-network pulse writer extends
+// state.cache every 1.4s. We poll /state.json on that same cadence and mutate
+// the existing STATE object in place so all renderers that captured `STATE`
+// (canvas, console rails, metric strip, inspect panel) re-read fresh data on
+// their next animation/timer tick. window.__DASHBOARD_STATE__ also tracks
+// because we Object.assign through the same reference.
+(function startLiveStatePoll() {
+  let inFlight = false;
+  async function pollOnce() {
+    if (inFlight) return;
+    inFlight = true;
+    try {
+      const res = await fetch('/state.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const fresh = await res.json();
+      // Remove keys that vanished from server state so renderers don't see stale data
+      for (const k of Object.keys(STATE)) {
+        if (!(k in fresh)) delete STATE[k];
+      }
+      Object.assign(STATE, fresh);
+      window.dispatchEvent(new CustomEvent('dashboard:state-updated', { detail: { ts: Date.now() } }));
+    } catch {
+      // Best-effort; never break the canvas if the server hiccups
+    } finally {
+      inFlight = false;
+    }
+  }
+  // Initial nudge then 1.4s cadence matching NUTRIENTS §3 cache.pulse aggregation
+  pollOnce();
+  setInterval(pollOnce, 1400);
+})();
+
+// Apply theme to CSS custom properties
+function applyThemeToCss(theme) {
+  const root = document.documentElement;
+  // Palette
+  root.style.setProperty('--ink', theme.palette.ink);
+  root.style.setProperty('--ink-2', theme.palette.ink_2);
+  root.style.setProperty('--ice', theme.palette.ice);
+  root.style.setProperty('--ice-2', theme.palette.ice_2);
+  root.style.setProperty('--cryo', theme.palette.cryo);
+  root.style.setProperty('--rule', theme.palette.rule);
+  // Lifecycle (dashboard.console.metric-strip uses these for health dot, etc.)
+  if (theme.lifecycle) {
+    root.style.setProperty('--life-germ', theme.lifecycle.germ);
+    root.style.setProperty('--life-grow', theme.lifecycle.grow);
+    root.style.setProperty('--life-flow', theme.lifecycle.flow);
+    root.style.setProperty('--life-fruit', theme.lifecycle.fruit);
+    root.style.setProperty('--life-dorm', theme.lifecycle.dorm);
+  }
+  // Severity (dashboard.console.metric-strip uses these for alerts, health, etc.)
+  if (theme.severity) {
+    root.style.setProperty('--sev-warn', theme.severity.warn);
+    root.style.setProperty('--sev-alert', theme.severity.alert);
+    root.style.setProperty('--sev-crit', theme.severity.crit);
+  }
+}
+applyThemeToCss(THEME);
+
+// ────────── Three.js Core Setup ──────────
+const stage = document.getElementById('stage');
+const canvas = document.getElementById('webgl');
+
+// Scene — transparent background (ink shows through from CSS)
+const scene = new THREE.Scene();
+scene.background = null;
+
+// Fog — subtle depth cue, color from theme ink
+const inkColor = parseInt(THEME.palette.ink.replace('#', ''), 16);
+scene.fog = new THREE.FogExp2(inkColor, 0.025);
+
+// Camera — perspective, 42 FOV (matches v9.4 prototype)
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+const initialCamPos = new THREE.Vector3(0, 2.5, 16);
+camera.position.copy(initialCamPos);
+
+// Renderer — antialiased, alpha, DPR capped at 2
+const renderer = new THREE.WebGLRenderer({
+  canvas: canvas,
+  antialias: true,
+  alpha: true
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// ────────── Resize Handler ──────────
+function fitRenderer() {
+  const rect = stage.getBoundingClientRect();
+  const width = rect.width;
+  const height = rect.height;
+
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+}
+
+window.addEventListener('resize', fitRenderer);
+fitRenderer();
+
+// ────────── OrbitControls (basic setup) ──────────
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enableZoom = false;   // custom zoom handler in dashboard.canvas.adaptive-zoom
+controls.enablePan = false;
+controls.minDistance = 1.5;
+controls.maxDistance = 30;
+controls.minPolarAngle = 0.02;
+controls.maxPolarAngle = Math.PI - 0.02;
+controls.target.set(0, 0, 0);
+
+// ────────── Main Group (wraps all product-specific objects) ──────────
+// Other canvas leaves (agent-globe, leaves-and-micros, cache-relays, etc.)
+// will add their objects to this group or directly to scene.
+const mainGroup = new THREE.Group();
+scene.add(mainGroup);
+
+// ────────── Globe Wireframe (faint orientation rings) ──────────
+const GLOBE_R = 4.6;
+{
+  const ringGeo = new THREE.TorusGeometry(GLOBE_R, 0.006, 6, 128);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0x1F2A3D,
+    transparent: true,
+    opacity: 0.42
+  });
+
+  // Equator ring
+  const equator = new THREE.Mesh(ringGeo, ringMat);
+  equator.rotation.x = Math.PI / 2;
+  mainGroup.add(equator);
+
+  // Two meridian rings
+  const meridian1 = new THREE.Mesh(ringGeo, ringMat.clone());
+  mainGroup.add(meridian1);
+
+  const meridian2 = new THREE.Mesh(ringGeo, ringMat.clone());
+  meridian2.rotation.y = Math.PI / 2;
+  mainGroup.add(meridian2);
+}
+
+// ────────── Animation Loop ──────────
+let animationFrameId = null;
+
+// Animation hook registry — other canvas leaves can register their animation functions
+const animationHooks = [];
+
+function animate(time) {
+  animationFrameId = requestAnimationFrame(animate);
+
+  // Time in seconds for animation calculations
+  const t = time * 0.001;
+
+  // Update controls damping
+  controls.update();
+
+  // Run registered animation hooks (agent-globe, leaves-and-micros, cache-relays, etc.)
+  animationHooks.forEach(hook => hook(t));
+
+  // Render scene
+  renderer.render(scene, camera);
+}
+
+// Start animation
+animate(0);
+
+// ════════════════════════════════════════════════════════════════════════════════
+// AGENT GLOBE — fibonacci-sphere placement + wireframe Bloch rings
+// Scope: dashboard.canvas.agent-globe
+// Consumes: STATE.agents[], THEME.identity, THEME.modulator
+// ════════════════════════════════════════════════════════════════════════════════
+
+const TAU = Math.PI * 2;
+const PHI = Math.PI * (Math.sqrt(5) - 1); // Golden angle ~2.399 radians
+
+// ────────── Brightness Modulator by Agent State ──────────
+function getBrightnessForState(state, modulator) {
+  switch (state) {
+    case 'active':  return modulator.active_brightness;
+    case 'fruit':   return modulator.fruit_brightness;
+    case 'failed':  return modulator.failed_brightness;
+    case 'pending':
+    case 'dorm':
+    default:        return modulator.pending_brightness;
+  }
+}
+
+// ────────── Color Helper: Apply Brightness to Hex ──────────
+function modulateColor(hexColor, brightness) {
+  // Parse hex to RGB
+  const hex = hexColor.replace('#', '');
+  let r = parseInt(hex.substring(0, 2), 16);
+  let g = parseInt(hex.substring(2, 4), 16);
+  let b = parseInt(hex.substring(4, 6), 16);
+
+  // Apply brightness as a multiplier (clamped)
+  r = Math.min(255, Math.round(r * brightness));
+  g = Math.min(255, Math.round(g * brightness));
+  b = Math.min(255, Math.round(b * brightness));
+
+  return (r << 16) | (g << 8) | b;
+}
+
+// ────────── Bloch Ring Factory ──────────
+// Creates a wireframe Bloch representation: 3 orthogonal torus rings + central pip
+function makeBlochRings(color, opacity = 0.85) {
+  const group = new THREE.Group();
+  const r = 0.5; // Ring radius
+
+  const ringGeo = new THREE.TorusGeometry(r, 0.005, 6, 64);
+  const matBright = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+  const matDim = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opacity * 0.5 });
+  const matMerid2 = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opacity * 0.35 });
+
+  // Equator ring (XZ plane)
+  const equator = new THREE.Mesh(ringGeo, matBright);
+  group.add(equator);
+
+  // Meridian 1 (XY plane, rotated 90° around X)
+  const meridian1 = new THREE.Mesh(ringGeo, matDim);
+  meridian1.rotation.x = Math.PI / 2;
+  group.add(meridian1);
+
+  // Meridian 2 (YZ plane, rotated 90° around Y)
+  const meridian2 = new THREE.Mesh(ringGeo, matMerid2);
+  meridian2.rotation.y = Math.PI / 2;
+  group.add(meridian2);
+
+  // Central pip (state indicator)
+  const pipMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+  const pip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 14), pipMat);
+  group.add(pip);
+
+  // Store materials for later brightness animation
+  group.userData = {
+    materials: [matBright, matDim, matMerid2, pipMat],
+    baseOpacities: [opacity, opacity * 0.5, opacity * 0.35, opacity],
+    baseColor: color
+  };
+
+  return group;
+}
+
+// ────────── Fibonacci Sphere Position Calculator ──────────
+function fibonacciSpherePosition(index, total, radius) {
+  // Offset index to avoid placing nodes at exact poles
+  const y = 1 - (index / (total - 1 || 1)) * 2;
+  const ringRadius = Math.sqrt(1 - y * y);
+  const theta = PHI * index;
+
+  return new THREE.Vector3(
+    Math.cos(theta) * ringRadius,
+    y,
+    Math.sin(theta) * ringRadius
+  ).multiplyScalar(radius);
+}
+
+// ────────── Agent Globe Data Structure ──────────
+// Maps agent.id -> { group, blochRings, position, state, spin, spinRate }
+const agentGlobeData = new Map();
+
+// ────────── Create Agent Bloch Rings ──────────
+function createAgentGlobe() {
+  const agents = STATE.agents || [];
+  const n = agents.length;
+
+  agents.forEach((agent, i) => {
+    // Calculate fibonacci sphere position
+    const position = fibonacciSpherePosition(i, n, GLOBE_R);
+
+    // Get identity color from theme (fallback to cryo)
+    const identityHex = THEME.identity[agent.id] || THEME.palette.cryo;
+
+    // Get brightness for current state
+    const brightness = getBrightnessForState(agent.state, THEME.modulator);
+
+    // Modulate color by brightness
+    const modulatedColor = modulateColor(identityHex, brightness);
+
+    // Create Bloch rings with modulated color
+    const blochRings = makeBlochRings(modulatedColor, 0.85);
+    blochRings.position.copy(position);
+
+    // Random spin initialization (visual interest, not state-dependent)
+    const spin = Math.random() * TAU;
+    const spinRate = (0.08 + Math.random() * 0.06) * (Math.random() < 0.5 ? 1 : -1);
+
+    // Add to main group
+    mainGroup.add(blochRings);
+
+    // Store reference for animation
+    agentGlobeData.set(agent.id, {
+      group: blochRings,
+      position: position.clone(),
+      basePosition: position.clone(),
+      state: agent.state,
+      identityHex,
+      spin,
+      spinRate,
+      index: i
+    });
+  });
+}
+
+// ────────── Agent Globe Animation ──────────
+// Called each frame from the main animation loop
+function animateAgentGlobe(t) {
+  const pulseHz = Math.min(THEME.modulator.active_pulse_hz, 1.5); // Clamp to slow-pulse ceiling
+
+  agentGlobeData.forEach((data, agentId) => {
+    const { group, state, identityHex, spin, spinRate } = data;
+
+    // Gentle spin animation (all agents)
+    group.rotation.y = spin + t * spinRate;
+    group.rotation.x = Math.sin(t * 0.15 + data.index) * 0.1;
+
+    // Slow breath pulse for ACTIVE agents only
+    if (state === 'active') {
+      // sin oscillation: 0.8 to 1.0 brightness range (subtle breath)
+      const breathPhase = Math.sin(t * pulseHz * TAU);
+      const breathBrightness = 0.9 + breathPhase * 0.1;
+
+      // Update material opacity to create breath effect
+      const { materials, baseOpacities } = group.userData;
+      materials.forEach((mat, i) => {
+        mat.opacity = baseOpacities[i] * breathBrightness;
+      });
+    }
+  });
+}
+
+// Initialize agent globe
+createAgentGlobe();
+
+// Register agent globe animation hook
+animationHooks.push(animateAgentGlobe);
+
+// ════════════════════════════════════════════════════════════════════════════════
+// CACHE RELAYS — inner-shell octahedron network at radius 2.6
+// Scope: dashboard.canvas.cache-relays
+// Consumes: STATE.agents[], THEME.identity["cache-network-store"], agentGlobeData
+//
+// 4-6 octahedron relay nodes forming an inner cache network shell. Each agent
+// edges to its nearest relay; relays form a 2-neighbor mesh among themselves.
+// Slow sinusoidal breath animation (0.8 rad/s) — well under the 1.5Hz ceiling.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Cache Relay Constants ──────────
+const CACHE_RELAY_RADIUS = 2.6;  // inner radius vs agent GLOBE_R=4.6
+const CACHE_RELAY_COUNT = 5;     // 4-6 relays; 5 for good fibonacci distribution
+const CACHE_RELAY_BREATH_RATE = 0.8; // rad/s — under 1.5Hz ceiling
+
+// Color from theme identity, fallback to cyan-teal (#1E9EBF)
+const CACHE_RELAY_COLOR_HEX = parseInt(
+  (THEME.identity['cache-network-store'] || '#1E9EBF').replace('#', ''),
+  16
+);
+const CACHE_RELAY_COLOR = new THREE.Color(CACHE_RELAY_COLOR_HEX);
+
+// Shared geometry — OctahedronGeometry (faceted look, distinct from agent Bloch rings)
+const CACHE_RELAY_GEO = new THREE.OctahedronGeometry(0.18, 0);
+
+// ────────── Cache Relay Data Structures ──────────
+const cacheRelayGroup = new THREE.Group();
+mainGroup.add(cacheRelayGroup);
+
+// Relay nodes: { id, basePos, wireMesh, fillMesh, haloMesh, wireMat, fillMat, haloMat }
+const cacheRelays = [];
+
+// Agent → relay edges: { agentId, relay, line, mat, geo }
+const cacheRelayEdges = [];
+
+// Relay → relay mesh edges: { ai, bi, line, mat }
+const cacheRelayMesh = [];
+
+// ────────── Create Cache Relay Nodes ──────────
+// Fibonacci-distributed on inner sphere at CACHE_RELAY_RADIUS
+for (let i = 0; i < CACHE_RELAY_COUNT; i++) {
+  // Fibonacci sphere position (same algorithm as agent-globe)
+  const basePos = fibonacciSpherePosition(i, CACHE_RELAY_COUNT, CACHE_RELAY_RADIUS);
+
+  // Wireframe octahedron
+  const wireMat = new THREE.MeshBasicMaterial({
+    color: CACHE_RELAY_COLOR_HEX,
+    transparent: true,
+    opacity: 0.55,
+    wireframe: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const wireMesh = new THREE.Mesh(CACHE_RELAY_GEO, wireMat);
+  wireMesh.position.copy(basePos);
+  cacheRelayGroup.add(wireMesh);
+
+  // Solid fill (back-face, subtle inner glow)
+  const fillMat = new THREE.MeshBasicMaterial({
+    color: CACHE_RELAY_COLOR_HEX,
+    transparent: true,
+    opacity: 0.12,
+    side: THREE.BackSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const fillMesh = new THREE.Mesh(CACHE_RELAY_GEO, fillMat);
+  fillMesh.position.copy(basePos);
+  cacheRelayGroup.add(fillMesh);
+
+  // Soft halo sphere (focus indicator, faint by default)
+  const haloMat = new THREE.MeshBasicMaterial({
+    color: CACHE_RELAY_COLOR_HEX,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide
+  });
+  const haloMesh = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), haloMat);
+  haloMesh.position.copy(basePos);
+  cacheRelayGroup.add(haloMesh);
+
+  cacheRelays.push({
+    id: `cache-relay-${i}`,
+    basePos: basePos.clone(),
+    wireMesh,
+    fillMesh,
+    haloMesh,
+    wireMat,
+    fillMat,
+    haloMat
+  });
+}
+
+// ────────── Agent → Nearest Cache Relay Edges ──────────
+// Each agent connects to its 3D-nearest relay with a subtle line
+agentGlobeData.forEach((agentData, agentId) => {
+  let nearestRelay = null;
+  let nearestDist = Infinity;
+
+  cacheRelays.forEach(relay => {
+    const dist = agentData.basePosition.distanceTo(relay.basePos);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearestRelay = relay;
+    }
+  });
+
+  if (nearestRelay) {
+    // Line geometry from agent position to relay position
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([
+      agentData.basePosition.x, agentData.basePosition.y, agentData.basePosition.z,
+      nearestRelay.basePos.x, nearestRelay.basePos.y, nearestRelay.basePos.z
+    ], 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color: CACHE_RELAY_COLOR_HEX,
+      transparent: true,
+      opacity: 0.10,
+      blending: THREE.AdditiveBlending
+    });
+
+    const line = new THREE.Line(geo, mat);
+    cacheRelayGroup.add(line);
+
+    cacheRelayEdges.push({
+      agentId,
+      relay: nearestRelay,
+      line,
+      mat,
+      geo
+    });
+
+    // Store relay reference on agent data for other leaves (pulses, etc.)
+    agentData.cacheRelay = nearestRelay;
+  }
+});
+
+// ────────── Relay → Relay Mesh (2-neighbor connectivity) ──────────
+// Each relay connects to its 2 nearest neighbors, avoiding duplicate edges
+cacheRelays.forEach((relayA, ai) => {
+  // Calculate distances to all other relays
+  const distances = cacheRelays
+    .map((relayB, bi) => ({
+      relay: relayB,
+      bi,
+      dist: relayA.basePos.distanceTo(relayB.basePos)
+    }))
+    .filter(x => x.bi !== ai)
+    .sort((a, b) => a.dist - b.dist);
+
+  // Connect to 2 nearest neighbors
+  distances.slice(0, 2).forEach(({ relay: relayB, bi }) => {
+    // Avoid duplicate edges (A→B and B→A)
+    const edgeExists = cacheRelayMesh.some(
+      e => (e.ai === ai && e.bi === bi) || (e.ai === bi && e.bi === ai)
+    );
+    if (edgeExists) return;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([
+      relayA.basePos.x, relayA.basePos.y, relayA.basePos.z,
+      relayB.basePos.x, relayB.basePos.y, relayB.basePos.z
+    ], 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color: CACHE_RELAY_COLOR_HEX,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending
+    });
+
+    const line = new THREE.Line(geo, mat);
+    cacheRelayGroup.add(line);
+
+    cacheRelayMesh.push({ ai, bi, line, mat });
+  });
+});
+
+// ────────── Cache Relay Animation ──────────
+// Slow sinusoidal breath (0.8 rad/s) — well under 1.5Hz ceiling
+function animateCacheRelays(t) {
+  cacheRelays.forEach((relay, ri) => {
+    // Slow breath: sin(t * 0.8 + relayIndex * 0.9)
+    // 0.8 rad/s ≈ 0.127 Hz — safely under 1.5Hz ceiling
+    const breath = (Math.sin(t * CACHE_RELAY_BREATH_RATE + ri * 0.9) + 1) * 0.5;
+
+    // Modulate wireframe opacity (0.55 base + breath variation)
+    const baseWireOpacity = 0.55;
+    relay.wireMat.opacity = baseWireOpacity + breath * 0.25;
+
+    // Modulate fill opacity (0.10 base + breath variation)
+    const baseFillOpacity = 0.10;
+    relay.fillMat.opacity = baseFillOpacity + breath * 0.08;
+
+    // Halo: very subtle breath (only visible during focus, handled by other leaves)
+    relay.haloMat.opacity = breath * 0.05;
+
+    // Very slow self-rotation (0.18 rad/s)
+    relay.wireMesh.rotation.y = t * 0.18 + ri;
+    relay.fillMesh.rotation.y = t * 0.18 + ri;
+
+    // Gentle breath scale (1.0 to 1.06)
+    const scale = 1.0 + breath * 0.06;
+    relay.wireMesh.scale.setScalar(scale);
+    relay.fillMesh.scale.setScalar(scale);
+  });
+
+  // Relay mesh edges — subtle pulse in unison
+  const meshBreath = (Math.sin(t * CACHE_RELAY_BREATH_RATE * 0.7) + 1) * 0.5;
+  cacheRelayMesh.forEach(edge => {
+    edge.mat.opacity = 0.14 + meshBreath * 0.04;
+  });
+}
+
+// Register cache relay animation hook
+animationHooks.push(animateCacheRelays);
+
+// ════════════════════════════════════════════════════════════════════════════════
+// PULSES — slow directional packets on mesh edges
+// Scope: dashboard.canvas.pulses
+// Three pulse families: routing (agent→agent, 6s), cache-query (leaf→relay, 3s),
+// dashflow (agent→leaf, 4s). All ≥ 1.5s traversal per slow-pulse discipline.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Pulse Duration Constants (all ≥ 1.5s per slow-pulse discipline) ──────────
+const ROUTING_PACKET_DURATION = 6.0;   // seconds, agent→agent traversal
+const CACHE_PULSE_DURATION = 3.0;      // seconds, leaf→relay traversal
+const DASHFLOW_DURATION = 4.0;         // seconds, agent→leaf traversal
+const RELAY_DIM_DURATION = 1.6;        // seconds, miss-triggered relay dim decay
+const TRAIL_COUNT = 6;                 // trail segments per packet
+
+// ────────── Routing Mesh — edges between agents ──────────
+// Build edges for routing packets: each agent connects to 2-3 nearest neighbors
+const routingEdges = [];
+
+function buildRoutingEdges() {
+  const agents = Array.from(agentGlobeData.values());
+  if (agents.length < 2) return;
+
+  // Each agent connects to its 2 nearest neighbors (undirected mesh)
+  const edgeSet = new Set();
+  agents.forEach((a, ai) => {
+    const dists = agents
+      .map((b, bi) => ({ b, bi, d: a.position.distanceTo(b.position) }))
+      .filter(x => x.bi !== ai)
+      .sort((x, y) => x.d - y.d);
+
+    // Connect to 2 nearest
+    dists.slice(0, 2).forEach(({ b, bi }) => {
+      const key = ai < bi ? `${ai}-${bi}` : `${bi}-${ai}`;
+      if (edgeSet.has(key)) return;
+      edgeSet.add(key);
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute([
+        a.position.x, a.position.y, a.position.z,
+        b.position.x, b.position.y, b.position.z
+      ], 3));
+      const mat = new THREE.LineBasicMaterial({
+        color: 0x232B3D,
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.AdditiveBlending
+      });
+      const line = new THREE.Line(geo, mat);
+      mainGroup.add(line);
+      routingEdges.push({ from: a, to: b, line, mat, geo });
+    });
+  });
+}
+
+buildRoutingEdges();
+
+// ────────── Active Packet Pool ──────────
+// All pulse types (routing, cache-query, dashflow) share this array
+const activePackets = [];
+
+// ────────── Packet Spawn Helper ──────────
+// Creates a trailed particle that travels from startPos to endPos
+function spawnPacket(opts) {
+  // opts: { type, startPos, endPos, duration, color, onComplete? }
+  const trailGroup = new THREE.Group();
+  const trail = [];
+
+  for (let i = 0; i < TRAIL_COUNT; i++) {
+    const radius = 0.06 - i * 0.007;
+    const geo = new THREE.SphereGeometry(radius, 8, 8);
+    const mat = new THREE.MeshBasicMaterial({
+      color: opts.color,
+      transparent: true,
+      opacity: 0.95 - i * 0.13,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(opts.startPos);
+    trail.push({ mesh, mat, baseOpacity: 0.95 - i * 0.13 });
+    trailGroup.add(mesh);
+  }
+
+  mainGroup.add(trailGroup);
+
+  activePackets.push({
+    type: opts.type,
+    trail,
+    trailGroup,
+    startPos: opts.startPos.clone(),
+    endPos: opts.endPos.clone(),
+    t: 0,
+    duration: opts.duration,
+    color: opts.color,
+    onComplete: opts.onComplete
+  });
+}
+
+// ────────── Event Tracking ──────────
+// Track processed events to avoid re-spawning packets
+const seenEventTs = new Set();       // lifecycle events
+const seenCacheEventTs = new Set();  // cache events
+
+// Track relay dim states (relay index → expiry timestamp in seconds)
+const relayDimUntil = new Map();
+
+// Track leaf state transitions for dashflow
+const prevLeafStates = new Map();
+
+// ────────── Routing Packets — agent→agent, 6s ──────────
+// Triggered by lifecycle events in STATE.events
+function checkAndSpawnRoutingPackets() {
+  if (routingEdges.length === 0) return;
+
+  // Look for recent lifecycle events
+  const lifecycleEvents = (STATE.events || []).filter(e => e.category === 'lifecycle');
+
+  lifecycleEvents.forEach(evt => {
+    if (seenEventTs.has(evt.ts)) return;
+    seenEventTs.add(evt.ts);
+
+    // Pick a random edge to animate (lifecycle events don't specify source/target)
+    const edge = routingEdges[Math.floor(Math.random() * routingEdges.length)];
+    if (!edge) return;
+
+    // Determine direction randomly
+    const reverse = Math.random() < 0.5;
+    const start = reverse ? edge.to.position : edge.from.position;
+    const end = reverse ? edge.from.position : edge.to.position;
+
+    spawnPacket({
+      type: 'routing',
+      startPos: start,
+      endPos: end,
+      duration: ROUTING_PACKET_DURATION,
+      color: parseInt(THEME.palette.cryo.replace('#', ''), 16)
+    });
+  });
+}
+
+// ────────── Cache Query Pulses — leaf→relay, 3s ──────────
+// Cyan (cryo) for hit, gold (warn) for miss; miss triggers brief relay dim
+function checkAndSpawnCachePulses() {
+  // Need both cache relays and leaf data
+  if (cacheRelays.length === 0) return;
+
+  const cacheEvents = (STATE.events || []).filter(
+    e => e.category === 'cache' &&
+      (e.short_type === 'cache · hit' || e.short_type === 'cache · miss')
+  );
+
+  cacheEvents.forEach(evt => {
+    if (seenCacheEventTs.has(evt.ts)) return;
+    seenCacheEventTs.add(evt.ts);
+
+    const isHit = evt.short_type === 'cache · hit';
+    const color = isHit
+      ? parseInt(THEME.palette.cryo.replace('#', ''), 16)
+      : parseInt(THEME.severity.warn.replace('#', ''), 16);
+
+    // Find a leaf to spawn from (ideally from evt.source biome)
+    let startPos = null;
+    const sourceBiomeId = evt.source;
+
+    // Try to find leaf position from leafMeshData (set by leaves-and-micros leaf)
+    const leafData = window.__DASHBOARD_CANVAS__?.leafMeshData;
+
+    if (leafData) {
+      // Try to find leaf from source biome
+      for (const [leafId, lData] of leafData.entries()) {
+        if (lData.parentAgentId === sourceBiomeId && lData.state === 'active') {
+          const agentData = agentGlobeData.get(sourceBiomeId);
+          if (agentData) {
+            startPos = lData.position.clone().add(agentData.position);
+            break;
+          }
+        }
+      }
+
+      // Fallback: pick any active leaf
+      if (!startPos) {
+        for (const [leafId, lData] of leafData.entries()) {
+          if (lData.state === 'active') {
+            const agentData = agentGlobeData.get(lData.parentAgentId);
+            if (agentData) {
+              startPos = lData.position.clone().add(agentData.position);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Fallback: use random agent position
+    if (!startPos && agentGlobeData.size > 0) {
+      const agents = Array.from(agentGlobeData.values());
+      startPos = agents[Math.floor(Math.random() * agents.length)].position.clone();
+    }
+
+    if (!startPos) return;
+
+    // Find nearest relay
+    let nearestRelay = null;
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    cacheRelays.forEach((relay, idx) => {
+      const d = startPos.distanceTo(relay.basePos);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearestRelay = relay;
+        nearestIdx = idx;
+      }
+    });
+
+    if (!nearestRelay) return;
+
+    // Spawn the pulse
+    const relayIdx = nearestIdx;
+    spawnPacket({
+      type: 'cache',
+      startPos: startPos,
+      endPos: nearestRelay.basePos.clone(),
+      duration: CACHE_PULSE_DURATION,
+      color: color,
+      onComplete: !isHit ? () => {
+        // On miss, trigger relay dim (1.6s decay)
+        const now = performance.now() / 1000;
+        relayDimUntil.set(relayIdx, now + RELAY_DIM_DURATION);
+      } : undefined
+    });
+  });
+}
+
+// ────────── Dashflow Pulses — agent→leaf, 4s ──────────
+// Triggered when leaf transitions to 'active' state
+function checkAndSpawnDashflowPulses() {
+  const leafData = window.__DASHBOARD_CANVAS__?.leafMeshData;
+  if (!leafData) return;
+
+  // Check each leaf for active transition
+  for (const [leafId, lData] of leafData.entries()) {
+    const prevState = prevLeafStates.get(leafId);
+    const currState = lData.state;
+
+    if (currState === 'active' && prevState !== 'active') {
+      // Leaf just became active — spawn dashflow pulse from parent agent to leaf
+      const agentData = agentGlobeData.get(lData.parentAgentId);
+      if (agentData) {
+        const startPos = agentData.position.clone();
+        const endPos = lData.position.clone().add(agentData.position);
+
+        // Color: use parent agent's identity color
+        const colorHex = THEME.identity[lData.parentAgentId] || THEME.palette.cryo;
+        const color = parseInt(colorHex.replace('#', ''), 16);
+
+        spawnPacket({
+          type: 'dashflow',
+          startPos: startPos,
+          endPos: endPos,
+          duration: DASHFLOW_DURATION,
+          color: color
+        });
+      }
+    }
+
+    prevLeafStates.set(leafId, currState);
+  }
+}
+
+// ────────── Apply Relay Dim on Cache Miss ──────────
+// Called each frame to modulate relay opacity during miss dim window
+function applyRelayDimEffects(t) {
+  const nowSec = performance.now() / 1000;
+
+  cacheRelays.forEach((relay, idx) => {
+    const dimUntil = relayDimUntil.get(idx);
+    if (dimUntil && nowSec < dimUntil) {
+      // Calculate remaining dim factor (1.0 at miss arrival → 0.0 at expiry)
+      const remaining = (dimUntil - nowSec) / RELAY_DIM_DURATION;
+      const dimFactor = 0.5 + remaining * 0.5; // 0.5 to 1.0 (inverted: more dim at start)
+      relay.wireMat.opacity *= dimFactor;
+      relay.fillMat.opacity *= dimFactor;
+    }
+  });
+}
+
+// ────────── Pulse Animation Loop ──────────
+let lastPulseTime = 0;
+
+function animatePulses(t) {
+  // Calculate delta time
+  const dt = lastPulseTime > 0 ? t - lastPulseTime : 0.016;
+  lastPulseTime = t;
+
+  // Check for new packets to spawn
+  checkAndSpawnRoutingPackets();
+  checkAndSpawnCachePulses();
+  checkAndSpawnDashflowPulses();
+
+  // Animate active packets
+  for (let i = activePackets.length - 1; i >= 0; i--) {
+    const p = activePackets[i];
+    p.t += dt / p.duration;
+
+    if (p.t >= 1) {
+      // Packet completed
+      if (p.onComplete) p.onComplete();
+      mainGroup.remove(p.trailGroup);
+      activePackets.splice(i, 1);
+      continue;
+    }
+
+    // Interpolate trail positions along the path
+    const tt = p.t;
+    p.trail.forEach((seg, idx) => {
+      // Stagger trail segments slightly behind the head
+      const segT = Math.max(0, tt - idx * 0.012);
+      seg.mesh.position.set(
+        p.startPos.x * (1 - segT) + p.endPos.x * segT,
+        p.startPos.y * (1 - segT) + p.endPos.y * segT,
+        p.startPos.z * (1 - segT) + p.endPos.z * segT
+      );
+      // Fade in then out (sin curve for smooth opacity)
+      seg.mat.opacity = seg.baseOpacity * Math.sin(tt * Math.PI);
+    });
+  }
+
+  // Apply relay dim effects (after cache-relays animation has run)
+  applyRelayDimEffects(t);
+
+  // Clean up old seen events (keep last 200 to prevent memory growth)
+  if (seenEventTs.size > 300) {
+    const arr = Array.from(seenEventTs);
+    arr.slice(0, 100).forEach(ts => seenEventTs.delete(ts));
+  }
+  if (seenCacheEventTs.size > 300) {
+    const arr = Array.from(seenCacheEventTs);
+    arr.slice(0, 100).forEach(ts => seenCacheEventTs.delete(ts));
+  }
+}
+
+// Register pulse animation hook
+animationHooks.push(animatePulses);
+
+// ════════════════════════════════════════════════════════════════════════════════
+// ADAPTIVE ZOOM — three presets + lerp-based wheel rebound
+// Scope: dashboard.canvas.adaptive-zoom
+// Consumes: camera, controls, renderer, agentGlobeData
+//
+// Three presets: globe d=14, agents d=7.5, leaves d=2.8 (per HYPHA spec)
+// Lerp 0.07 per frame toward target; wheel rebound snaps to nearest preset.
+// Click agent → 'agents' preset; click leaf → 'leaves' preset;
+// Double-click empty space → 'globe' preset. Escape returns to globe.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Zoom Preset Configuration ──────────
+const ZOOM_PRESETS = {
+  globe:  { distance: 14,   label: 'globe',  index: 0 },
+  agents: { distance: 7.5,  label: 'agents', index: 1 },
+  leaves: { distance: 2.8,  label: 'leaves', index: 2 }
+};
+const ZOOM_LEVELS = ['globe', 'agents', 'leaves'];
+const ZOOM_LERP_FACTOR = 0.07;  // per-frame lerp toward target (per HYPHA spec)
+
+// ────────── Zoom State ──────────
+let currentZoomPreset = 'globe';
+let zoomDistanceTarget = ZOOM_PRESETS.globe.distance;
+let zoomDistanceCurrent = ZOOM_PRESETS.globe.distance;
+
+// Focus target — module-local ref, dispatched via CustomEvent for dashboard-console
+// null = no focus; { type: 'agent'|'leaf', id: string, agentId?: string }
+let focusTarget = null;
+let focusPosition = new THREE.Vector3(0, 0, 0); // Lerp target for camera lookAt
+
+// ────────── Zoom Preset Controller ──────────
+function setZoomPreset(presetName, options = {}) {
+  const preset = ZOOM_PRESETS[presetName];
+  if (!preset) return;
+
+  currentZoomPreset = presetName;
+  zoomDistanceTarget = preset.distance;
+
+  // Dispatch event for dashboard-console to update zoom readout (if present)
+  document.dispatchEvent(new CustomEvent('dashboard:zoom-change', {
+    detail: { preset: presetName, distance: preset.distance }
+  }));
+}
+
+function getZoomPresetIndex() {
+  return ZOOM_PRESETS[currentZoomPreset]?.index || 0;
+}
+
+// ────────── Nearest Preset Calculator ──────────
+// Used for wheel rebound: finds the closest preset to current zoom distance
+function findNearestPreset(distance) {
+  // Threshold midpoints between presets
+  const agentsLeavesThreshold = (ZOOM_PRESETS.agents.distance + ZOOM_PRESETS.leaves.distance) / 2;
+  const globeAgentsThreshold = (ZOOM_PRESETS.globe.distance + ZOOM_PRESETS.agents.distance) / 2;
+
+  if (distance < agentsLeavesThreshold) return 'leaves';
+  if (distance < globeAgentsThreshold) return 'agents';
+  return 'globe';
+}
+
+// ────────── Wheel Zoom Handler (Custom, Rebound to Preset) ──────────
+// OrbitControls zoom is disabled (controls.enableZoom = false in scaffold)
+// This handler manages wheel zoom with rebound to nearest preset on release.
+let wheelReboundTimeout = null;
+const WHEEL_REBOUND_DELAY = 220; // ms after wheel stops before snapping to preset
+
+renderer.domElement.addEventListener('wheel', (e) => {
+  e.preventDefault();
+
+  // Adjust target distance based on scroll delta
+  // Scale factor 0.015 matches v9.4 feel
+  zoomDistanceTarget = Math.max(1.5, Math.min(28, zoomDistanceTarget + e.deltaY * 0.015));
+
+  // Find nearest preset for readout update (but don't snap yet)
+  const nearest = findNearestPreset(zoomDistanceTarget);
+  if (nearest !== currentZoomPreset) {
+    currentZoomPreset = nearest;
+    // Dispatch interim readout update
+    document.dispatchEvent(new CustomEvent('dashboard:zoom-change', {
+      detail: { preset: nearest, distance: zoomDistanceTarget, interim: true }
+    }));
+  }
+
+  // Clear any pending rebound, set new one
+  if (wheelReboundTimeout) clearTimeout(wheelReboundTimeout);
+  wheelReboundTimeout = setTimeout(() => {
+    // Rebound: snap to the nearest preset
+    const snapTo = findNearestPreset(zoomDistanceCurrent);
+    setZoomPreset(snapTo);
+  }, WHEEL_REBOUND_DELAY);
+}, { passive: false });
+
+// ────────── Focus Target Controller ──────────
+// Click on agent → preset 'agents'; click on leaf → preset 'leaves'
+// Double-click empty space → preset 'globe'
+
+function setFocusTarget(target) {
+  focusTarget = target;
+
+  if (!target) {
+    // Unfocus: return to origin
+    focusPosition.set(0, 0, 0);
+    document.dispatchEvent(new CustomEvent('dashboard:focus-change', {
+      detail: { target: null }
+    }));
+    return;
+  }
+
+  if (target.type === 'agent') {
+    const agentData = agentGlobeData.get(target.id);
+    if (agentData) {
+      focusPosition.copy(agentData.position);
+    }
+    setZoomPreset('agents');
+  } else if (target.type === 'leaf') {
+    // Leaf focus: zoom to leaves level
+    // Position comes from leafMeshData (set by dashboard.canvas.leaves-and-micros)
+    const leafData = window.__DASHBOARD_CANVAS__?.leafMeshData?.get(target.id);
+    if (leafData) {
+      const parentAgent = agentGlobeData.get(leafData.parentAgentId);
+      if (parentAgent) {
+        focusPosition.copy(leafData.position).add(parentAgent.position);
+      }
+    } else if (target.agentId) {
+      // Fallback: focus on the parent agent's position
+      const agentData = agentGlobeData.get(target.agentId);
+      if (agentData) {
+        focusPosition.copy(agentData.position);
+      }
+    }
+    setZoomPreset('leaves');
+  }
+
+  // Dispatch focus change event for dashboard-console
+  document.dispatchEvent(new CustomEvent('dashboard:focus-change', {
+    detail: { target }
+  }));
+}
+
+// ────────── Raycaster for Click Detection ──────────
+const raycaster = new THREE.Raycaster();
+raycaster.params.Mesh = { threshold: 0.05 };
+const pointerNDC = new THREE.Vector2();
+
+// Build hit targets from agent globe data (central pips are clickable)
+function getAgentHitTargets() {
+  const targets = [];
+  agentGlobeData.forEach((data, agentId) => {
+    // Each Bloch ring group has a central pip (SphereGeometry) — last child
+    const children = data.group.children;
+    const pip = children[children.length - 1]; // Central pip sphere
+    if (pip && pip.isMesh) {
+      pip.userData = { kind: 'agent', agentId: agentId };
+      targets.push(pip);
+    }
+  });
+  return targets;
+}
+
+// Build hit targets from leaf mesh data (if available)
+function getLeafHitTargets() {
+  const targets = [];
+  const leafData = window.__DASHBOARD_CANVAS__?.leafMeshData;
+  if (!leafData) return targets;
+
+  leafData.forEach((lData, leafId) => {
+    // Leaf meshes have a fill sphere that's good for hit testing
+    if (lData.fillMesh && lData.fillMesh.isMesh) {
+      lData.fillMesh.userData = {
+        kind: 'leaf',
+        leafId: leafId,
+        agentId: lData.parentAgentId
+      };
+      targets.push(lData.fillMesh);
+    }
+  });
+  return targets;
+}
+
+// Pointer tracking for click detection
+let pointerDownPos = null;
+let lastClickTime = 0;
+const DOUBLE_CLICK_THRESHOLD = 350; // ms
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  pointerDownPos = { x: e.clientX, y: e.clientY };
+});
+
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!pointerDownPos) return;
+
+  const dx = e.clientX - pointerDownPos.x;
+  const dy = e.clientY - pointerDownPos.y;
+  const moved = Math.sqrt(dx * dx + dy * dy);
+  pointerDownPos = null;
+
+  // If dragged more than 4px, it's a drag, not a click
+  if (moved > 4) return;
+
+  // Update NDC for raycaster
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  pointerNDC.y = ((e.clientY - rect.top) / rect.height) * -2 + 1;
+  raycaster.setFromCamera(pointerNDC, camera);
+
+  // Check for leaf hits first (only when zoomed in enough)
+  let hit = null;
+  if (zoomDistanceCurrent < 10) {
+    const leafTargets = getLeafHitTargets();
+    const leafHits = raycaster.intersectObjects(leafTargets, false);
+    if (leafHits.length > 0) {
+      hit = leafHits[0].object.userData;
+    }
+  }
+
+  // Then check for agent hits
+  if (!hit) {
+    const agentTargets = getAgentHitTargets();
+    const agentHits = raycaster.intersectObjects(agentTargets, false);
+    if (agentHits.length > 0) {
+      hit = agentHits[0].object.userData;
+    }
+  }
+
+  const now = performance.now();
+  const isDoubleClick = (now - lastClickTime) < DOUBLE_CLICK_THRESHOLD;
+  lastClickTime = now;
+
+  if (hit) {
+    if (hit.kind === 'leaf') {
+      // Click on leaf → focus and zoom to 'leaves' preset
+      setFocusTarget({ type: 'leaf', id: hit.leafId, agentId: hit.agentId });
+    } else if (hit.kind === 'agent') {
+      // Single click on agent → focus and zoom to 'agents' preset
+      setFocusTarget({ type: 'agent', id: hit.agentId });
+    }
+  } else if (isDoubleClick) {
+    // Double-click on empty space → return to globe view, clear focus
+    setFocusTarget(null);
+    setZoomPreset('globe');
+  }
+});
+
+// Escape key clears focus and returns to globe
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    setFocusTarget(null);
+    setZoomPreset('globe');
+  }
+});
+
+// ────────── Zoom Animation (per-frame lerp) ──────────
+// Integrates into the main animation loop via animationHooks
+function animateAdaptiveZoom(t) {
+  // Lerp current distance toward target (0.07 per frame, per HYPHA spec)
+  zoomDistanceCurrent += (zoomDistanceTarget - zoomDistanceCurrent) * ZOOM_LERP_FACTOR;
+
+  // Lerp controls.target toward focusPosition (smooth camera panning)
+  controls.target.lerp(focusPosition, 0.06);
+
+  // Maintain camera distance from controls.target
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  camera.position.copy(controls.target).add(dir.multiplyScalar(zoomDistanceCurrent));
+}
+
+// Register zoom animation hook
+animationHooks.push(animateAdaptiveZoom);
+
+// ════════════════════════════════════════════════════════════════════════════════
+// MULTIVERSE VIEW — outer-layer mini-globes for each product
+// Scope: dashboard.canvas.multiverse
+// ════════════════════════════════════════════════════════════════════════════════
+
+const MULTIVERSE_OUTER_RADIUS = 7.8;
+const MULTIVERSE_MINI_GLOBE_R = 1.2;
+
+function makeTextSprite(text, size = 40, color = '#A8B4C5') {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 80;
+  const cx = c.getContext('2d');
+  cx.font = `400 ${size}px "Geist Mono", monospace`;
+  cx.fillStyle = color; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText(text, c.width / 2, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const multiverseGroup = new THREE.Group();
+scene.add(multiverseGroup);
+const productMinis = [];
+
+const MOCK_PRODUCTS = [
+  { id: 'product-alpha', name: 'alpha', tint: 'fruit', agents: 8, leavesDone: 12, leavesTotal: 20, status: 'active' },
+  { id: 'product-beta', name: 'beta', tint: 'flow', agents: 6, leavesDone: 3, leavesTotal: 14, status: 'building' },
+  { id: 'product-gamma', name: 'gamma', tint: 'grow', agents: 5, leavesDone: 8, leavesTotal: 10, status: 'finishing' },
+  { id: 'product-delta', name: 'delta', tint: 'dorm', agents: 4, leavesDone: 0, leavesTotal: 8, status: 'queued' },
+];
+
+function getTintColor(tint) {
+  const m = { fruit: THEME.lifecycle.fruit, flow: THEME.lifecycle.flow, grow: THEME.lifecycle.grow, germ: THEME.lifecycle.germ, dorm: THEME.lifecycle.dorm };
+  return m[tint] || THEME.palette.cryo;
+}
+
+function createMultiverseMiniGlobes() {
+  MOCK_PRODUCTS.forEach((prod, i) => {
+    const g = new THREE.Group();
+    const basePos = fibonacciSpherePosition(i, MOCK_PRODUCTS.length, MULTIVERSE_OUTER_RADIUS);
+    g.position.copy(basePos);
+    const r = MULTIVERSE_MINI_GLOBE_R;
+    const tintHex = getTintColor(prod.tint);
+    const tintColor = parseInt(tintHex.replace('#', ''), 16);
+
+    const ringGeo = new THREE.TorusGeometry(r, 0.005, 6, 64);
+    const ringMat = new THREE.MeshBasicMaterial({ color: tintColor, transparent: true, opacity: 0.75 });
+    const ringMatDim = new THREE.MeshBasicMaterial({ color: tintColor, transparent: true, opacity: 0.35 });
+    const eq = new THREE.Mesh(ringGeo, ringMat); eq.rotation.x = Math.PI / 2; g.add(eq);
+    const md = new THREE.Mesh(ringGeo, ringMatDim); g.add(md);
+
+    const dots = [];
+    for (let ai = 0; ai < prod.agents; ai++) {
+      const y = 1 - (ai / (prod.agents - 1 || 1)) * 2;
+      const ring = Math.sqrt(1 - y * y);
+      const theta = PHI * ai;
+      const done = ai < Math.floor(prod.agents * prod.leavesDone / prod.leavesTotal);
+      const dotColor = done ? parseInt(THEME.lifecycle.fruit.replace('#', ''), 16) : tintColor;
+      const dotMat = new THREE.MeshBasicMaterial({ color: dotColor, transparent: true, opacity: 0.95 });
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), dotMat);
+      dot.position.set(Math.cos(theta) * ring * r, y * r, Math.sin(theta) * ring * r);
+      g.add(dot); dots.push({ mesh: dot, mat: dotMat, done });
+    }
+
+    const coreMat = new THREE.MeshBasicMaterial({ color: tintColor, transparent: true, opacity: 0.9 });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), coreMat); g.add(core);
+    const cryoColor = parseInt(THEME.palette.cryo.replace('#', ''), 16);
+    const haloMat = new THREE.MeshBasicMaterial({ color: cryoColor, transparent: true, opacity: 0, side: THREE.BackSide });
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(r * 1.18, 24, 24), haloMat); g.add(halo);
+    const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(r * 1.25, 16, 16), hitMat);
+    hit.userData = { kind: 'product', productId: prod.id }; g.add(hit);
+
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(prod.name, 36, THEME.palette.ice), transparent: true, opacity: 0.95, depthTest: false }));
+    label.scale.set(2.0, 0.28, 1); label.position.set(0, -r - 0.36, 0); g.add(label);
+    const sub = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeTextSprite(`${prod.leavesDone}/${prod.leavesTotal} · ${prod.status}`, 24, THEME.palette.ice_2), transparent: true, opacity: 0.85, depthTest: false }));
+    sub.scale.set(1.6, 0.18, 1); sub.position.set(0, -r - 0.62, 0); g.add(sub);
+
+    multiverseGroup.add(g);
+    productMinis.push({ id: prod.id, product: prod, group: g, halo, haloMat, hitMesh: hit, eq, md, ringMat, ringMatDim, core, coreMat, basePos: basePos.clone(), dots });
+  });
+}
+
+const multiverseEdges = [];
+function createMultiverseEdges() {
+  const n = productMinis.length; if (n < 2) return;
+  for (let i = 0; i < n; i++) {
+    const from = productMinis[i], to = productMinis[(i + 1) % n];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([from.basePos.x, from.basePos.y, from.basePos.z, to.basePos.x, to.basePos.y, to.basePos.z], 3));
+    const mat = new THREE.LineBasicMaterial({ color: parseInt(THEME.palette.rule.replace('#', ''), 16), transparent: true, opacity: 0.35 });
+    const line = new THREE.Line(geo, mat); multiverseGroup.add(line);
+    multiverseEdges.push({ from, to, line, mat, geo });
+  }
+}
+
+const mvPacketGroup = new THREE.Group(); multiverseGroup.add(mvPacketGroup);
+const mvPackets = [];
+function spawnMvPacket(edge) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10),
+    new THREE.MeshBasicMaterial({ color: parseInt(THEME.palette.cryo.replace('#', ''), 16), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  mvPacketGroup.add(m);
+  mvPackets.push({ edge, mesh: m, t: 0, speed: 0.003 + Math.random() * 0.004, reverse: Math.random() < 0.5 });
+}
+let mvPacketSpawnerId = null;
+function startMvPacketSpawner() {
+  if (mvPacketSpawnerId) return;
+  mvPacketSpawnerId = setInterval(() => {
+    if (STATE.organism.view !== 'multiverse' || multiverseEdges.length === 0) return;
+    spawnMvPacket(multiverseEdges[Math.floor(Math.random() * multiverseEdges.length)]);
+  }, 2000);
+}
+function stopMvPacketSpawner() { if (mvPacketSpawnerId) { clearInterval(mvPacketSpawnerId); mvPacketSpawnerId = null; } }
+
+const mvRaycaster = new THREE.Raycaster(); mvRaycaster.params.Mesh = { threshold: 0.05 };
+const mvNdc = new THREE.Vector2();
+let hoveredProductId = null;
+function getProductHitMeshes() { return productMinis.map(pm => pm.hitMesh); }
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (STATE.organism.view !== 'multiverse') { if (hoveredProductId) { productMinis.forEach(pm => { pm.haloMat.opacity = 0; }); hoveredProductId = null; } return; }
+  const rect = renderer.domElement.getBoundingClientRect();
+  mvNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mvNdc.y = ((e.clientY - rect.top) / rect.height) * -2 + 1;
+  mvRaycaster.setFromCamera(mvNdc, camera);
+  const hits = mvRaycaster.intersectObjects(getProductHitMeshes(), false);
+  let newHoveredId = (hits.length > 0 && hits[0].object.userData.kind === 'product') ? hits[0].object.userData.productId : null;
+  if (newHoveredId !== hoveredProductId) { productMinis.forEach(pm => { pm.haloMat.opacity = (pm.id === newHoveredId) ? 0.18 : 0; }); hoveredProductId = newHoveredId; }
+});
+renderer.domElement.addEventListener('pointerleave', () => { if (hoveredProductId) { productMinis.forEach(pm => { pm.haloMat.opacity = 0; }); hoveredProductId = null; } });
+
+let mvPointerDown = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { if (STATE.organism.view === 'multiverse') mvPointerDown = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (STATE.organism.view !== 'multiverse' || !mvPointerDown) return;
+  const dx = e.clientX - mvPointerDown.x, dy = e.clientY - mvPointerDown.y; mvPointerDown = null;
+  if (Math.sqrt(dx * dx + dy * dy) > 4) return;
+  if (hoveredProductId) { document.dispatchEvent(new CustomEvent('dashboard:enter-product', { detail: { product_id: hoveredProductId } })); enterProductView(hoveredProductId); }
+});
+
+let multiverseCurrentView = STATE.organism.view || 'multiverse';
+let multiverseActiveProductId = STATE.organism.active_product_id || null;
+
+function enterProductView(productId) {
+  multiverseCurrentView = 'product'; multiverseActiveProductId = productId;
+  multiverseGroup.visible = false; stopMvPacketSpawner(); mainGroup.visible = true;
+  document.dispatchEvent(new CustomEvent('dashboard:view-changed', { detail: { view: 'product', product_id: productId } }));
+}
+function enterMultiverseView() {
+  multiverseCurrentView = 'multiverse'; multiverseActiveProductId = null;
+  multiverseGroup.visible = true; mainGroup.visible = true; startMvPacketSpawner();
+  document.dispatchEvent(new CustomEvent('dashboard:view-changed', { detail: { view: 'multiverse', product_id: null } }));
+}
+document.addEventListener('dashboard:exit-product', () => { enterMultiverseView(); });
+
+function animateMultiverse(t) {
+  if (!multiverseGroup.visible) return;
+  productMinis.forEach((pm, pi) => {
+    const breath = (Math.sin(t * 0.6 + pi * 1.2) + 1) * 0.5;
+    pm.coreMat.opacity = 0.7 + breath * 0.25;
+    pm.group.rotation.y = t * 0.08 + pi * 0.5;
+    if (pm.product.status === 'active') pm.dots.forEach((d, di) => { d.mat.opacity = 0.8 + (Math.sin(t * 0.5 + di * 0.4) + 1) * 0.5 * 0.15; });
+  });
+  multiverseEdges.forEach((edge, ei) => { edge.mat.opacity = 0.25 + (Math.sin(t * 0.4 + ei * 0.7) + 1) * 0.5 * 0.12; });
+  for (let i = mvPackets.length - 1; i >= 0; i--) {
+    const pkt = mvPackets[i]; pkt.t += pkt.speed;
+    if (pkt.t >= 1) { mvPacketGroup.remove(pkt.mesh); pkt.mesh.geometry.dispose(); pkt.mesh.material.dispose(); mvPackets.splice(i, 1); continue; }
+    const progress = pkt.reverse ? (1 - pkt.t) : pkt.t;
+    pkt.mesh.position.lerpVectors(pkt.edge.from.basePos, pkt.edge.to.basePos, progress);
+    pkt.mesh.material.opacity = 0.7 * Math.sin(progress * Math.PI);
+  }
+}
+
+createMultiverseMiniGlobes(); createMultiverseEdges();
+if (STATE.organism.view === 'multiverse') { multiverseGroup.visible = true; startMvPacketSpawner(); } else { multiverseGroup.visible = false; }
+animationHooks.push(animateMultiverse);
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// LEAVES AND MICROS — orbital sub-elements around agents (focus-conditional)
+// Scope: dashboard.canvas.leaves-and-micros
+// Consumes: agentGlobeData, STATE, THEME, focusTarget, currentZoomPreset
+//
+// Leaves orbit each agent at radius 1.3 (LEAF_ORBIT_RADIUS).
+// Micros orbit each leaf at radius 0.4 (MICRO_ORBIT_RADIUS), 2-4 per leaf.
+// Color by micro.routing: cheap → theme.lifecycle.germ, full → theme.palette.cryo.
+// Orbit speeds: leaves 0.18 rad/s, micros 0.32 rad/s (under 1.5Hz ceiling).
+// Visible only when parent agent is focused (zoom preset 'agents' or 'leaves').
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Leaves & Micros Constants ──────────
+const LEAF_ORBIT_RADIUS = 1.3;      // Leaves orbit agents at this radius
+const MICRO_ORBIT_RADIUS = 0.4;     // Micros orbit leaves at this radius
+const LEAF_ORBIT_SPEED = 0.18;      // rad/s — slow orbit (well under 1.5Hz ceiling)
+const MICRO_ORBIT_SPEED = 0.32;     // rad/s — slightly faster but still slow
+
+// ────────── Shared Geometry (reused for all leaves/micros) ──────────
+const leafSphereGeo = new THREE.IcosahedronGeometry(0.10, 1);
+const leafWireGeo = new THREE.WireframeGeometry(leafSphereGeo);
+const microSphereGeo = new THREE.SphereGeometry(0.022, 8, 8);
+
+// ────────── Leaves & Micros Storage ──────────
+// Map<agentId, { group: THREE.Group, leaves: Map<leafId, leafData> }>
+const agentLeafMeshes = new Map();
+// Map<leafId, { group, wireMesh, fillMesh, micros: [], parentAgentId, orbitAngle, orbitIncline }>
+const leafMeshData = new Map();
+
+// ────────── Color Helpers ──────────
+const MICRO_CHEAP_COLOR = new THREE.Color(THEME.lifecycle?.germ || '#B7A8E8');  // germ violet
+const MICRO_FULL_COLOR = new THREE.Color(THEME.palette?.cryo || '#7AE5FF');     // cryo cyan
+
+// ────────── Create a Single Leaf Mesh with Micros ──────────
+function createLeafMesh(leaf, agentId, leafIndex, totalLeaves, parentIdentityColor) {
+  const leafGroup = new THREE.Group();
+  leafGroup.name = `leaf-${leaf.id}`;
+
+  // Determine leaf color based on parent agent's identity hue, modulated by leaf state
+  const leafColor = new THREE.Color(parentIdentityColor);
+  const leafBrightness = getBrightnessForState(leaf.state === 'done' ? 'fruit' : leaf.state);
+  leafColor.multiplyScalar(leafBrightness);
+
+  // Wireframe mesh (primary visual)
+  const wireMat = new THREE.LineBasicMaterial({
+    color: leafColor,
+    opacity: 0.85,
+    transparent: true
+  });
+  const wireMesh = new THREE.LineSegments(leafWireGeo, wireMat);
+  leafGroup.add(wireMesh);
+
+  // Solid fill mesh (for hit detection + subtle glow)
+  const fillMat = new THREE.MeshBasicMaterial({
+    color: leafColor,
+    opacity: 0.15,
+    transparent: true
+  });
+  const fillMesh = new THREE.Mesh(leafSphereGeo, fillMat);
+  fillMesh.userData = { kind: 'leaf', leafId: leaf.id, agentId: agentId };
+  leafGroup.add(fillMesh);
+
+  // Calculate orbital parameters for this leaf
+  // Distribute leaves evenly around the agent in a tilted orbit plane
+  const orbitAngle = (leafIndex / Math.max(1, totalLeaves)) * TAU;
+  const orbitIncline = (leafIndex % 3) * 0.3 - 0.3; // Vary orbital plane slightly
+
+  // Create micros orbiting this leaf
+  const micros = [];
+  const microCount = leaf.micros?.length || 0;
+
+  for (let mi = 0; mi < microCount; mi++) {
+    const micro = leaf.micros[mi];
+    const microColor = micro.routing === 'cheap' ? MICRO_CHEAP_COLOR : MICRO_FULL_COLOR;
+
+    const microMat = new THREE.MeshBasicMaterial({
+      color: microColor,
+      opacity: 0.9,
+      transparent: true
+    });
+    const microMesh = new THREE.Mesh(microSphereGeo, microMat);
+    microMesh.name = `micro-${leaf.id}-${mi}`;
+
+    // Initial micro orbit angle (distributed around leaf)
+    const microOrbitAngle = (mi / microCount) * TAU;
+
+    micros.push({
+      mesh: microMesh,
+      orbitAngle: microOrbitAngle,
+      routing: micro.routing,
+      lastHit: micro.last_call_was_hit,
+      fireCount: micro.fire_count
+    });
+
+    leafGroup.add(microMesh);
+  }
+
+  // Store leaf data for animation
+  const leafData = {
+    group: leafGroup,
+    wireMesh,
+    fillMesh,
+    micros,
+    parentAgentId: agentId,
+    leafState: leaf.state,
+    orbitAngle,
+    orbitIncline,
+    leafId: leaf.id
+  };
+
+  leafMeshData.set(leaf.id, leafData);
+
+  return { group: leafGroup, data: leafData };
+}
+
+// ────────── Build All Leaves and Micros ──────────
+function buildLeavesAndMicros() {
+  // Iterate over all agents
+  for (const agent of STATE.agents || []) {
+    const agentData = agentGlobeData.get(agent.id);
+    if (!agentData) continue;
+
+    // Create a group to hold all leaves for this agent
+    const agentLeafGroup = new THREE.Group();
+    agentLeafGroup.name = `leaves-${agent.id}`;
+
+    // Get agent's identity color
+    const identityColor = THEME.identity?.[agent.id] || '#7AE5FF';
+
+    const leaves = agent.leaves || [];
+    const leafMap = new Map();
+
+    for (let li = 0; li < leaves.length; li++) {
+      const leaf = leaves[li];
+      const { group, data } = createLeafMesh(leaf, agent.id, li, leaves.length, identityColor);
+      leafMap.set(leaf.id, data);
+      agentLeafGroup.add(group);
+    }
+
+    // Position the leaf group at the agent's position (leaves orbit around this point)
+    agentLeafGroup.position.copy(agentData.position);
+
+    // Initially hidden — visibility controlled by focus state
+    agentLeafGroup.visible = false;
+
+    // Add to main group and store reference
+    mainGroup.add(agentLeafGroup);
+    agentLeafMeshes.set(agent.id, {
+      group: agentLeafGroup,
+      leaves: leafMap,
+      agentPosition: agentData.position.clone()
+    });
+  }
+}
+
+// ────────── Animate Leaves and Micros ──────────
+function animateLeavesAndMicros(t) {
+  const ft = focusTarget;
+  const zoomPreset = currentZoomPreset;
+
+  // Determine if we should show leaves (only when focused on an agent or leaf)
+  const shouldShowLeaves = ft && (zoomPreset === 'agents' || zoomPreset === 'leaves');
+  const focusedAgentId = ft?.type === 'agent' ? ft.id : (ft?.type === 'leaf' ? ft.agentId : null);
+
+  agentLeafMeshes.forEach((agentLeafData, agentId) => {
+    const isThisAgentFocused = agentId === focusedAgentId;
+    const showThisAgent = shouldShowLeaves && isThisAgentFocused;
+
+    // Animate visibility (instant for now, could add fade)
+    agentLeafData.group.visible = showThisAgent;
+
+    if (!showThisAgent) return;
+
+    // Update each leaf's orbit position
+    agentLeafData.leaves.forEach((leafData) => {
+      // Leaf orbits around agent at LEAF_ORBIT_RADIUS
+      const leafOrbitT = t * LEAF_ORBIT_SPEED + leafData.orbitAngle;
+
+      // Position on orbital circle (with incline for visual interest)
+      const lx = Math.cos(leafOrbitT) * LEAF_ORBIT_RADIUS;
+      const ly = Math.sin(leafData.orbitIncline * 2) * LEAF_ORBIT_RADIUS * 0.3;
+      const lz = Math.sin(leafOrbitT) * LEAF_ORBIT_RADIUS;
+
+      leafData.group.position.set(lx, ly, lz);
+
+      // Rotate leaf mesh slowly for visual interest
+      leafData.wireMesh.rotation.y = t * 0.1;
+      leafData.wireMesh.rotation.x = t * 0.07;
+
+      // Update micros orbiting this leaf
+      leafData.micros.forEach((micro, mi) => {
+        const microOrbitT = t * MICRO_ORBIT_SPEED + micro.orbitAngle;
+
+        // Position micro on its orbit around the leaf
+        const mx = Math.cos(microOrbitT) * MICRO_ORBIT_RADIUS;
+        const my = Math.sin(microOrbitT + mi * 0.5) * MICRO_ORBIT_RADIUS * 0.5;
+        const mz = Math.sin(microOrbitT) * MICRO_ORBIT_RADIUS;
+
+        micro.mesh.position.set(mx, my, mz);
+
+        // Subtle pulse effect on micros that recently fired (hit)
+        if (micro.lastHit) {
+          const pulseScale = 1.0 + Math.sin(t * 2) * 0.15;
+          micro.mesh.scale.setScalar(pulseScale);
+        } else {
+          micro.mesh.scale.setScalar(1.0);
+        }
+      });
+    });
+  });
+}
+
+// Build leaves and micros on initialization
+buildLeavesAndMicros();
+
+// Register animation hook
+animationHooks.push(animateLeavesAndMicros);
+
+// ────────── Export Agent Globe Data for Other Leaves ──────────
+// Other leaves (leaves-and-micros, multiverse, hud-overlays, etc.)
+
+// ────────── Exports for other canvas leaves ──────────
+// Other dashboard.canvas.* leaves will import/access these via window
+window.__DASHBOARD_CANVAS__ = {
+  scene,
+  camera,
+  renderer,
+  controls,
+  mainGroup,
+  GLOBE_R,
+  STATE,
+  THEME,
+  THREE,
+  // Animation hook registry — other canvas leaves register here
+  animationHooks,
+  // Agent globe exports
+  agentGlobeData,
+  fibonacciSpherePosition,
+  makeBlochRings,
+  getBrightnessForState,
+  modulateColor,
+  TAU,
+  PHI,
+  // Cache relay exports (dashboard.canvas.cache-relays)
+  cacheRelayGroup,
+  cacheRelays,
+  cacheRelayEdges,
+  cacheRelayMesh,
+  CACHE_RELAY_RADIUS,
+  CACHE_RELAY_COLOR_HEX,
+  CACHE_RELAY_COLOR,
+  // Pulse exports (dashboard.canvas.pulses)
+  routingEdges,
+  activePackets,
+  spawnPacket,
+  relayDimUntil,
+  ROUTING_PACKET_DURATION,
+  CACHE_PULSE_DURATION,
+  DASHFLOW_DURATION,
+  RELAY_DIM_DURATION,
+  // Adaptive zoom exports (dashboard.canvas.adaptive-zoom)
+  ZOOM_PRESETS,
+  ZOOM_LEVELS,
+  ZOOM_LERP_FACTOR,
+  setZoomPreset,
+  getZoomPresetIndex,
+  findNearestPreset,
+  setFocusTarget,
+  focusTarget: () => focusTarget,
+  focusPosition,
+  zoomDistanceCurrent: () => zoomDistanceCurrent,
+  zoomDistanceTarget: () => zoomDistanceTarget,
+  currentZoomPreset: () => currentZoomPreset,
+  raycaster,
+  getAgentHitTargets,
+  getLeafHitTargets,
+  // Multiverse exports (dashboard.canvas.multiverse)
+  multiverseGroup,
+  productMinis,
+  multiverseEdges,
+  mvPackets,
+  MULTIVERSE_OUTER_RADIUS,
+  MULTIVERSE_MINI_GLOBE_R,
+  enterProductView,
+  enterMultiverseView,
+  makeTextSprite,
+  getProductHitMeshes,
+  // Leaves & micros exports (dashboard.canvas.leaves-and-micros)
+  agentLeafMeshes,
+  leafMeshData,
+  LEAF_ORBIT_RADIUS,
+  MICRO_ORBIT_RADIUS,
+  LEAF_ORBIT_SPEED,
+  MICRO_ORBIT_SPEED,
+  MICRO_CHEAP_COLOR,
+  MICRO_FULL_COLOR,
+  createLeafMesh,
+  buildLeavesAndMicros,
+  animateLeavesAndMicros
+};
+
+// ════════════════════════════════════════════════════════════════════════════════
+// HUD OVERLAYS — targeting reticle, scan beam, depth readout (focus-conditional)
+// Scope: dashboard.canvas.hud-overlays
+// Consumes: camera, renderer, agentGlobeData, focusTarget, currentZoomPreset
+//
+// Targeting reticle: 4 corner brackets that converge on the focused agent.
+// Scan beam: vertical sweep during dive transitions (zoom preset changes).
+// Depth HUD: agent.id + state + iter readout — updates on focus change only.
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── HUD DOM Elements ──────────
+const hudReticle = document.getElementById('target-reticle');
+const hudReticleLbl = document.getElementById('reticle-lbl');
+const hudScanbeam = document.getElementById('scanbeam');
+const hudDepth = document.getElementById('depth-hud');
+const hudDepthTarget = document.getElementById('depth-target');
+const hudDepthState = document.getElementById('depth-state');
+const hudDepthIter = document.getElementById('depth-iter');
+const hudDepthLock = document.getElementById('depth-lock');
+
+// ────────── HUD State ──────────
+let hudPrevZoomPreset = currentZoomPreset;
+let hudFocusEngageProgress = 0;  // 0 = unfocused, 1 = fully locked
+const HUD_ENGAGE_RATE = 0.0104;  // progress per frame (1.6s to fully engage at 60fps: 1/(60*1.6)≈0.0104)
+
+// ────────── Scan Beam Trigger ──────────
+// Triggered on dive transitions (zoom preset change from globe→agents or agents→leaves)
+function triggerScanBeam() {
+  if (!hudScanbeam) return;
+  // Reset and restart animation (reflow trick to restart CSS animation)
+  hudScanbeam.classList.remove('run');
+  void hudScanbeam.offsetWidth; // Force reflow
+  hudScanbeam.classList.add('run');
+}
+
+// Listen for zoom preset changes dispatched by adaptive-zoom
+document.addEventListener('dashboard:zoom-change', (e) => {
+  const newPreset = e.detail?.preset;
+  if (!newPreset) return;
+
+  // Trigger scan beam on dive transitions (zooming in)
+  const isDive = (
+    (hudPrevZoomPreset === 'globe' && newPreset === 'agents') ||
+    (hudPrevZoomPreset === 'agents' && newPreset === 'leaves') ||
+    (hudPrevZoomPreset === 'globe' && newPreset === 'leaves')
+  );
+
+  if (isDive && !e.detail?.interim) {
+    triggerScanBeam();
+  }
+
+  hudPrevZoomPreset = newPreset;
+});
+
+// ────────── Depth HUD Update ──────────
+// Called when focus target changes — updates the depth readout (not per-frame)
+function updateDepthHud(target) {
+  if (!hudDepth) return;
+
+  if (!target) {
+    // No focus: hide depth HUD
+    hudDepth.classList.remove('show');
+    return;
+  }
+
+  // Find agent data
+  let agentId = null;
+  let agentState = '—';
+  let iter = STATE.organism?.iter || 0;
+
+  if (target.type === 'agent') {
+    agentId = target.id;
+    // Find agent state from STATE.agents
+    const agent = STATE.agents?.find(a => a.id === agentId);
+    if (agent) {
+      agentState = agent.state || 'pending';
+    }
+  } else if (target.type === 'leaf') {
+    agentId = target.agentId || target.id;
+    // Find leaf state
+    const parentAgent = STATE.agents?.find(a => a.id === target.agentId);
+    if (parentAgent) {
+      const leaf = parentAgent.leaves?.find(l => l.id === target.id);
+      if (leaf) {
+        agentState = leaf.state || 'pending';
+      }
+    }
+  }
+
+  // Update depth HUD elements
+  if (hudDepthTarget) hudDepthTarget.textContent = agentId || '—';
+  if (hudDepthState) hudDepthState.textContent = agentState;
+  if (hudDepthIter) hudDepthIter.textContent = iter;
+  if (hudDepthLock) hudDepthLock.textContent = agentId || '—';
+
+  // Show depth HUD
+  hudDepth.classList.add('show');
+}
+
+// Listen for focus changes dispatched by adaptive-zoom
+document.addEventListener('dashboard:focus-change', (e) => {
+  const target = e.detail?.target;
+  updateDepthHud(target);
+
+  // Reset engage progress when focus changes
+  if (!target) {
+    hudFocusEngageProgress = 0;
+  }
+});
+
+// ────────── Targeting Reticle Animation ──────────
+// Per-frame update: projects focused agent to screen space, positions reticle
+function animateHudOverlays(t) {
+  const ft = focusTarget;  // Current focus target
+
+  if (!ft || !hudReticle) {
+    // No focus: hide reticle, reset progress
+    if (hudReticle) hudReticle.classList.remove('lock');
+    hudFocusEngageProgress = Math.max(0, hudFocusEngageProgress - HUD_ENGAGE_RATE * 2);
+    return;
+  }
+
+  // Advance engage progress (smoothly approaches 1.0)
+  hudFocusEngageProgress = Math.min(1, hudFocusEngageProgress + HUD_ENGAGE_RATE);
+
+  // Get 3D position of focused target
+  let worldPos = null;
+
+  if (ft.type === 'agent') {
+    const agentData = agentGlobeData.get(ft.id);
+    if (agentData) {
+      worldPos = agentData.position.clone();
+    }
+  } else if (ft.type === 'leaf') {
+    // Leaf position: try leafMeshData first, then fall back to parent agent
+    const leafData = window.__DASHBOARD_CANVAS__?.leafMeshData?.get(ft.id);
+    if (leafData) {
+      const parentAgent = agentGlobeData.get(leafData.parentAgentId);
+      if (parentAgent) {
+        worldPos = leafData.position.clone().add(parentAgent.position);
+      }
+    }
+    if (!worldPos && ft.agentId) {
+      const parentAgent = agentGlobeData.get(ft.agentId);
+      if (parentAgent) {
+        worldPos = parentAgent.position.clone();
+      }
+    }
+  }
+
+  if (!worldPos) {
+    hudReticle.classList.remove('lock');
+    return;
+  }
+
+  // Project 3D position to screen space
+  const projected = worldPos.clone();
+  projected.project(camera);
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  const screenX = (projected.x * 0.5 + 0.5) * rect.width;
+  const screenY = (-projected.y * 0.5 + 0.5) * rect.height;
+
+  // Reticle size: converges from 220px to 80px as engage progress increases (1.6s animation)
+  const maxSize = 220;
+  const minSize = 80;
+  const size = maxSize - (maxSize - minSize) * hudFocusEngageProgress;
+
+  // Position reticle centered on projected point
+  hudReticle.style.left = (screenX - size / 2) + 'px';
+  hudReticle.style.top = (screenY - size / 2) + 'px';
+  hudReticle.style.width = size + 'px';
+  hudReticle.style.height = size + 'px';
+
+  // Show reticle (lock class) when engage progress > 0.15
+  hudReticle.classList.toggle('lock', hudFocusEngageProgress > 0.15);
+
+  // Update reticle label
+  if (hudReticleLbl) {
+    const targetLabel = ft.type === 'agent' ? ft.id : (ft.agentId || ft.id);
+    hudReticleLbl.textContent = `lock · ${targetLabel}`;
+  }
+}
+
+// Register HUD overlay animation hook
+animationHooks.push(animateHudOverlays);
+
+// ────────── Export HUD Overlay Functions ──────────
+// Add to the existing __DASHBOARD_CANVAS__ exports
+window.__DASHBOARD_CANVAS__.triggerScanBeam = triggerScanBeam;
+window.__DASHBOARD_CANVAS__.updateDepthHud = updateDepthHud;
+window.__DASHBOARD_CANVAS__.hudFocusEngageProgress = () => hudFocusEngageProgress;
+
+// ════════════════════════════════════════════════════════════════════════════════
+// TITLEBAR — heartbeat dot, uptime counter, brand seal
+// Scope: dashboard.console.titlebar
+// Consumes: STATE.organism.started_at, THEME.brand, THEME.modulator.active_pulse_hz
+// ════════════════════════════════════════════════════════════════════════════════
+
+// ────────── Titlebar DOM Initialization ──────────
+(function initTitlebar() {
+  const titlebarEl = document.getElementById('titlebar');
+  if (!titlebarEl) return;
+
+  // ── Brand values from theme ──
+  const brand = THEME.brand || {};
+  const logoChar = brand.logo_char || 'Ψ';
+  const title = brand.title || 'mycelium';
+  const tagline = brand.tagline || 'decentralized · live';
+
+  // ── Pulse rate from theme modulator ──
+  // Clamp to slow-pulse discipline: minimum animation duration is 1/(1.5Hz) ≈ 0.667s
+  // But we enforce ≥1.5s duration for any animation, so max Hz is ~0.667Hz
+  // Per HYPHA: theme.modulator.active_pulse_hz capped at 1.5, but animation-duration must be ≥1.5s
+  const pulseHz = Math.min(THEME.modulator?.active_pulse_hz || 0.9, 1.5);
+  // Convert Hz to seconds for one full cycle (animation-duration)
+  // animation-duration = 1 / pulseHz, but enforce minimum 1.5s
+  const pulseDuration = Math.max(1.5, 1 / pulseHz);
+
+  // ── Build titlebar DOM ──
+  titlebarEl.innerHTML = `
+    <div class="brand">
+      <span class="seal">
+        <span class="logo-char">${logoChar}</span>
+        <span class="title">${title}</span>
+      </span>
+      <span class="tagline">${tagline}</span>
+    </div>
+    <div class="titlebar-right">
+      <div class="heartbeat-wrap">
+        <div class="heartbeat" id="titlebar-heartbeat"></div>
+        <span class="uptime" id="titlebar-uptime">00:00:00</span>
+      </div>
+    </div>
+  `;
+
+  // ── Set heartbeat animation-duration from theme ──
+  const heartbeatEl = document.getElementById('titlebar-heartbeat');
+  if (heartbeatEl) {
+    heartbeatEl.style.animationDuration = pulseDuration.toFixed(2) + 's';
+  }
+
+  // ── Uptime counter ──
+  // Computes HH:MM:SS from STATE.organism.started_at
+  const uptimeEl = document.getElementById('titlebar-uptime');
+  const startedAt = STATE.organism?.started_at
+    ? new Date(STATE.organism.started_at).getTime()
+    : Date.now();
+
+  function updateUptime() {
+    if (!uptimeEl) return;
+    const now = Date.now();
+    const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+    uptimeEl.textContent =
+      String(h).padStart(2, '0') + ':' +
+      String(m).padStart(2, '0') + ':' +
+      String(s).padStart(2, '0');
+  }
+
+  // Initial update + 1-second interval
+  updateUptime();
+  const uptimeInterval = setInterval(updateUptime, 1000);
+
+  // ── Export titlebar state for other console leaves ──
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.titlebar = {
+    uptimeInterval,
+    startedAt,
+    pulseDuration,
+    pulseHz
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// PROVIDERS RAIL — top section of right rail
+// Scope: dashboard.console.providers-rail
+// Consumes: STATE.providers[], THEME.identity, THEME.severity, THEME.lifecycle
+//
+// Displays provider status: identity dot, provider name, up/down indicator, latency_ms
+// Reads from state.providers[] per NUTRIENTS §2 ProviderState interface
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initProvidersRail() {
+  const providersListEl = document.getElementById('providers-list');
+  if (!providersListEl) return;
+
+  // ── Latency thresholds for severity coloring ──
+  const LATENCY_SLOW_MS = 500;       // Above this: warn color
+  const LATENCY_VERY_SLOW_MS = 1500; // Above this: alert color
+
+  // ── Render a single provider row ──
+  function renderProviderRow(provider) {
+    // Per NUTRIENTS §2: ProviderState { id: string; up: boolean; latency_ms: number; model: string; }
+    const providerId = provider.id || 'unknown';
+    const isUp = provider.up === true;
+    const latencyMs = typeof provider.latency_ms === 'number' ? provider.latency_ms : null;
+    const model = provider.model || '';
+
+    // Get identity color from theme (fallback to cryo)
+    const identityColor = THEME.identity?.[providerId] || THEME.palette?.cryo || '#7AE5FF';
+
+    // Determine latency class
+    let latencyClass = '';
+    if (latencyMs !== null) {
+      if (latencyMs > LATENCY_VERY_SLOW_MS) {
+        latencyClass = 'very-slow';
+      } else if (latencyMs > LATENCY_SLOW_MS) {
+        latencyClass = 'slow';
+      }
+    }
+
+    // Format latency display
+    const latencyDisplay = latencyMs !== null ? `${latencyMs}ms` : '—';
+
+    // Create row element
+    const row = document.createElement('div');
+    row.className = 'provider-row';
+    row.innerHTML = `
+      <span class="provider-dot" style="background: ${identityColor}; --provider-color: ${identityColor};"></span>
+      <span class="provider-name">${providerId}</span>
+      ${model ? `<span class="provider-model">${model}</span>` : ''}
+      <span class="provider-status ${isUp ? 'up' : ''}"></span>
+      <span class="provider-latency ${latencyClass}">${latencyDisplay}</span>
+    `;
+
+    return row;
+  }
+
+  // ── Render the full providers list ──
+  function renderProvidersList() {
+    // Clear existing content
+    providersListEl.innerHTML = '';
+
+    const providers = STATE.providers || [];
+
+    if (providers.length === 0) {
+      // Empty state
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'empty-state';
+      emptyEl.textContent = 'no providers';
+      providersListEl.appendChild(emptyEl);
+      return;
+    }
+
+    // Render each provider
+    providers.forEach(provider => {
+      const row = renderProviderRow(provider);
+      providersListEl.appendChild(row);
+    });
+  }
+
+  // ── Initial render ──
+  renderProvidersList();
+
+  // ── Export for other console leaves and re-render capability ──
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.providersRail = {
+    renderProvidersList,
+    LATENCY_SLOW_MS,
+    LATENCY_VERY_SLOW_MS
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// AGENTS RAIL — bottom section of right rail
+// Scope: dashboard.console.agents-rail
+// Consumes: STATE.agents[], THEME.identity, THEME.lifecycle, THEME.modulator
+//
+// Displays agent list with:
+//   - 3px left border colored by theme.identity[agent.id] modulated by brightness
+//   - Agent name
+//   - Lifecycle pill (text from agent.state, background from theme.lifecycle)
+//   - Click fires selectAgent → dispatches CustomEvent("dashboard:agent-select")
+//   - Second click pins, third click unpins
+// Per NUTRIENTS §2 AgentState interface
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initAgentsRail() {
+  const agentsListEl = document.getElementById('agents-list');
+  if (!agentsListEl) return;
+
+  // ── State tracking for selection + pinning ──
+  let selectedAgentId = null;
+  let pinnedAgentId = null;
+  let clickCount = 0; // Tracks clicks on same agent for pin/unpin logic
+
+  // ── Map agent.state → modulator key for brightness ──
+  // Per NUTRIENTS §1: modulator has pending_brightness, active_brightness, fruit_brightness, failed_brightness
+  // dorm uses pending_brightness as fallback
+  function mapStateToModulator(state) {
+    switch (state) {
+      case 'pending': return 'pending_brightness';
+      case 'active':  return 'active_brightness';
+      case 'fruit':   return 'fruit_brightness';
+      case 'failed':  return 'failed_brightness';
+      case 'dorm':    return 'pending_brightness'; // dorm uses pending as fallback
+      default:        return 'pending_brightness';
+    }
+  }
+
+  // ── Helper: modulate hex color brightness ──
+  // Takes a hex color and a brightness multiplier (0-1), returns adjusted hex
+  function modulateBrightness(hex, brightness) {
+    if (!hex || typeof brightness !== 'number') return hex;
+    // Parse hex
+    let r, g, b;
+    if (hex.length === 7) {
+      r = parseInt(hex.slice(1, 3), 16);
+      g = parseInt(hex.slice(3, 5), 16);
+      b = parseInt(hex.slice(5, 7), 16);
+    } else if (hex.length === 4) {
+      r = parseInt(hex[1] + hex[1], 16);
+      g = parseInt(hex[2] + hex[2], 16);
+      b = parseInt(hex[3] + hex[3], 16);
+    } else {
+      return hex;
+    }
+    // Apply brightness (simple linear scaling)
+    r = Math.round(r * brightness);
+    g = Math.round(g * brightness);
+    b = Math.round(b * brightness);
+    // Clamp
+    r = Math.min(255, Math.max(0, r));
+    g = Math.min(255, Math.max(0, g));
+    b = Math.min(255, Math.max(0, b));
+    // Convert back to hex
+    return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+  }
+
+  // ── selectAgent: dispatch CustomEvent and open inspect panel ──
+  function selectAgent(agentId) {
+    // Per HYPHA spec: fires CustomEvent("dashboard:agent-select", { detail: agent.id })
+    window.dispatchEvent(new CustomEvent('dashboard:agent-select', { detail: agentId }));
+  }
+
+  // ── Handle agent row click with pin/unpin logic ──
+  // Per HYPHA spec:
+  //   - Click on agent → select + open inspect panel
+  //   - Second click on same agent → pin (sticky open)
+  //   - Third click → unpin + close
+  function handleAgentClick(agentId) {
+    if (selectedAgentId === agentId) {
+      // Same agent clicked again
+      clickCount++;
+      if (clickCount === 2) {
+        // Second click: pin
+        pinnedAgentId = agentId;
+        updateRowStates();
+      } else if (clickCount >= 3) {
+        // Third click: unpin + close
+        pinnedAgentId = null;
+        selectedAgentId = null;
+        clickCount = 0;
+        updateRowStates();
+        // Dispatch close event for inspect panel
+        window.dispatchEvent(new CustomEvent('dashboard:agent-close', { detail: agentId }));
+        return;
+      }
+    } else {
+      // Different agent clicked
+      selectedAgentId = agentId;
+      clickCount = 1;
+      // If we had a pinned agent that wasn't this one, unpin it
+      if (pinnedAgentId && pinnedAgentId !== agentId) {
+        pinnedAgentId = null;
+      }
+      updateRowStates();
+    }
+    // Fire select event
+    selectAgent(agentId);
+  }
+
+  // ── Update row selected/pinned classes ──
+  function updateRowStates() {
+    const rows = agentsListEl.querySelectorAll('.agent-row');
+    rows.forEach(row => {
+      const rowId = row.dataset.agentId;
+      row.classList.toggle('selected', rowId === selectedAgentId);
+      row.classList.toggle('pinned', rowId === pinnedAgentId);
+    });
+  }
+
+  // ── Render a single agent row ──
+  function renderAgentRow(agent) {
+    // Per NUTRIENTS §2: AgentState { id, state, paused, contracts, provider, leaves, history, cost_usd, tokens }
+    const agentId = agent.id || 'unknown';
+    const agentState = agent.state || 'dorm';
+
+    // Get identity color from theme (fallback to cryo)
+    const baseIdentityColor = THEME.identity?.[agentId] || THEME.palette?.cryo || '#7AE5FF';
+
+    // Get brightness modulator based on state
+    const modulatorKey = mapStateToModulator(agentState);
+    const brightness = THEME.modulator?.[modulatorKey] ?? 1.0;
+
+    // Apply brightness modulation to identity color
+    const modulatedColor = modulateBrightness(baseIdentityColor, brightness);
+
+    // Create row element
+    const row = document.createElement('div');
+    row.className = 'agent-row';
+    row.dataset.agentId = agentId;
+    row.style.borderLeftColor = modulatedColor;
+
+    // Check if this row is selected/pinned
+    if (agentId === selectedAgentId) {
+      row.classList.add('selected');
+    }
+    if (agentId === pinnedAgentId) {
+      row.classList.add('pinned');
+    }
+
+    row.innerHTML = `
+      <span class="agent-name">${agentId}</span>
+      <span class="lifecycle-pill ${agentState}">${agentState}</span>
+    `;
+
+    // Click handler
+    row.addEventListener('click', () => handleAgentClick(agentId));
+
+    return row;
+  }
+
+  // ── Render the full agents list ──
+  function renderAgentsList() {
+    // Clear existing content
+    agentsListEl.innerHTML = '';
+
+    const agents = STATE.agents || [];
+
+    if (agents.length === 0) {
+      // Empty state per HYPHA spec: "no agents" when empty
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'empty-state';
+      emptyEl.textContent = 'no agents';
+      agentsListEl.appendChild(emptyEl);
+      return;
+    }
+
+    // Render each agent
+    agents.forEach(agent => {
+      const row = renderAgentRow(agent);
+      agentsListEl.appendChild(row);
+    });
+  }
+
+  // ── Keyboard handler: Esc closes inspect panel ──
+  // Per HYPHA spec: Esc keypress closes (and unpins)
+  function handleKeydown(e) {
+    if (e.key === 'Escape') {
+      if (selectedAgentId) {
+        const prevAgentId = selectedAgentId;
+        pinnedAgentId = null;
+        selectedAgentId = null;
+        clickCount = 0;
+        updateRowStates();
+        // Dispatch close event
+        window.dispatchEvent(new CustomEvent('dashboard:agent-close', { detail: prevAgentId }));
+      }
+    }
+  }
+
+  // ── Listen for keyboard events ──
+  window.addEventListener('keydown', handleKeydown);
+
+  // ── Initial render ──
+  renderAgentsList();
+
+  // ── Export for other console leaves and re-render capability ──
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.agentsRail = {
+    renderAgentsList,
+    selectAgent,
+    getSelectedAgentId: () => selectedAgentId,
+    getPinnedAgentId: () => pinnedAgentId,
+    clearSelection: () => {
+      selectedAgentId = null;
+      pinnedAgentId = null;
+      clickCount = 0;
+      updateRowStates();
+    }
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// METRIC STRIP — 5 core cells + 2 cache cells
+// Scope: dashboard.console.metric-strip
+// Consumes: STATE.agents[], STATE.events[], STATE.alerts[], STATE.cache
+//
+// Cells:
+//   1. Health — ratio of agents not failed/dorm, rendered as % + colored dot
+//   2. Agents · Leaves — count of agents · sum of leaves
+//   3. Spend 24h — sum of agent cost_usd, formatted $N.NN
+//   4. Events — count of events with ts within last 24h
+//   5. Alerts — length of state.alerts (red when > 0)
+//   6. Cache hit % — hits / (hits + misses), "—" if denominator 0
+//   7. Calls saved — sum of saved_tokens from cache.hit events, fallback to hits * 280
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initMetricStrip() {
+  // ── DOM element references ──
+  const healthValEl = document.getElementById('health-val');
+  const healthDotEl = document.getElementById('health-dot');
+  const agentsLeavesValEl = document.getElementById('agents-leaves-val');
+  const spendValEl = document.getElementById('spend-val');
+  const eventsValEl = document.getElementById('events-val');
+  const alertsValEl = document.getElementById('alerts-val');
+  const cacheHitValEl = document.getElementById('cache-hit-val');
+  const callsSavedValEl = document.getElementById('calls-saved-val');
+
+  // ── Track previous values for pulse animation ──
+  const prevValues = {
+    health: null,
+    agentsLeaves: null,
+    spend: null,
+    events: null,
+    alerts: null,
+    cacheHit: null,
+    callsSaved: null
+  };
+
+  // ── Pulse animation helper: triggers 1.5s pulse on value change ──
+  // Per slow-pulse discipline, all animation/transition durations ≥ 1.5s
+  function triggerPulse(metricId) {
+    const metricEl = document.getElementById(metricId);
+    if (!metricEl) return;
+    metricEl.classList.remove('pulse');
+    void metricEl.offsetWidth; // Force reflow to restart animation
+    metricEl.classList.add('pulse');
+    // Remove class after animation completes (1.5s transition + buffer)
+    setTimeout(() => metricEl.classList.remove('pulse'), 3200);
+  }
+
+  // ── Helper: format number with commas ──
+  function formatNumber(n) {
+    if (typeof n !== 'number' || isNaN(n)) return '—';
+    return n.toLocaleString('en-US');
+  }
+
+  // ── Helper: get 24h ago timestamp ──
+  function get24hAgoTimestamp() {
+    return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  // ── Cell 1: Health ──
+  // Ratio of agents not in "failed" or "dorm" state
+  function updateHealth() {
+    const agents = STATE.agents || [];
+    if (agents.length === 0) {
+      if (healthValEl) healthValEl.textContent = '—';
+      if (healthDotEl) healthDotEl.className = 'health-dot';
+      return;
+    }
+
+    const healthyCount = agents.filter(
+      a => a.state !== 'failed' && a.state !== 'dorm'
+    ).length;
+    const healthPct = Math.round((healthyCount / agents.length) * 100);
+    const healthStr = healthPct + '%';
+
+    // Determine severity class for dot
+    let dotClass = 'healthy';
+    if (healthPct < 50) {
+      dotClass = 'crit';
+    } else if (healthPct < 75) {
+      dotClass = 'alert';
+    } else if (healthPct < 90) {
+      dotClass = 'warn';
+    }
+
+    if (healthValEl) healthValEl.textContent = healthStr;
+    if (healthDotEl) healthDotEl.className = 'health-dot ' + dotClass;
+
+    // Pulse on change
+    if (prevValues.health !== healthStr) {
+      triggerPulse('metric-health');
+      prevValues.health = healthStr;
+    }
+  }
+
+  // ── Cell 2: Agents · Leaves ──
+  function updateAgentsLeaves() {
+    const agents = STATE.agents || [];
+    const agentCount = agents.length;
+    const leafCount = agents.reduce((sum, a) => sum + (a.leaves?.length || 0), 0);
+    const value = formatNumber(agentCount) + ' · ' + formatNumber(leafCount);
+
+    if (agentsLeavesValEl) agentsLeavesValEl.textContent = value;
+
+    if (prevValues.agentsLeaves !== value) {
+      triggerPulse('metric-agents');
+      prevValues.agentsLeaves = value;
+    }
+  }
+
+  // ── Cell 3: Spend 24h ──
+  // Sum of agent cost_usd, formatted $N.NN
+  function updateSpend() {
+    const agents = STATE.agents || [];
+    const totalSpend = agents.reduce((sum, a) => sum + (a.cost_usd || 0), 0);
+    const spendStr = '$' + totalSpend.toFixed(2);
+
+    if (spendValEl) spendValEl.textContent = spendStr;
+
+    // Color based on spend threshold (arbitrary: warn > $50, crit > $100)
+    if (spendValEl) {
+      spendValEl.classList.remove('warn', 'crit');
+      if (totalSpend > 100) {
+        spendValEl.classList.add('crit');
+      } else if (totalSpend > 50) {
+        spendValEl.classList.add('warn');
+      }
+    }
+
+    if (prevValues.spend !== spendStr) {
+      triggerPulse('metric-spend');
+      prevValues.spend = spendStr;
+    }
+  }
+
+  // ── Cell 4: Events ──
+  // Count of events with ts within last 24h
+  function updateEvents() {
+    const events = STATE.events || [];
+    const cutoff = get24hAgoTimestamp();
+    const recentEvents = events.filter(e => e.ts >= cutoff);
+    const count = recentEvents.length;
+    const countStr = formatNumber(count);
+
+    if (eventsValEl) eventsValEl.textContent = countStr;
+
+    if (prevValues.events !== countStr) {
+      triggerPulse('metric-events');
+      prevValues.events = countStr;
+    }
+  }
+
+  // ── Cell 5: Alerts ──
+  // Length of state.alerts (red when > 0)
+  function updateAlerts() {
+    const alerts = STATE.alerts || [];
+    const count = alerts.length;
+    const countStr = formatNumber(count);
+
+    if (alertsValEl) {
+      alertsValEl.textContent = countStr;
+      alertsValEl.classList.remove('crit', 'warn', 'alert');
+      if (count > 0) {
+        // Color by highest severity in alerts
+        const hasCrit = alerts.some(a => a.severity === 'crit');
+        const hasAlert = alerts.some(a => a.severity === 'alert');
+        if (hasCrit) {
+          alertsValEl.classList.add('crit');
+        } else if (hasAlert) {
+          alertsValEl.classList.add('alert');
+        } else {
+          alertsValEl.classList.add('warn');
+        }
+      }
+    }
+
+    if (prevValues.alerts !== countStr) {
+      triggerPulse('metric-alerts');
+      prevValues.alerts = countStr;
+    }
+  }
+
+  // ── Cell 6: Cache hit % ──
+  // hits / (hits + misses), "—" if denominator 0
+  function updateCacheHitPct() {
+    const cache = STATE.cache || { hits: 0, misses: 0 };
+    const hits = cache.hits || 0;
+    const misses = cache.misses || 0;
+    const total = hits + misses;
+
+    let pctStr = '—';
+    if (total > 0) {
+      const pct = Math.round((hits / total) * 100);
+      pctStr = pct + '%';
+    }
+
+    if (cacheHitValEl) cacheHitValEl.textContent = pctStr;
+
+    if (prevValues.cacheHit !== pctStr) {
+      triggerPulse('metric-cache-hit');
+      prevValues.cacheHit = pctStr;
+    }
+  }
+
+  // ── Cell 7: Calls saved ──
+  // Sum of saved_tokens from cache.hit events in state.events,
+  // or fall back to state.cache.hits * 280
+  function updateCallsSaved() {
+    const events = STATE.events || [];
+    const cache = STATE.cache || { hits: 0 };
+
+    // Try to sum saved_tokens from cache.hit events
+    // These come through as EventEntry with short_type "cache · hit"
+    // and the actual saved_tokens is in the raw event (not in EventEntry shape)
+    // Per NUTRIENTS §3: cache.hit events have saved_tokens
+    // However, EventEntry doesn't expose saved_tokens — fall back to estimate
+
+    // Fallback: hits * 280 (per HYPHA spec)
+    const hits = cache.hits || 0;
+    const estimatedSaved = hits * 280;
+
+    // Try to find actual saved_tokens from cache.hit events
+    // In the EventEntry shape, there's no saved_tokens field,
+    // so we use the estimate for now
+    // A more advanced version would aggregate from raw JSONL events
+
+    let savedStr = '—';
+    if (hits > 0) {
+      // Format with commas, show as "tokens saved"
+      savedStr = formatNumber(estimatedSaved);
+    }
+
+    if (callsSavedValEl) callsSavedValEl.textContent = savedStr;
+
+    if (prevValues.callsSaved !== savedStr) {
+      triggerPulse('metric-calls-saved');
+      prevValues.callsSaved = savedStr;
+    }
+  }
+
+  // ── Update all metrics ──
+  function updateAllMetrics() {
+    updateHealth();
+    updateAgentsLeaves();
+    updateSpend();
+    updateEvents();
+    updateAlerts();
+    updateCacheHitPct();
+    updateCallsSaved();
+  }
+
+  // ── Initial render ──
+  updateAllMetrics();
+
+  // ── Periodic refresh (every 1.4s to match cache.pulse cadence) ──
+  const metricRefreshInterval = setInterval(updateAllMetrics, 1400);
+
+  // ── Export metric strip functions for other console leaves ──
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.metricStrip = {
+    updateAllMetrics,
+    updateHealth,
+    updateAgentsLeaves,
+    updateSpend,
+    updateEvents,
+    updateAlerts,
+    updateCacheHitPct,
+    updateCallsSaved,
+    metricRefreshInterval,
+    triggerPulse
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// FEEDBAR — dashboard.console.feedbar
+// Scope: filter chips (all/lifecycle/nutrient/cost/health/anomaly/cache)
+// cache chip pivots canvas via CustomEvent("dashboard:filter", { detail: "cache" })
+// Consumes: STATE, THEME
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initFeedbar() {
+  const feedbarEl = document.getElementById('feedbar');
+  if (!feedbarEl) return;
+
+  // ────────── Filter Categories ──────────
+  // Per NUTRIENTS §2 EventEntry.category union + "all"
+  const FILTER_CATEGORIES = [
+    { id: 'all',       label: 'All' },
+    { id: 'lifecycle', label: 'Lifecycle' },
+    { id: 'nutrient',  label: 'Nutrient' },
+    { id: 'cost',      label: 'Cost' },
+    { id: 'health',    label: 'Health' },
+    { id: 'anomaly',   label: 'Anomaly' },
+    { id: 'cache',     label: 'Cache' }
+  ];
+
+  // ────────── Module-scope state ──────────
+  // Per HYPHA: "Selecting a chip sets a module-scope state.feedFilter"
+  let currentFilter = 'all';
+
+  // ────────── Build Feedbar DOM ──────────
+  feedbarEl.innerHTML = `
+    <span class="feedbar-label">Filter</span>
+    <div class="feedbar-chips" id="feedbar-chips">
+      ${FILTER_CATEGORIES.map((cat, i) => `
+        ${i === 1 ? '<span class="feedbar-sep"></span>' : ''}
+        <button class="filter-chip${cat.id === 'all' ? ' active' : ''}" data-filter="${cat.id}">
+          ${cat.label}
+        </button>
+      `).join('')}
+    </div>
+  `;
+
+  const chipsContainer = document.getElementById('feedbar-chips');
+  const chips = chipsContainer.querySelectorAll('.filter-chip');
+
+  // ────────── Chip Click Handler ──────────
+  function selectFilter(filterId) {
+    const prevFilter = currentFilter;
+    currentFilter = filterId;
+
+    // Update active state on chips
+    chips.forEach(chip => {
+      const isActive = chip.dataset.filter === filterId;
+      chip.classList.toggle('active', isActive);
+    });
+
+    // Dispatch filter event for event-feed (sibling leaf)
+    // Per HYPHA: "re-renders the event feed"
+    document.dispatchEvent(new CustomEvent('dashboard:feedbar-filter', {
+      detail: { filter: filterId, prev: prevFilter }
+    }));
+
+    // ────────── Cache chip canvas pivot ──────────
+    // Per HYPHA: "The cache chip ALSO dispatches CustomEvent('dashboard:filter', { detail: 'cache' })
+    // for the canvas to listen for (it dims outer mesh + brightens relay topology).
+    // Switching away from cache dispatches detail: 'default'."
+    if (filterId === 'cache' && prevFilter !== 'cache') {
+      document.dispatchEvent(new CustomEvent('dashboard:filter', {
+        detail: 'cache'
+      }));
+    } else if (prevFilter === 'cache' && filterId !== 'cache') {
+      document.dispatchEvent(new CustomEvent('dashboard:filter', {
+        detail: 'default'
+      }));
+    }
+  }
+
+  // ────────── Attach Click Listeners ──────────
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const filterId = chip.dataset.filter;
+      if (filterId !== currentFilter) {
+        selectFilter(filterId);
+      }
+    });
+  });
+
+  // ────────── Keyboard Navigation (accessibility) ──────────
+  chipsContainer.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      const chipsArr = Array.from(chips);
+      const currentIdx = chipsArr.findIndex(c => c.dataset.filter === currentFilter);
+      let nextIdx;
+
+      if (e.key === 'ArrowRight') {
+        nextIdx = (currentIdx + 1) % chipsArr.length;
+      } else {
+        nextIdx = (currentIdx - 1 + chipsArr.length) % chipsArr.length;
+      }
+
+      const nextChip = chipsArr[nextIdx];
+      nextChip.focus();
+      selectFilter(nextChip.dataset.filter);
+      e.preventDefault();
+    }
+  });
+
+  // ────────── Export feedbar state for other console leaves ──────────
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.feedbar = {
+    getCurrentFilter: () => currentFilter,
+    setFilter: selectFilter,
+    FILTER_CATEGORIES
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// EVENT FEED — dashboard.console.event-feed
+// Scope: 60-90px scrollable feed of state.events filtered by feedFilter,
+//        severity-colored left border
+// Consumes: STATE, THEME
+// Listens: dashboard:feedbar-filter custom event from feedbar
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initEventFeed() {
+  const feedEl = document.getElementById('feed');
+  if (!feedEl) return;
+
+  // ────────── Category Icons (12px SVG glyphs) ──────────
+  // Per HYPHA: "category icon (12px glyph, identity from theme.severity[event.severity])"
+  const CATEGORY_ICONS = {
+    lifecycle: `<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6 3v3l2 2" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`,
+    nutrient:  `<svg viewBox="0 0 12 12"><path d="M6 1v10M3 4l3-3 3 3M3 8l3 3 3-3" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    cost:      `<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6 3v6M4 4.5h4M4 7.5h4" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round"/></svg>`,
+    health:    `<svg viewBox="0 0 12 12"><path d="M6 2.5C3 0.5 0 3 0 5.5c0 3 6 5.5 6 5.5s6-2.5 6-5.5c0-2.5-3-5-6-3z" fill="currentColor"/></svg>`,
+    anomaly:   `<svg viewBox="0 0 12 12"><path d="M6 1L11 10H1L6 1z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="6" cy="8" r="0.7" fill="currentColor"/><path d="M6 4v2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+    cache:     `<svg viewBox="0 0 12 12"><rect x="1.5" y="3" width="9" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round"/></svg>`
+  };
+
+  // ────────── Module-scope state ──────────
+  let currentFilter = 'all';
+  let lastScrollTime = 0;
+  let userHasScrolled = false;
+
+  // ────────── Format timestamp as HH:MM:SS ──────────
+  function formatTs(isoStr) {
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '--:--:--';
+      return d.toTimeString().slice(0, 8);
+    } catch {
+      return '--:--:--';
+    }
+  }
+
+  // ────────── Truncate source biome to 14 chars ──────────
+  function truncateSource(source) {
+    if (!source) return 'unknown';
+    return source.length > 14 ? source.slice(0, 14) : source;
+  }
+
+  // ────────── Render a single event row ──────────
+  function renderEventRow(event) {
+    const severity = event.severity || 'info';
+    const category = event.category || 'lifecycle';
+    const icon = CATEGORY_ICONS[category] || CATEGORY_ICONS.lifecycle;
+
+    return `
+      <div class="feed-row sev-${severity}">
+        <span class="feed-icon">${icon}</span>
+        <span class="feed-ts">${formatTs(event.ts)}</span>
+        <span class="feed-source">${truncateSource(event.source)}</span>
+        <span class="feed-type">${event.short_type || ''}</span>
+        <span class="feed-msg">${event.message || ''}</span>
+      </div>
+    `;
+  }
+
+  // ────────── Filter events by category ──────────
+  function filterEvents(events, filter) {
+    if (!events || !Array.isArray(events)) return [];
+    if (filter === 'all') return events;
+    return events.filter(e => e.category === filter);
+  }
+
+  // ────────── Render entire feed ──────────
+  function renderFeed() {
+    const events = STATE.events || [];
+    const filtered = filterEvents(events, currentFilter);
+
+    if (filtered.length === 0) {
+      feedEl.innerHTML = `<div class="feed-empty">no events${currentFilter !== 'all' ? ` (${currentFilter})` : ''}</div>`;
+      return;
+    }
+
+    // Events are already newest-first per NUTRIENTS §2
+    feedEl.innerHTML = filtered.map(renderEventRow).join('');
+
+    // Per HYPHA: "No auto-scroll if operator has manually scrolled away from top within the last 4s"
+    const now = Date.now();
+    if (!userHasScrolled || (now - lastScrollTime > 4000)) {
+      feedEl.scrollTop = 0;
+      userHasScrolled = false;
+    }
+  }
+
+  // ────────── Track manual scrolling ──────────
+  feedEl.addEventListener('scroll', () => {
+    // If scrolled away from top, mark as user-scrolled
+    if (feedEl.scrollTop > 5) {
+      userHasScrolled = true;
+      lastScrollTime = Date.now();
+    } else {
+      // User scrolled back to top
+      userHasScrolled = false;
+    }
+  });
+
+  // ────────── Listen for filter changes from feedbar ──────────
+  document.addEventListener('dashboard:feedbar-filter', (e) => {
+    const newFilter = e.detail?.filter || 'all';
+    if (newFilter !== currentFilter) {
+      currentFilter = newFilter;
+      renderFeed();
+    }
+  });
+
+  // ────────── Initial render ──────────
+  renderFeed();
+
+  // ────────── Export event feed functions for other console leaves ──────────
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.eventFeed = {
+    renderFeed,
+    getCurrentFilter: () => currentFilter,
+    getFilteredEvents: () => filterEvents(STATE.events || [], currentFilter)
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// ALERT RIBBON — dashboard.console.alert-ribbon
+// Scope: absolute-positioned top banner sliding in when alerts arrive, auto-dismiss 15s
+// Consumes: STATE.alerts, THEME.severity
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initAlertRibbon() {
+  const ribbonEl = document.getElementById('alert-ribbon');
+  const stackEl = document.getElementById('alert-ribbon-stack');
+  if (!ribbonEl || !stackEl) return;
+
+  // ────────── Module state ──────────
+  // Track which alerts we've already shown (by ts + message tuple)
+  // Per HYPHA: "Slides in when state.alerts[] gains a new entry since last render
+  // (compare by ts + message tuple)"
+  const shownAlertKeys = new Set();
+  const dismissTimers = new Map(); // alertKey → timeoutId
+  const AUTO_DISMISS_MS = 15000; // 15s auto-dismiss per HYPHA spec
+
+  // ────────── Helper: create alert key from entry ──────────
+  function alertKey(alert) {
+    return `${alert.ts}|${alert.message}`;
+  }
+
+  // ────────── Helper: format timestamp as HH:MM:SS ──────────
+  function formatTime(isoString) {
+    try {
+      const d = new Date(isoString);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      const ss = String(d.getSeconds()).padStart(2, '0');
+      return `${hh}:${mm}:${ss}`;
+    } catch {
+      return '—';
+    }
+  }
+
+  // ────────── Dismiss a single alert ──────────
+  function dismissAlert(key, itemEl) {
+    // Clear any pending auto-dismiss timer
+    if (dismissTimers.has(key)) {
+      clearTimeout(dismissTimers.get(key));
+      dismissTimers.delete(key);
+    }
+
+    // Add dismissing class for slide-out animation (1.5s per slow-pulse discipline)
+    itemEl.classList.add('dismissing');
+
+    // Remove from DOM after animation completes
+    setTimeout(() => {
+      if (itemEl.parentNode) {
+        itemEl.parentNode.removeChild(itemEl);
+      }
+      shownAlertKeys.delete(key);
+
+      // If no more alerts, slide ribbon out
+      if (stackEl.children.length === 0) {
+        ribbonEl.classList.remove('visible');
+        ribbonEl.classList.add('dismissing');
+        // Remove dismissing class after animation
+        setTimeout(() => {
+          ribbonEl.classList.remove('dismissing');
+        }, 1500);
+      }
+    }, 1500);
+  }
+
+  // ────────── Render a single alert item ──────────
+  function renderAlertItem(alert) {
+    const key = alertKey(alert);
+    const severity = alert.severity || 'warn';
+
+    const itemEl = document.createElement('div');
+    itemEl.className = `alert-ribbon-item ${severity}`;
+    itemEl.dataset.alertKey = key;
+
+    itemEl.innerHTML = `
+      <div class="alert-ribbon-content">
+        <span class="alert-ribbon-icon"></span>
+        <span class="alert-ribbon-ts">${formatTime(alert.ts)}</span>
+        <span class="alert-ribbon-message">${escapeHtml(alert.message)}</span>
+      </div>
+      <span class="alert-ribbon-dismiss">×</span>
+      <div class="alert-ribbon-progress"></div>
+    `;
+
+    // Click to dismiss (per HYPHA: "Auto-dismiss after 15s ... OR on click")
+    itemEl.addEventListener('click', () => {
+      dismissAlert(key, itemEl);
+    });
+
+    // Auto-dismiss after 15s (per HYPHA spec)
+    const timerId = setTimeout(() => {
+      dismissAlert(key, itemEl);
+    }, AUTO_DISMISS_MS);
+    dismissTimers.set(key, timerId);
+
+    return itemEl;
+  }
+
+  // ────────── Helper: escape HTML to prevent XSS ──────────
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ────────── Check for new alerts and render ──────────
+  function checkAndRenderAlerts() {
+    const alerts = STATE.alerts || [];
+
+    // Per HYPHA: empty alerts[] → ribbon stays hidden
+    if (alerts.length === 0) {
+      // Clear any existing shown alerts
+      stackEl.innerHTML = '';
+      shownAlertKeys.clear();
+      ribbonEl.classList.remove('visible');
+      return;
+    }
+
+    // Find new alerts (not yet shown)
+    const newAlerts = alerts.filter(a => !shownAlertKeys.has(alertKey(a)));
+
+    if (newAlerts.length > 0) {
+      // Sort new alerts by timestamp (newest first for display at top)
+      newAlerts.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
+      // Render each new alert
+      newAlerts.forEach(alert => {
+        const key = alertKey(alert);
+        shownAlertKeys.add(key);
+        const itemEl = renderAlertItem(alert);
+        // Insert at top of stack (newest first)
+        stackEl.insertBefore(itemEl, stackEl.firstChild);
+      });
+
+      // Slide ribbon in
+      ribbonEl.classList.remove('dismissing');
+      ribbonEl.classList.add('visible');
+    }
+  }
+
+  // ────────── Initial render ──────────
+  checkAndRenderAlerts();
+
+  // ────────── Periodic check (every 1.4s to match dashboard cadence) ──────────
+  const alertCheckInterval = setInterval(checkAndRenderAlerts, 1400);
+
+  // ────────── Export for cleanup and other leaves ──────────
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.alertRibbon = {
+    checkAndRenderAlerts,
+    dismissAll: () => {
+      // Dismiss all visible alerts
+      stackEl.querySelectorAll('.alert-ribbon-item').forEach(itemEl => {
+        const key = itemEl.dataset.alertKey;
+        if (key) dismissAlert(key, itemEl);
+      });
+    },
+    alertCheckInterval,
+    getShownCount: () => shownAlertKeys.size
+  };
+})();
+
+// ════════════════════════════════════════════════════════════════════════════════
+// INSPECT PANEL — dashboard.console.inspect-panel
+// Scope: 300-420px slide-in from left edge, opens on dashboard:agent-select
+// Sections: header + synopsis + ops actions + identity + focus + leaf queue
+//           + subagent mini-diagram + flow + files + cost
+// Consumes: STATE, THEME
+// Listens: dashboard:agent-select, dashboard:agent-close custom events
+// ════════════════════════════════════════════════════════════════════════════════
+
+(function initInspectPanel() {
+  const panelEl = document.getElementById('inspect-panel');
+  const headEl = document.getElementById('inspect-head');
+  const bodyEl = document.getElementById('inspect-body');
+
+  if (!panelEl || !headEl || !bodyEl) return;
+
+  // ────────── Module-scope state ──────────
+  let currentAgentId = null;
+  let isPinned = false;
+
+  // ────────── Lifecycle colors (from NUTRIENTS §2 state → lifecycle mapping) ──────────
+  const LIFECYCLE_MAP = {
+    pending: { label: 'pending', css: 'germ' },
+    active:  { label: 'active',  css: 'flow' },
+    fruit:   { label: 'fruit',   css: 'fruit' },
+    failed:  { label: 'failed',  css: 'crit' },
+    dorm:    { label: 'dorm',    css: 'dorm' }
+  };
+
+  // ────────── Leaf state → display mapping ──────────
+  const LEAF_STATE_MAP = {
+    pending: { dot: '○', css: 's-pending', color: 'germ' },
+    active:  { dot: '◐', css: 's-active',  color: 'flow' },
+    done:    { dot: '●', css: 's-done',    color: 'fruit' },
+    failed:  { dot: '✕', css: 's-failed',  color: 'crit' }
+  };
+
+  // ────────── Get lifecycle CSS color ──────────
+  function getLifecycleColor(state) {
+    const map = LIFECYCLE_MAP[state] || LIFECYCLE_MAP.dorm;
+    const cssVar = map.css === 'crit' ? `--sev-${map.css}` : `--life-${map.css}`;
+    return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() ||
+           (THEME.lifecycle?.[map.css]) ||
+           (THEME.severity?.[map.css]) ||
+           '#5A6471';
+  }
+
+  // ────────── Find agent by ID ──────────
+  function findAgent(agentId) {
+    return (STATE.agents || []).find(a => a.id === agentId);
+  }
+
+  // ────────── Format currency ──────────
+  function formatUsd(val) {
+    if (val == null || isNaN(val)) return '$0.00';
+    return '$' + val.toFixed(2);
+  }
+
+  // ────────── Format number with commas ──────────
+  function formatNumber(val) {
+    if (val == null || isNaN(val)) return '0';
+    return val.toLocaleString();
+  }
+
+  // ────────── Format duration ──────────
+  function formatDuration(seconds) {
+    if (seconds == null || isNaN(seconds) || seconds === 0) return '—';
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}m ${secs}s`;
+  }
+
+  // ────────── Get provider color ──────────
+  function getProviderColor(providerId) {
+    return THEME.identity?.[providerId] || THEME.palette?.cryo || '#7AE5FF';
+  }
+
+  // ────────── Get identity color ──────────
+  function getIdentityColor(agentId) {
+    return THEME.identity?.[agentId] || THEME.palette?.cryo || '#7AE5FF';
+  }
+
+  // ────────── Open panel ──────────
+  function openPanel(agentId) {
+    currentAgentId = agentId;
+    renderPanel(agentId);
+    panelEl.classList.add('open');
+    if (isPinned) {
+      panelEl.classList.add('pinned');
+    }
+  }
+
+  // ────────── Close panel ──────────
+  function closePanel() {
+    panelEl.classList.remove('open', 'pinned');
+    currentAgentId = null;
+    isPinned = false;
+  }
+
+  // ────────── Pin panel ──────────
+  function pinPanel() {
+    isPinned = true;
+    panelEl.classList.add('pinned');
+  }
+
+  // ────────── Unpin panel ──────────
+  function unpinPanel() {
+    isPinned = false;
+    panelEl.classList.remove('pinned');
+  }
+
+  // ────────── Render Header ──────────
+  function renderHeader(agent) {
+    const identityColor = getIdentityColor(agent.id);
+    const stateInfo = LIFECYCLE_MAP[agent.state] || LIFECYCLE_MAP.dorm;
+    const stateColor = getLifecycleColor(agent.state);
+
+    headEl.innerHTML = `
+      <div class="h-info">
+        <div class="h-eyebrow" style="color: ${identityColor}">agent · ${isPinned ? 'pinned' : 'selected'}</div>
+        <div class="h-title" style="color: ${identityColor}">${agent.id}</div>
+        <div class="h-tag">${(agent.contracts || []).slice(0, 2).join(' · ') || 'no contracts'}</div>
+      </div>
+      <div class="h-actions">
+        <button class="x-close" id="inspect-close">esc</button>
+        <div class="h-state" style="color: ${stateColor}; border-color: ${stateColor};">${stateInfo.label}</div>
+      </div>
+    `;
+
+    // Close button handler
+    document.getElementById('inspect-close')?.addEventListener('click', closePanel);
+  }
+
+  // ────────── Render Synopsis Section ──────────
+  function renderSynopsis(agent) {
+    const contracts = (agent.contracts || []).join(' · ') || 'no contracts';
+    const providerColor = getProviderColor(agent.provider);
+
+    return `
+      <div class="i-section">
+        <h5>synopsis</h5>
+        <div class="i-prose">${contracts}</div>
+        <div class="i-provider-tag">
+          <span class="p-dot" style="background: ${providerColor}; box-shadow: 0 0 6px ${providerColor};"></span>
+          <span class="p-name">${agent.provider || 'unknown'}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Operator Actions Section ──────────
+  function renderOperatorActions(agent) {
+    // v1: stubs that emit CustomEvent("dashboard:operator-action", { detail: { agent_id, action } })
+    const pauseLabel = agent.paused ? 'resume' : 'pause';
+
+    return `
+      <div class="i-section">
+        <h5>operator actions</h5>
+        <div class="op-actions">
+          <button class="op-btn" data-action="${pauseLabel}" data-agent="${agent.id}">${pauseLabel}</button>
+          <button class="op-btn danger" data-action="kill" data-agent="${agent.id}">kill</button>
+          <button class="op-btn go" data-action="respawn" data-agent="${agent.id}">respawn</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Identity Section ──────────
+  function renderIdentity(agent) {
+    const leaves = agent.leaves || [];
+    const leavesCount = leaves.length;
+    const failedCount = leaves.filter(l => l.state === 'failed').length;
+
+    return `
+      <div class="i-section">
+        <h5>identity</h5>
+        <div class="i-row"><span class="k">contracts</span><span class="v dim">${(agent.contracts || []).length}</span></div>
+        <div class="i-row"><span class="k">leaves</span><span class="v">${leavesCount}</span></div>
+        <div class="i-row"><span class="k">provider</span><span class="v">${agent.provider || 'unknown'}</span></div>
+        <div class="i-row"><span class="k">cost</span><span class="v">${formatUsd(agent.cost_usd)}</span></div>
+        <div class="i-row"><span class="k">tokens</span><span class="v">${formatNumber(agent.tokens)}</span></div>
+        ${failedCount > 0 ? `<div class="i-row"><span class="k">failed</span><span class="v" style="color: var(--sev-crit);">${failedCount}</span></div>` : ''}
+      </div>
+    `;
+  }
+
+  // ────────── Render Current Focus Section ──────────
+  function renderCurrentFocus(agent) {
+    const leaves = agent.leaves || [];
+    const activeLeaf = leaves.find(l => l.state === 'active');
+
+    if (!activeLeaf) {
+      return `
+        <div class="i-section">
+          <h5>current focus</h5>
+          <div class="i-empty">no active leaf</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="i-section">
+        <h5>current focus</h5>
+        <div class="i-row"><span class="k">leaf</span><span class="v">${activeLeaf.id}</span></div>
+        <div class="i-row"><span class="k">scope</span><span class="v dim">${activeLeaf.scope || '—'}</span></div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Leaf Queue Section (with subagent mini-diagram per leaf) ──────────
+  function renderLeafQueue(agent) {
+    const leaves = agent.leaves || [];
+
+    if (leaves.length === 0) {
+      return `
+        <div class="i-section">
+          <h5>leaf queue</h5>
+          <div class="i-empty">no leaves</div>
+        </div>
+      `;
+    }
+
+    const leafRows = leaves.map(leaf => {
+      const stateInfo = LEAF_STATE_MAP[leaf.state] || LEAF_STATE_MAP.pending;
+      const dotColor = stateInfo.color === 'crit'
+        ? 'var(--sev-crit)'
+        : `var(--life-${stateInfo.color})`;
+      const isCurrent = leaf.state === 'active';
+      const dur = formatDuration(leaf.duration_seconds);
+      const filesCount = (leaf.files || []).length;
+
+      // Subagent mini-diagram SVG for this leaf
+      const microsSvg = renderMicroDiagram(leaf);
+
+      return `
+        <div class="leaf-row ${stateInfo.css}${isCurrent ? ' current' : ''}" data-leaf-id="${leaf.id}">
+          <span class="dot" style="color: ${dotColor};">${stateInfo.dot}</span>
+          <span class="name">
+            ${leaf.id}
+            <span class="scope">${leaf.failure_reason || leaf.scope || '—'}</span>
+          </span>
+          <span class="dur">${dur}</span>
+          <span class="files-count">${filesCount} file${filesCount !== 1 ? 's' : ''}</span>
+        </div>
+        ${microsSvg}
+      `;
+    }).join('');
+
+    return `
+      <div class="i-section">
+        <h5>leaf queue</h5>
+        <div class="leaf-list">${leafRows}</div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Micro Diagram (per leaf) ──────────
+  // Per HYPHA: 2-4 small circles per MicroState, colored by routing (cheap → theme.lifecycle.germ, full → cryo)
+  // Each circle has flow-out arrow toward central "cache" glyph and flow-in arrow back
+  // 4s dashoffset animation (no animation under 1.5s)
+  function renderMicroDiagram(leaf) {
+    const micros = leaf.micros || [];
+    if (micros.length === 0) return '';
+
+    const W = 200, H = 50;
+    const cx = W / 2, cy = H / 2;
+    const cacheX = cx, cacheY = cy;
+    const microRadius = 12;
+
+    let svg = `<svg class="subagent-map" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arrow-out-${leaf.id}" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="3" markerHeight="3" orient="auto">
+          <path d="M0 0 L6 3 L0 6 Z" fill="var(--cryo)"/>
+        </marker>
+        <marker id="arrow-in-${leaf.id}" viewBox="0 0 6 6" refX="1" refY="3" markerWidth="3" markerHeight="3" orient="auto">
+          <path d="M6 0 L0 3 L6 6 Z" fill="var(--life-germ)"/>
+        </marker>
+      </defs>`;
+
+    // Central cache glyph (octagon-ish)
+    svg += `<rect class="cache-glyph" x="${cacheX - 6}" y="${cacheY - 6}" width="12" height="12" rx="2"/>`;
+
+    // Place micros in a row
+    const spacing = W / (micros.length + 1);
+    micros.forEach((micro, i) => {
+      const mx = spacing * (i + 1);
+      const my = cy - 16;
+      const isHit = micro.last_call_was_hit;
+      const routing = micro.routing || 'cheap';
+      const colorClass = routing === 'full' ? 'full' : 'cheap';
+
+      // Flow-out line (micro → cache)
+      svg += `<line class="flow-out" x1="${mx}" y1="${my + 4}" x2="${cacheX}" y2="${cacheY - 6}" marker-end="url(#arrow-out-${leaf.id})"/>`;
+
+      // Flow-in line (cache → micro)
+      svg += `<line class="flow-in" x1="${cacheX}" y1="${cacheY + 6}" x2="${mx}" y2="${my + 20}" marker-end="url(#arrow-in-${leaf.id})"/>`;
+
+      // Micro circle
+      svg += `<circle class="micro-circle ${colorClass}" cx="${mx}" cy="${my}" r="4"/>`;
+
+      // Fire count label
+      svg += `<text x="${mx}" y="${my + 28}" text-anchor="middle" fill="var(--ice-2)" font-size="6" font-family="Geist Mono, monospace">${micro.fire_count || 0}</text>`;
+    });
+
+    svg += `</svg>
+    <div class="submap-legend">
+      <span>→ query cache</span>
+      <span>← response</span>
+    </div>`;
+
+    return svg;
+  }
+
+  // ────────── Render Recent Nutrient Flow Section ──────────
+  function renderRecentFlow(agent) {
+    const events = STATE.events || [];
+    // Filter to last 4 events where source === agent.id
+    const agentEvents = events.filter(e => e.source === agent.id).slice(0, 4);
+
+    if (agentEvents.length === 0) {
+      return `
+        <div class="i-section">
+          <h5>recent flow</h5>
+          <div class="i-empty">no events yet</div>
+        </div>
+      `;
+    }
+
+    const rows = agentEvents.map(e => `
+      <div class="io-row">
+        <span class="arrow">·</span>
+        <span class="type">${e.short_type || e.category}</span>
+        <span class="msg">${(e.message || '').slice(0, 60)}${(e.message || '').length > 60 ? '…' : ''}</span>
+      </div>
+    `).join('');
+
+    return `
+      <div class="i-section">
+        <h5>recent flow</h5>
+        <div class="io-list">${rows}</div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Files Produced Section ──────────
+  function renderFilesProduced(agent) {
+    const leaves = agent.leaves || [];
+    // Aggregate all files, de-dupe
+    const allFiles = [...new Set(leaves.flatMap(l => l.files || []))];
+
+    if (allFiles.length === 0) {
+      return `
+        <div class="i-section">
+          <h5>files produced</h5>
+          <div class="i-empty">none yet</div>
+        </div>
+      `;
+    }
+
+    // Truncate to 12, "+N more" if over
+    const displayFiles = allFiles.slice(0, 12);
+    const moreCount = allFiles.length - 12;
+
+    const rows = displayFiles.map(f => `<div class="file-row">${f}</div>`).join('');
+    const moreEl = moreCount > 0 ? `<div class="file-more">+${moreCount} more</div>` : '';
+
+    return `
+      <div class="i-section">
+        <h5>files produced</h5>
+        <div class="file-list">${rows}${moreEl}</div>
+      </div>
+    `;
+  }
+
+  // ────────── Render Cost Section ──────────
+  function renderCost(agent) {
+    const leaves = agent.leaves || [];
+
+    // Per-leaf breakdown (first 4 leaves)
+    const leafBreakdown = leaves.slice(0, 4).map(l => `
+      <div class="i-row"><span class="k">${l.id}</span><span class="v dim">${formatNumber(l.tokens || 0)} tok</span></div>
+    `).join('');
+
+    return `
+      <div class="i-section">
+        <h5>cost</h5>
+        <div class="i-row"><span class="k">total usd</span><span class="v">${formatUsd(agent.cost_usd)}</span></div>
+        <div class="i-row"><span class="k">total tokens</span><span class="v">${formatNumber(agent.tokens)}</span></div>
+        ${leafBreakdown}
+      </div>
+    `;
+  }
+
+  // ────────── Render Full Panel ──────────
+  function renderPanel(agentId) {
+    const agent = findAgent(agentId);
+    if (!agent) {
+      headEl.innerHTML = '<div class="h-info"><div class="h-title">Agent not found</div></div>';
+      bodyEl.innerHTML = '<div class="i-section"><div class="i-empty">No data available</div></div>';
+      return;
+    }
+
+    renderHeader(agent);
+
+    bodyEl.innerHTML = [
+      renderSynopsis(agent),
+      renderOperatorActions(agent),
+      renderIdentity(agent),
+      renderCurrentFocus(agent),
+      renderLeafQueue(agent),
+      renderRecentFlow(agent),
+      renderFilesProduced(agent),
+      renderCost(agent)
+    ].join('');
+
+    // Attach operator action button handlers
+    bodyEl.querySelectorAll('.op-btn[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        const agentId = btn.dataset.agent;
+        // v1: stub — emit CustomEvent("dashboard:operator-action", { detail: { agent_id, action } })
+        window.dispatchEvent(new CustomEvent('dashboard:operator-action', {
+          detail: { agent_id: agentId, action: action }
+        }));
+        // No-op handler attached — future implementation will handle actual pause/kill/respawn
+        console.log(`[inspect-panel] Operator action: ${action} on ${agentId}`);
+      });
+    });
+  }
+
+  // ────────── Event Listeners ──────────
+
+  // Listen for agent-select event (from agents-rail)
+  window.addEventListener('dashboard:agent-select', (e) => {
+    const agentId = e.detail;
+    if (!agentId) return;
+
+    // If clicking same agent while open → pin (handled by agents-rail click logic)
+    // Here we just open/update the panel
+    if (currentAgentId === agentId && panelEl.classList.contains('open')) {
+      // Toggle pin
+      if (!isPinned) {
+        pinPanel();
+      }
+      // Re-render to update pinned state in header
+      renderPanel(agentId);
+    } else {
+      // New agent or panel was closed
+      isPinned = false;
+      openPanel(agentId);
+    }
+  });
+
+  // Listen for agent-close event
+  window.addEventListener('dashboard:agent-close', () => {
+    closePanel();
+  });
+
+  // Keyboard handler: Esc closes (and unpins)
+  // Already handled by agents-rail, but also handle here for robustness
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panelEl.classList.contains('open')) {
+      closePanel();
+    }
+  });
+
+  // ────────── Periodic refresh (if pinned, keep data fresh) ──────────
+  const inspectRefreshInterval = setInterval(() => {
+    if (currentAgentId && panelEl.classList.contains('open')) {
+      renderPanel(currentAgentId);
+    }
+  }, 1400); // Match cache.pulse cadence
+
+  // ────────── Export inspect panel functions for other console leaves ──────────
+  window.__DASHBOARD_CONSOLE__ = window.__DASHBOARD_CONSOLE__ || {};
+  window.__DASHBOARD_CONSOLE__.inspectPanel = {
+    openPanel,
+    closePanel,
+    pinPanel,
+    unpinPanel,
+    renderPanel,
+    getCurrentAgentId: () => currentAgentId,
+    isPinned: () => isPinned,
+    inspectRefreshInterval
+  };
+})();
+
+// ────────── Cleanup on page unload ──────────
+window.addEventListener('beforeunload', () => {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+  }
+  renderer.dispose();
+  // Clear titlebar uptime interval (dashboard.console.titlebar)
+  if (window.__DASHBOARD_CONSOLE__?.titlebar?.uptimeInterval) {
+    clearInterval(window.__DASHBOARD_CONSOLE__.titlebar.uptimeInterval);
+  }
+  // Clear metric strip refresh interval (dashboard.console.metric-strip)
+  if (window.__DASHBOARD_CONSOLE__?.metricStrip?.metricRefreshInterval) {
+    clearInterval(window.__DASHBOARD_CONSOLE__.metricStrip.metricRefreshInterval);
+  }
+  // Clear alert ribbon check interval (dashboard.console.alert-ribbon)
+  if (window.__DASHBOARD_CONSOLE__?.alertRibbon?.alertCheckInterval) {
+    clearInterval(window.__DASHBOARD_CONSOLE__.alertRibbon.alertCheckInterval);
+  }
+  // Clear inspect panel refresh interval (dashboard.console.inspect-panel)
+  if (window.__DASHBOARD_CONSOLE__?.inspectPanel?.inspectRefreshInterval) {
+    clearInterval(window.__DASHBOARD_CONSOLE__.inspectPanel.inspectRefreshInterval);
+  }
+});
+
+</script>
+</body>
+</html>

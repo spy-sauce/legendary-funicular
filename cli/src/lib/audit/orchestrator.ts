@@ -40,6 +40,8 @@ export interface OrchestratorOptions {
   autofixBranch?: string;
   maxBudgetUsd?: number;
   dryRun: boolean;
+  microsEnabled?: boolean;
+  contractHash?: string;
 }
 
 export interface OrchestratorResult {
@@ -285,6 +287,8 @@ export async function runAuditOrchestrator(
     cultivationDir,
     iteration: 0,
     concurrency,
+    microsEnabled: opts.microsEnabled,
+    contractHash: opts.contractHash,
   });
 
   const endedAt = new Date().toISOString();
@@ -395,6 +399,8 @@ export async function runAuditOrchestrator(
         cultivationDir: iterCultDir,
         iteration,
         concurrency,
+        microsEnabled: opts.microsEnabled,
+        contractHash: opts.contractHash,
       });
       return collectFindings(results);
     };

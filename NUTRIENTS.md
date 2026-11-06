@@ -1,326 +1,323 @@
-# NUTRIENTS.md — Audit-Run
+# NUTRIENTS.md — Dashboard + Cache-Network
 
-Frozen contracts for the **audit-run** cultivation — building `mycelium audit-run` into the framework. Every leaf consumes these. Do not redesign at leaf-time; halt and flag if a contract is wrong.
+Frozen contracts for the **dashboard-cache** cultivation — shipping `mycelium dashboard {init,serve,render}` and `cli/src/lib/cache-network/` into the framework simultaneously. Every leaf consumes these. Do not redesign at leaf-time; halt and flag if a contract is wrong.
 
-Source spec: `docs/mycelium-audit-run-spec.md`. §10 leans adopted as written (max-iterations=3, Maestro v1, gitignored `audit/`, commit-on-top w/ `--autofix-branch` escape, separate `tester.contract`, operator-written testers).
+Source brief: `cultivations/dashboard-cache/brief.md`. Visual ground truth: `.superpowers/brainstorm/4035-1778891130/content/hybrid-v9.4-cache-relays.html` (gitignored, local-only). Architectural ground truth: `docs/cache-network-micro-agents.md`.
 
-Phase 1 + Phase 2 + Phase 3 all in this cultivation. Sequencing: contract-freeze gates all biomes; biomes germinate in parallel; cross-biome data flows through these sections only.
-
----
-
-## 1. Finding schema — the wire between testers and the aggregator
-
-**Location:** TypeScript interface exported from `cli/src/lib/audit/findings.ts`. All testers emit findings in this exact shape via the JSONL writer; the aggregator consumes them in this exact shape.
-
-```ts
-export type Severity = "critical" | "major" | "minor";
-//   critical → blocks contract-freeze on re-plant
-//   major    → blocks harvest threshold
-//   minor    → informational; included in brief but non-blocking
-
-export interface Finding {
-  id: string;            // sha256(tester_id + biome + summary + file_path + line_range)
-  tester_id: string;     // e.g., "tester.flow.talent"
-  biome: string;         // production biome this finding maps to
-  severity: Severity;
-  file_path?: string;
-  line_range?: [number, number];
-  summary: string;       // one-line headline
-  detail: string;        // multi-line root-cause explanation
-  repro_steps: string[]; // ordered commands or actions to reproduce
-  suggested_fix: string; // free-text; the re-plant leaf consumes this as acceptance criterion
-  observed_at: string;   // ISO-8601 with ms
-  iteration: number;     // which autofix iteration produced this (0 = baseline)
-}
-```
-
-**ID determinism:** `id = sha256(tester_id + "|" + biome + "|" + summary + "|" + (file_path || "") + "|" + (line_range ? line_range.join("-") : ""))`. SHA-256 hex, lowercase. The same defect across `--autofix` iterations produces the same `id` so dedupe is automatic.
-
-**Writer contract:** `appendFinding(runDir: string, finding: Finding): void` — atomic append to `findings.jsonl`, one finding per line, UTF-8, `\n`-terminated. Dedupe by `id` against existing lines in the same file before append. Never throws on filesystem error — log to stderr and continue (mirrors telemetry-emitter pattern).
-
-**Severity validation:** `validateFinding(finding: Finding): asserts finding is Finding` — runtime guard; throws if severity not in the union, if id length ≠ 64, if observed_at not ISO-8601.
+Two interlocked subsystems in one parallel cultivation: dashboard renders the live cache-network topology; cache-network feeds real hit/miss data to the dashboard. Contract-freeze gates all 10 biomes; biomes germinate in parallel; cross-biome data flows through these sections only.
 
 ---
 
-## 2. `audit/` directory layout — frozen path conventions
+## 1. Theme schema — per-cultivation `theme.yaml`
 
-Every audit-run produces one timestamped directory. Layout is part of the contract — sporenet integration, heal-loop, and `--against <ref>` baseline diff all rely on these paths.
+**Location:** `theme.yaml` at cwd. Loaded by `cli/src/lib/dashboard/theme.ts` via `yaml` (existing dep); fallback to `templates/theme.default.yaml` if missing.
 
+```yaml
+# theme.yaml — example
+brand:
+  title: "mycelium · dashboard-cache"
+  tagline: "decentralized · cryogenic · live"
+  logo_char: "Ψ"
+
+palette:
+  ink:    "#060912"
+  ink_2:  "#0A0E18"
+  ice:    "#E8EEF5"
+  ice_2:  "#A8B4C5"
+  cryo:   "#7AE5FF"
+  rule:   "#1A2030"
+
+lifecycle:
+  germ:  "#B7A8E8"
+  grow:  "#7BC9C0"
+  flow:  "#8BB8E0"
+  fruit: "#D9C390"
+  dorm:  "#5A6471"
+
+severity:
+  warn:  "#D9B85A"
+  alert: "#E08A5C"
+  crit:  "#DB5C6E"
+
+identity:
+  # biome_id → stable hue. lifecycle state modulates brightness, not hue.
+  "dashboard-canvas":          "#7AE5FF"
+  "dashboard-console":         "#C9A84C"
+  "dashboard-theme":           "#B7A8E8"
+  "dashboard-data":            "#88AAFF"
+  "dashboard-cli":             "#9FE870"
+  "dashboard-docs":            "#E8B4D4"
+  "cache-network-store":       "#1E9EBF"
+  "cache-network-integration": "#D4820A"
+  "cache-network-micros":      "#7B5EA7"
+  "cache-network-docs":        "#FF8C5A"
+
+modulator:
+  pending_brightness: 0.30
+  active_brightness:  1.00
+  fruit_brightness:   0.90
+  failed_brightness:  0.45
+  active_pulse_hz:    0.9     # slow-pulse discipline; max 1.5
 ```
-audit/<ISO-timestamp>/
-  findings.jsonl                    # one Finding per line (§1)
-  summary.json                      # counts, severity buckets, biomes affected, audit_baseline pointer
-  brief-fix.md                      # aggregator-composed re-plant brief (§5)
-  testers/<tester_id>/stdout.log    # per-tester stdout
-  testers/<tester_id>/stderr.log    # per-tester stderr
-  testers/<tester_id>/finding.json  # the single finding the tester emitted (or empty if clean)
-  iterations/<n>/                   # phase 2 autofix iterations; iteration 0 is the baseline run
-    findings.jsonl
-    summary.json
-    brief-fix.md
-    testers/...
-```
 
-**ISO timestamp:** `YYYY-MM-DDTHH-mm-ss-mmmZ` (filesystem-safe — colons replaced with dashes). The directory is the source of truth; no other state.
-
-**summary.json shape:**
+**TypeScript shape (exported from `cli/src/lib/dashboard/theme.ts`):**
 
 ```ts
-interface AuditSummary {
-  audit_run_id: string;           // <iso-timestamp>-<4-char-hash>
-  organism: string;               // from mycelium.yaml
-  started_at: string;             // ISO-8601 with ms
-  ended_at: string;
-  wall_ms: number;
-  testers_run: number;
-  testers_failed: number;         // tester_error count (operator concern, not cultivation defect)
-  findings_count: number;
-  by_severity: { critical: number; major: number; minor: number };
-  biomes_affected: string[];      // biomes with ≥1 critical|major finding
-  iteration: number;              // 0 for baseline; n for autofix run n
-  audit_baseline?: string;        // path to prior findings.jsonl (for --against)
+export interface DashboardTheme {
+  brand: { title: string; tagline: string; logo_char: string };
+  palette: Record<"ink"|"ink_2"|"ice"|"ice_2"|"cryo"|"rule", string>;
+  lifecycle: Record<"germ"|"grow"|"flow"|"fruit"|"dorm", string>;
+  severity: Record<"warn"|"alert"|"crit", string>;
+  identity: Record<string, string>;  // biome_id → hex
+  modulator: {
+    pending_brightness: number;
+    active_brightness: number;
+    fruit_brightness: number;
+    failed_brightness: number;
+    active_pulse_hz: number;
+  };
 }
+
+export function loadTheme(cwd: string): DashboardTheme;
+export const DEFAULT_THEME_PATH: string;  // resolved templates/theme.default.yaml
 ```
 
-**Gitignore:** `audit/` is gitignored in cultivated apps (§10.4 lean). `audit/<ts>/summary.json` is committed as a breadcrumb — explicit `git add audit/<ts>/summary.json` after each run.
+**Loader contract:** `loadTheme(cwd)` reads `<cwd>/theme.yaml`, deep-merges over `templates/theme.default.yaml`, validates structurally (each required key present, hex strings match `/^#[0-9A-Fa-f]{6}$/`, modulator numbers in `[0, 2]`). Throws `ThemeValidationError` on malformed input. Synchronous (called per-render-request).
 
 ---
 
-## 3. Sporenet audit block — state.json extension
+## 2. DashboardState — unified shape consumed by canvas + console
 
-Phase 3. Extends the existing `sporenet/state.json` shape (see `cli/src/commands/sporenet.ts:34-42`) with an optional `audit` block. Existing fields preserved (per framework rule #9).
+**Producer:** `cli/src/lib/dashboard/state.ts:buildDashboardState(cwd)`. Reads `<cwd>/sporenet/state.json` + tails JSONL events in `<cwd>/.mycelium/events/` (existing path). Synchronous read at server-render time.
+
+**Consumers:** canvas renderer + console DOM, both reading `window.__DASHBOARD_STATE__` inlined into served HTML.
 
 ```ts
-interface SporenetAuditBlock {
-  status: "pending" | "running" | "complete" | "failed";
-  audit_run_id: string | null;        // null when status === "pending"
-  iteration: number;                  // 0 for baseline, n for autofix iteration
-  findings_count: number;
-  by_severity: { critical: number; major: number; minor: number };
-  biomes_affected: string[];
-  last_run_at: string | null;         // ISO-8601 with ms
-  started_at: string | null;          // ISO-8601 with ms; null when not running
+export interface DashboardState {
+  organism: {
+    name: string;
+    started_at: string;        // ISO-8601
+    iter: number;              // heal-loop iteration count
+    view: "multiverse" | "product";
+    active_product_id?: string;
+  };
+  agents: AgentState[];        // one per biome
+  cache: CacheState;
+  events: EventEntry[];        // last 200, newest first
+  alerts: AlertEntry[];        // active only
+  providers: ProviderState[];
 }
 
-// Added to existing state.json root, optional:
+export interface AgentState {
+  id: string;
+  state: "pending" | "active" | "fruit" | "failed" | "dorm";
+  paused: boolean;
+  contracts: string[];          // NUTRIENTS sections owned
+  provider: string;             // "anthropic" | "openai" | ...
+  leaves: LeafState[];
+  history: AgentSnapshot[];     // per heal-loop iter
+  cost_usd: number;
+  tokens: number;
+}
+
+export interface LeafState {
+  id: string;
+  state: "pending" | "active" | "done" | "failed";
+  scope: string;
+  files: string[];              // produced artifacts
+  commit: string;               // git sha or ""
+  duration_seconds: number;
+  tokens: number;
+  failure_reason?: string;
+  micros: MicroState[];         // 2-4 per leaf
+}
+
+export interface MicroState {
+  idx: number;
+  routing: "cheap" | "full";    // cheap = haiku-class, full = opus-class
+  last_call_was_hit: boolean;
+  fire_count: number;
+}
+
+export interface CacheState {
+  hits: number;
+  misses: number;
+  entries: number;
+  capacity: number;
+  recent_keys: string[];        // last 16 key_hash prefixes (12 chars each)
+}
+
+export interface EventEntry {
+  ts: string;                   // ISO-8601
+  category: "lifecycle" | "nutrient" | "cost" | "health" | "anomaly" | "cache";
+  source: string;               // biome_id or "operator"
+  severity: "info" | "warn" | "alert" | "crit";
+  short_type: string;           // e.g., "cache · hit"
+  message: string;
+}
+
+export interface AlertEntry { severity: "warn" | "alert" | "crit"; message: string; ts: string; }
+export interface ProviderState { id: string; up: boolean; latency_ms: number; model: string; }
+export interface AgentSnapshot { iter: number; state: AgentState["state"]; tokens: number; cost_usd: number; }
+```
+
+**Builder contract:** `buildDashboardState(cwd: string): DashboardState` is synchronous and pure given the same on-disk state. Re-reads on every call (no caching). Tolerates missing state.json (returns shape with empty `agents`/`events`/`alerts`, defaulted `cache: {hits:0,misses:0,entries:0,capacity:0,recent_keys:[]}`). Never throws on missing files — only on malformed JSON.
+
+---
+
+## 3. Event schema — new cache events
+
+Extends the existing JSONL event stream emitted to `.mycelium/events/<organism>.jsonl`. Existing event types unchanged.
+
+```ts
+export type CacheEvent =
+  | { type: "cache.hit";   ts: string; leaf_id: string; key_hash: string; saved_tokens: number; saved_usd: number }
+  | { type: "cache.miss";  ts: string; leaf_id: string; key_hash: string }
+  | { type: "cache.evict"; ts: string; key_hash: string; reason: "lru" | "iter_invalidate" | "contract_change" }
+  | { type: "cache.pulse"; ts: string; window_seconds: number; hits: number; misses: number; net_saved_usd: number };
+```
+
+**Emitter:** `cli/src/lib/cache-network/accounting.ts:emitCacheEvent(event, eventsPath)`. Appends JSONL line, fsync-on-batch (mirror existing `cli/src/lib/telemetry/sink-jsonl.ts:append` pattern — never throws on filesystem error, single stderr log on failure).
+
+**Tailer:** `cli/src/lib/dashboard/events.ts:tailEvents(path, sinceTs, maxLines)`. Returns last `maxLines` events newest-first. Filters by category for the `cache` chip in feedbar.
+
+**Key hashing:** `key_hash` is the first 12 chars of `sha256(tool_name + "|" + normalized_args + "|" + contract_hash)`. Operators see prefix only — never raw args (may contain prompts/secrets). Use Node `crypto.createHash("sha256")`.
+
+**Aggregation cadence:** `cache.pulse` events emit every 1.4s when any hit or miss occurred in that window. Raw `cache.hit`/`cache.miss` events still emit per-call (dashboard uses them for canvas pulse animations); `cache.pulse` is for ticker readouts.
+
+---
+
+## 4. Cache-network runtime — `CacheStore` + `MicroAgent` + integration
+
+**Location:** `cli/src/lib/cache-network/index.ts` exports:
+
+```ts
+export interface CacheStore {
+  get(key: string): CacheEntry | undefined;
+  set(key: string, payload: unknown, tokenCost: number, leafId: string, iter: number): void;
+  invalidateLeaf(leafId: string): void;
+  invalidateIter(iter: number): void;
+  size(): number;
+  capacity(): number;
+  stats(): { hits: number; misses: number; entries: number };
+}
+
+export interface CacheEntry {
+  key: string;
+  payload: unknown;
+  hits: number;
+  added_at: string;
+  last_hit_at: string;
+  token_cost: number;       // tokens saved on each hit
+  leaf_id: string;          // origin leaf
+  iter: number;             // origin iter — invalidated on advance
+}
+
+export function makeCacheStore(opts: { capacity: number; eventsPath?: string }): CacheStore;
+export function cacheKey(input: { tool_name: string; args: unknown; contract_hash: string }): string;
+```
+
+**Eviction:** LRU. On `set` when at capacity, evict the entry with the oldest `last_hit_at`. Emit `cache.evict` with reason `lru` (only if `eventsPath` provided).
+
+**Iter invalidation:** when heal-loop advances iter, call `invalidateIter(prevIter)` from the cultivate iter-advance handler. Evicts all entries with matching `iter`. Emit `cache.evict` with reason `iter_invalidate`.
+
+**Cost accounting:** `get` increments `hits`, refreshes `last_hit_at` to now, and emits `cache.hit` with `saved_tokens` from the entry's `token_cost`. `saved_usd` computed as `saved_tokens * UNIT_COST` where `UNIT_COST = 0.000003` (opus-4-7 input rough) — exported constant from `accounting.ts`.
+
+**Integration point (cultivate.ts):** at the SDK-call chokepoint (grep `claude-agent-sdk\|query\(` in `cli/src/commands/cultivate.ts` for actual anchor; design doc cited line 480 but file may have drifted), wrap the SDK call:
+
+```ts
+// pseudocode — integration leaf must read actual file before editing
+const key = cacheKey({ tool_name: "claude-agent-sdk", args: prompt, contract_hash });
+const hit = store.get(key);
+if (hit) {
+  // get() emits cache.hit internally
+  return hit.payload;
+}
+emitCacheEvent({ type: "cache.miss", ts: nowIso(), leaf_id, key_hash: key.slice(0, 12) }, eventsPath);
+const payload = await sdkCall(prompt);
+store.set(key, payload, payload.usage?.input_tokens ?? 0, leaf_id, currentIter);
+return payload;
+```
+
+**Disable flag:** `--no-cache` on `mycelium cultivate` skips the wrapper entirely (pure passthrough). Default ON.
+
+**MicroAgent fan-out:** `cli/src/lib/micro-agents/spawn.ts` exports:
+
+```ts
+export interface MicroSpawnOpts { leafId: string; severity?: "critical" | "major" | "minor"; }
+export function spawnMicros(opts: MicroSpawnOpts): MicroState[];
+```
+
+Deterministic per `opts.leafId` — use Node `crypto.createHash("sha256").update(leafId).digest()` first 4 bytes as a seed for a small xorshift PRNG. Spawn 2-4 micros (seeded uniform in `[2, 5)`). Routing split: 70% `cheap` / 30% `full` for `severity ≠ "critical"`; 50/50 for `severity === "critical"`. Returns `MicroState[]` with `fire_count: 0`, `last_call_was_hit: false`.
+
+**Bus visibility:** raw `cache.hit`/`cache.miss` events publish to the JSONL stream (existing bus). Aggregate `cache.pulse` emits at 1.4s cadence (see §3) for dashboard ticker.
+
+---
+
+## 5. Sporenet state.json — additive `cache` block
+
+**Constraint:** existing fields (per `cli/src/commands/sporenet.ts:34-42`) MUST remain present and unchanged. New `cache` block is optional — readers gate on `state.cache != null`.
+
+```ts
+// addition only; existing fields elided
 interface SporenetState {
-  // ...existing fields preserved verbatim...
-  audit?: SporenetAuditBlock;
+  // ... existing fields preserved ...
+  cache?: {
+    hits: number;
+    misses: number;
+    entries: number;
+    capacity: number;
+    last_updated: string;     // ISO-8601, written on each pulse aggregate
+  };
 }
 ```
 
-**Writer contract:** `writeAuditBlock(stateDir: string, block: SporenetAuditBlock): Promise<void>` — atomic temp-file/rename pattern (mirrors the `writeLeafState` serialization fix from 2026-05-10). Awaited via `drainAuditStateWrites` before audit-run exits.
+**Writer:** `cli/src/lib/cache-network/accounting.ts:writeCachePulse(stateDir, cacheState)`. Reads current `state.json`, deep-merges new `cache` block, atomic temp-file/rename (mirror the `writeLeafState` serialization fix in `cli/src/commands/cultivate.ts` from 2026-05-10 entry — serialized promise chain, never lose writes).
 
-**Read path:** `sporenet serve` `/` handler re-reads state.json on every request (the F5 path); the existing `renderHtml` is extended to render an "Audit" pane below the leaf grid when `state.audit` is present.
-
----
-
-## 4. Tester registry + runner contract — what audit-cli imports from audit-testers
-
-**Tester definition** (operator-authored as `hyphae/HYPHA-TEST-<id>.md` in the cultivation being audited):
-
-```ts
-export interface TesterDef {
-  id: string;                    // "tester.<name>" — must start with "tester."
-  mirrors_biome: string | null;  // null for cross-cutting testers
-  scope: string;                 // one-line description
-  inputs: string[];              // paths (cultivated artifacts + NUTRIENTS — read-only)
-  assertion_summary: string;     // what the tester asserts (free text from HYPHA)
-  tools: ("Read" | "Bash")[];    // default ["Read", "Bash"] — Write/Edit never granted
-  hypha_path: string;            // path to the source HYPHA-TEST-*.md file
-}
-```
-
-**Loader contract:**
-
-```ts
-export function loadTesters(cultivationDir: string): TesterDef[];
-//   Scans <cultivationDir>/hyphae/HYPHA-TEST-*.md
-//   Parses CACHE HEADER (mirrors existing HYPHA format) for fields.
-//   Throws on malformed HYPHA — operator concern, not silent skip.
-
-export function filterTesters(
-  testers: TesterDef[],
-  opts: { onlyTesterId?: string }
-): TesterDef[];
-//   --only-tester flag implementation.
-```
-
-**Runner contract:**
-
-```ts
-export interface TesterResult {
-  tester_id: string;
-  exit_code: number;
-  wall_ms: number;
-  finding: Finding | null;
-  stdout_path: string;
-  stderr_path: string;
-}
-
-export function runTester(
-  def: TesterDef,
-  ctx: { auditRunDir: string; cultivationDir: string; iteration: number }
-): Promise<TesterResult>;
-//   Spawns a Claude Agent SDK session.
-//   Tool budget enforced: only Read + Bash by default; never Write/Edit unless --autofix is on,
-//     and even then Write/Edit are reserved for the re-plant biome leaves, NOT the tester itself.
-//   Tester prompt is built by mirroring buildLeafPrompt at cli/src/commands/cultivate.ts:492.
-//   Stdout written to <auditRunDir>/testers/<tester_id>/stdout.log.
-//   On finding, the tester emits one Finding JSON to <auditRunDir>/testers/<tester_id>/finding.json.
-
-export function runTestersInPool(
-  testers: TesterDef[],
-  ctx: { auditRunDir: string; cultivationDir: string; iteration: number; concurrency: number }
-): Promise<TesterResult[]>;
-//   Imports `runWithConcurrency` from `cli/src/lib/concurrency.ts` (the shared utility — extracted
-//     from cultivate.ts before this cultivation started; cultivate.ts now imports from there too).
-//     Do NOT modify cultivate.ts.
-```
+**Reader:** dashboard `buildDashboardState` reads `state.cache` if present; treats absence as `{hits:0, misses:0, entries:0, capacity:0, recent_keys:[]}`.
 
 ---
 
-## 5. Aggregator → brief composition contract
+## 6. Dashboard CLI surface — `mycelium dashboard {init,serve,render}`
 
-```ts
-export interface AggregatedFindings {
-  byBiome: Record<string, Finding[]>;
-  criticalBiomes: string[];                // biomes with ≥1 critical finding
-  majorBiomes: string[];                   // biomes with ≥1 major (and no critical)
-  minorOnlyBiomes: string[];
-}
+**Registration:** `cli/src/commands/dashboard/index.ts` exports `registerDashboardCommand(program: Command): void`. Wire into `cli/src/index.ts` main program.
 
-export function aggregate(findings: Finding[]): AggregatedFindings;
-//   Pure function; deterministic ordering (biome alpha, findings by severity then id).
+**Subcommands:**
 
-export function composeBriefFix(
-  originalBrief: string,                   // contents of brief.md from the cultivation
-  aggregated: AggregatedFindings,
-  auditBaselinePath: string | null
-): string;
-//   Returns the full text of brief-fix.md.
-//   Inherits originalBrief verbatim, prepends:
-//     - `only_biomes: [<criticalBiomes + majorBiomes>]` field at the top
-//     - per-affected-biome "Active findings" sections with MUST-line acceptance criteria
-//     - `audit_baseline: <path>` field (null on iteration 0)
-//   minor findings appear in the brief as informational notes only — never as MUST lines.
+```
+mycelium dashboard init [--cwd <path>] [--force]
+  - Writes <cwd>/theme.yaml (copy of templates/theme.default.yaml) if missing.
+  - Writes <cwd>/sporenet/dashboard.html (static one-shot snapshot).
+  - --force overwrites existing theme.yaml.
+
+mycelium dashboard serve [--port <n>] [--cwd <path>]
+  - HTTP server on port (default 3334; sporenet uses 3333).
+  - GET / → re-reads state.json + theme.yaml per request, renders templates/dashboard.html with state + theme inlined as window.__DASHBOARD_STATE__ + window.__DASHBOARD_THEME__.
+  - GET /events/stream → SSE stream of new JSONL events since connection time.
+  - GET /static/* → serves templates/ assets if any (Three.js is CDN-loaded, so /static is mostly empty in v1).
+  - Logs each request with ms timing to stdout.
+  - SIGINT cleanly shuts down (no orphaned port).
+
+mycelium dashboard render [--cwd <path>] [--out <path>]
+  - One-shot static render to <cwd>/sporenet/dashboard.html (or --out path).
+  - No server.
 ```
 
-**`only_biomes` consumption:** the heal-loop passes this list to `mycelium cultivate --only-biome <id>` (one invocation per biome, since cultivate currently accepts a single biome — sequential, not parallel, in iteration n).
+**Render function:** `cli/src/lib/dashboard/render.ts:renderDashboard(state, theme, templatePath): string`. Pure: state + theme → HTML string. No DOM, no fs reads beyond the template read. Inlines state + theme as `<script>window.__DASHBOARD_STATE__ = ${JSON.stringify(state)};window.__DASHBOARD_THEME__ = ${JSON.stringify(theme)};</script>` immediately before the closing `</body>`.
+
+**Template:** `templates/dashboard.html` is a single self-contained HTML file. Inline `<style>` + `<script>`. Three.js loaded from CDN `https://unpkg.com/three@0.161.0/build/three.module.js` (consistent with v9.4 prototype). Same canvas + chrome shape as v9.4 but reads `window.__DASHBOARD_STATE__` and `window.__DASHBOARD_THEME__` at boot instead of using the simulator.
+
+**Template substitution:** the simulator block in v9.4 (BIOMES/PRODUCTS/ROUTING constants + biomeTick simulator) is REPLACED in `templates/dashboard.html` with a binding to `window.__DASHBOARD_STATE__`. The render pipeline (canvas Bloch wires, micros, cache relays, packets, inspect panel, multiverse, Star Wars HUD) is preserved as-is.
 
 ---
 
-## 6. HYPHA-TEST-*.md authoring schema
+## 7. Frozen vocab additions
 
-Operator-authored. Lives in the cultivation being audited at `hyphae/HYPHA-TEST-<id>.md`. The audit-testers loader parses this format.
+Two new terms enter the canonical Mycelium vocabulary. Both are case-sensitive uppercase identifiers when used in NUTRIENTS / HYPHA / docs prose; lowercase when used as code identifiers.
 
-```markdown
-# HYPHA-TEST — <tester-id>
+- **MICRO** — a sub-leaf worker. 2-4 per leaf. Spawned at leaf `active`, retired at leaf `done`/`failed`. Routes between `cheap` and `full` providers. Not a separate process — bookkeeping only. Visible on canvas as small spheres orbiting each leaf.
+- **CACHE_NET** — the framework-level cache layer. Shared across all biomes in a cultivation. Keyed by `tool + normalized_args + contract_hash`. LRU-evicted. Iter-invalidated on heal-loop advance. Emits `cache.hit` / `cache.miss` / `cache.evict` / `cache.pulse` events on the BIOME BUS.
 
-## CACHE HEADER
-- **TESTER_ID:** tester.<name>
-- **MIRRORS_BIOME:** <biome-id> | (cross-cutting)
-- **SCOPE:** <one-line>
-- **INPUTS:** <comma-list of cultivated artifact paths + NUTRIENTS sections>
-- **TOOLS:** Read, Bash  (default — Write/Edit never granted)
+`HIT_HALO` is REJECTED as canonical vocab — purely visual, lives in dashboard biome internals only. Do not promote.
 
-## Assertions
-<free-text description of what the tester asserts, including the
- deterministic exit-code / file / row / grep conditions for fail>
-
-## Repro recipe
-<ordered commands the tester runs; tester emits these as
- finding.repro_steps when an assertion fails>
-
-## Suggested fix template
-<free-text the tester uses as a starting point for finding.suggested_fix>
-```
-
-**Helper:** `mycelium audit-run scaffold-tester <biome>` (phase 1 deliverable on audit-cli) — emits a stub `hyphae/HYPHA-TEST-<biome>.md` pre-filled from the biome's HYPHA scope. Operator edits assertions/repro/fix.
-
----
-
-## 7. `mycelium audit-run` CLI surface — frozen
-
-Public command-line surface. Once frozen, additions only — no renames or removals.
-
-```
-mycelium audit-run                                  # baseline run; writes findings + brief; no autofix
-mycelium audit-run --autofix                        # heal loop; default --max-iterations 3
-mycelium audit-run --autofix --max-iterations <n>   # custom iteration cap
-mycelium audit-run --only-tester <tester_id>        # single tester (audit-run debugging)
-mycelium audit-run --against <ref>                  # baseline diff; report regressions only
-mycelium audit-run --concurrency <n>                # default = organism's cultivate concurrency
-mycelium audit-run --no-serve                       # skip sporenet integration
-mycelium audit-run --autofix-branch <name>          # phase 2; sub-organism mode (default: commit-on-top)
-mycelium audit-run --max-budget-usd <n>             # phase 2; cost cap; defaults to lib/budget.ts default
-mycelium audit-run scaffold-tester <biome>          # subcommand; emits hyphae/HYPHA-TEST-<biome>.md stub
-mycelium audit-run --dry-run                        # print execution plan; spawn no sessions
-```
-
-Exit codes: `0` clean, `1` findings present (non-autofix mode), `2` autofix exhausted with criticals remaining, `3` tester_error count > 0 (operator concern).
-
----
-
-## 8. Heal-loop iteration contract
-
-Phase 2 only. Per-iteration metadata written under `audit/<ts>/iterations/<n>/`.
-
-```ts
-export interface IterationRecord {
-  iteration: number;                          // 0 = baseline, 1..N = autofix
-  started_at: string;
-  ended_at: string;
-  wall_ms: number;
-  findings_in: number;                        // findings carried over from prior iteration
-  findings_out: number;                       // findings present after this iteration
-  criticals_in: number;
-  criticals_out: number;
-  biomes_replanted: string[];                 // only_biomes from prior brief-fix.md
-  replant_command: string;                    // exact command line invoked
-  replant_exit_code: number;
-  cost_usd: number;                           // tracked via lib/budget.ts
-  cumulative_cost_usd: number;
-  budget_remaining_usd: number;
-}
-```
-
-**Termination conditions** (any one ends the loop):
-1. `findings.by_severity.critical === 0` (success).
-2. `iteration === maxIterations` (capped — default 3).
-3. `cumulative_cost_usd >= maxBudgetUsd` (budget exhausted).
-4. `findings_out >= findings_in` on a non-zero-criticals iteration (no progress — same severity set survived a re-plant).
-
-Loop emits a final `audit/<ts>/heal-loop-summary.json` with all `IterationRecord`s.
-
----
-
-## 9. Cost / budget tie-in
-
-Phase 2 only. Reuses `cli/src/lib/budget.ts` (existing). Audit-run treats each iteration's re-plant as a cost-tracked cultivation event; testers' cost is also tracked via the standard cost-recorded event path (audit testers are Claude Agent SDK sessions, same as leaves).
-
-```ts
-// Existing in lib/budget.ts (do not modify):
-//   getMaxBudgetUsd(opts: { fromCli?: number; fromYaml?: number }): number
-//   formatBudget(usd: number): string
-```
-
-Audit-run's `--max-budget-usd` reads from CLI flag; falls back to `mycelium.yaml` `budget.maxUsd`; falls back to lib/budget.ts default.
-
----
-
-## 10. Cultivate.ts re-use boundaries
-
-Audit-run **imports** from a new shared lib (extracted from cultivate.ts before cultivation started):
-- `runWithConcurrency<T, R>` from `cli/src/lib/concurrency.ts` — the canonical concurrency-limited promise pool. cultivate.ts now imports from there as well. Audit's `runTestersInPool` (§4) calls this directly.
-
-Audit-run **mirrors** (does NOT import) module-private patterns inside cultivate.ts:
-- The `buildLeafPrompt` shape (`cultivate.ts:771`) — mirrored locally as `buildTesterPrompt` (different prompt body, same skeleton). Module-private in cultivate.ts; do not import.
-
-Audit-run **does not modify** `cli/src/commands/cultivate.ts` further:
-- No new flags on cultivate.
-- No changes to CommitQueue behavior.
-- No changes to the F1 skip-already-done path (`cultivate.ts:158-170`) — heal-loop invokes `mycelium cultivate --only-biome <id>` and lets F1 do its job unchanged.
-- Per framework rule #2 (CLAUDE.md): "Don't touch cli/src/commands/cultivate.ts public contract."
-
-If audit-run discovers a need to change cultivate's behavior, halt and flag — that is a separate framework change, not part of this cultivation.
+Existing vocab (HYPHA, HYPHAE, NUTRIENTS, BIOME BUS, FRUITING BODY, SPORULATION, PRUNING, HPP, NFA) unchanged.
