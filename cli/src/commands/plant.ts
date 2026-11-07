@@ -456,7 +456,8 @@ Your job — produce these files using the Write tool:
 
 1. **CLAUDE.md** — project context. Include: what this is (1-paragraph summary
    from the brief), the Stack section, the Stream tag convention
-   (\`MF/DOMAIN: description\`), an "Active HYPHA" line pointing at
+   (\`<PREFIX>/DOMAIN: description\`, where PREFIX is a short
+   uppercase code for this project), an "Active HYPHA" line pointing at
    \`hyphae/HYPHA-{DOMAIN}.md\`, a Contracts line pointing at \`NUTRIENTS.md\`,
    and a Rules section.
 

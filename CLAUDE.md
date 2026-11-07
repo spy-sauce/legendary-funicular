@@ -64,7 +64,7 @@ mycelium sporenet serve --port 3333
 
 ## Stream tag
 Framework-level work: `MYC/<short-kebab-desc>` per global taxonomy.
-Cultivation work uses cultivation-specific tags (see cultivation context below — current cultivation uses `MF/TELEMETRY`, `MF/CICD`, etc.).
+Cultivation work uses cultivation-specific tags (see cultivation context below — current cultivation uses `MYC/TELEMETRY`, `MYC/CICD`, etc.).
 
 ## Frozen vocab + lifecycle
 **Vocab (do not redefine):** HYPHA · HYPHAE · NUTRIENTS · BIOME BUS · FRUITING BODY · SPORULATION · PRUNING · HPP · NFA
@@ -132,13 +132,13 @@ Orchestrator auto-tags commits based on biome. Your biome → tag:
 
 | Biome | Tag |
 |---|---|
-| telemetry-agent | `MF/TELEMETRY` |
-| dashboard-agent | `MF/DASHBOARD` |
-| cicd-agent | `MF/CICD` |
-| cost-agent | `MF/COST` |
-| alerting-agent | `MF/ALERTING` |
-| fleet-agent | `MF/FLEET` |
-| docs-agent | `MF/DOCS` |
+| telemetry-agent | `MYC/TELEMETRY` |
+| dashboard-agent | `MYC/DASHBOARD` |
+| cicd-agent | `MYC/CICD` |
+| cost-agent | `MYC/COST` |
+| alerting-agent | `MYC/ALERTING` |
+| fleet-agent | `MYC/FLEET` |
+| docs-agent | `MYC/DOCS` |
 
 ## File layout for new code
 

@@ -131,6 +131,30 @@ function collectOrganism(dir: string): OrganismSummary | null {
   };
 }
 
+/** Default bundle location: ~/Desktop/mycelium-export. */
+export function defaultExportDir(home: string = process.env.HOME ?? "~"): string {
+  return path.join(home, "Desktop", "mycelium-export");
+}
+
+const DEFAULT_ORGANISMS = ["bardot", "bloom-labs", "legendary-funicular"];
+
+/**
+ * Candidate organism directories when `--dirs` is omitted: the known
+ * organisms on the Desktop and as siblings of the current directory
+ * (e.g. running from inside a checkout of one of them). Callers keep only
+ * the ones that exist.
+ */
+export function defaultScanRoots(
+  home: string = process.env.HOME ?? "~",
+  cwd: string = process.cwd()
+): string[] {
+  const bases = [path.join(home, "Desktop"), path.dirname(path.resolve(cwd))];
+  const roots = bases.flatMap((base) =>
+    DEFAULT_ORGANISMS.map((name) => path.join(base, name))
+  );
+  return [...new Set(roots)];
+}
+
 export function registerExportCommand(program: Command): void {
   program
     .command("export")
@@ -144,28 +168,14 @@ export function registerExportCommand(program: Command): void {
     .option(
       "-o, --out <dir>",
       "Output directory",
-      path.join(process.env.HOME ?? "~", "Desktop", "mf-export")
+      defaultExportDir()
     )
     .action(async (opts) => {
       const outDir = path.resolve(opts.out);
 
       let dirs: string[] = opts.dirs ?? [];
       if (dirs.length === 0) {
-        const scanRoots = [
-          path.join(process.env.HOME ?? "~", "Desktop", "bardot"),
-          path.join(
-            process.env.HOME ?? "~",
-            "Desktop",
-            "vs_mf_merge",
-            "bloom-labs"
-          ),
-          path.join(
-            process.env.HOME ?? "~",
-            "Desktop",
-            "vs_mf_merge",
-            "legendary-funicular"
-          ),
-        ];
+        const scanRoots = defaultScanRoots();
         dirs = scanRoots.filter((d) => fs.existsSync(d));
       }
 

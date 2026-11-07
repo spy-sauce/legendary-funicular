@@ -194,7 +194,7 @@ const upgrade: Upgrade = {
     if (!sink) return;
 
     // Determine the stream tag for this leaf's biome
-    const tag = `MF/${leaf.biome.replace(/-agent$/, "").toUpperCase()}`;
+    const tag = `MYC/${leaf.biome.replace(/-agent$/, "").toUpperCase()}`;
 
     const event = buildLeafStarted(
       { run_id: runId, organism: organismName },

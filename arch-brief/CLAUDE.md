@@ -16,15 +16,15 @@ An interactive single-file HTML architecture diagram (`ARCHITECTURE.html`) that 
 Commit messages and branch names use the format:
 
 ```
-MF/{DOMAIN}: description
+MYC/{DOMAIN}: description
 ```
 
 Where `{DOMAIN}` matches the agent id in UPPER_SNAKE_CASE.
 
 Examples:
-- `MF/LAYOUT_AGENT: add particle canvas background`
-- `MF/COMPONENT_AGENT: extract exports from cultivate.ts`
-- `MF/WIRING_AGENT: inline arch-data.json into final HTML`
+- `MYC/LAYOUT_AGENT: add particle canvas background`
+- `MYC/COMPONENT_AGENT: extract exports from cultivate.ts`
+- `MYC/WIRING_AGENT: inline arch-data.json into final HTML`
 
 ## Active HYPHA
 
