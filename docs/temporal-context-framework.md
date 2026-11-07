@@ -262,7 +262,7 @@ Cross-product daily/weekly aggregation, KPI tracking, deliverable status surfaci
 | Output | Profile | Audience | Trigger |
 |---|---|---|---|
 | Daily digest | LINEAR (7d half-life) | SPY (operator) | EOD scheduled |
-| Weekly report | LOGARITHMIC (3mo) | SPY + business partner | Weekly scheduled |
+| Weekly report | LOGARITHMIC (3mo) | SPY | Weekly scheduled |
 | Live deliverable tracker | FROZEN until shipped → `resolution_multiplier=0.1` post-ship | SPY | Continuous |
 | Friction log | EXPONENTIAL until reviewed → promoted-or-pruned | SPY | Continuous |
 | KPI roll-up | LINEAR (per-week) | SPY | Weekly scheduled |

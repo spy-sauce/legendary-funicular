@@ -3,7 +3,7 @@
 # Usage: ./auto-commit.sh "DOMAIN" "message"
 # Example: ./auto-commit.sh "ADAPTER" "ClaudeCodeAgent + PetriDishCoordinator"
 
-STREAM="MF"
+STREAM="MYC"
 DOMAIN=$1
 MESSAGE=$2
 
